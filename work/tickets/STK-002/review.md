@@ -56,3 +56,45 @@ No violations found apart from Issue 1 (R2 exactness). R1: all logic is in `pack
 - Rights issue; deferred 5% PIT on bonus shares (already listed in the plan).
 - Reconcile Flags 1–3 (WAC, cash-dividend treatment, rounding) against a real TCBS statement.
 - Exchange holiday calendar data source.
+
+## Attempt 2 — 2026-10-22
+Verdict: PASS
+
+### Checks (run by reviewer)
+- typecheck: pass (`pnpm typecheck`: packages/core, apps/web, apps/worker all Done)
+- lint: pass (`pnpm lint`: eslint clean in all 3 projects)
+- test: pass (`pnpm test`: 5 files, 37 tests passed). Matches impl-log.md attempt 2.
+
+Reviewer scratch tests (run against the branch, then deleted; the working tree is clean):
+- Overflow repro from attempt 1 (buy 1 @ MAX_SAFE_INTEGER, then buy 1 @ 2, asOf 2026-03-04) now returns `ok: false` / INVALID_INPUT. **Fixed.**
+- Cash-dividend accumulator overflow (two dividends of 2^52/share on 1 share, 'income', 0% WHT) returns `ok: false`. **Fixed.**
+- Stock-dividend overflow (2^20 shares, ratio 1:2^40) returns `ok: false` through `toSafe`. **Fixed.**
+- Regression: the attempt-1 hand-computed case (two buys, cash dividend, sell 600) still gives costRemoved 12,048,900, proceedsNet 14,962,500, realized 2,913,600, totalCost 18,073,350, avg 20,082. The oversell-with-pending case still gives OVERSELL with `sellable: 100`. **No regression.**
+
+### Attempt-1 issues
+- Issue 1 (🔴 overflow): fixed. `addVnd` (BigInt sum plus `toSafe`) is at `money.ts:49-54`, and `toSafe` is exported at `money.ts:30`. Every accumulation and subtraction listed in attempt 1 now goes through `addVnd` (`build-ledger.ts:134,146-147,152,170-171,181-183,199-206,224,237`), and `newShares` and averageCost go through `toSafe` (`:209,246`). A grep for remaining unchecked `+=`/`-=` finds only `lot.quantityRemaining -= take` and `left -= take` (`:177-178`), which are bounded by already-checked values. Tests: "rejects accumulated sums beyond the safe integer range" and "addVnd › sums exactly and rejects unsafe results".
+- Issue 2 (🟡 settings enums): fixed at `build-ledger.ts:51-54`. Test: "rejects unknown settings enums".
+- Issue 3 (🟡 duplicate ids): fixed with a shared `Set` at `build-ledger.ts:58-75`. Test: "rejects duplicate ids across transactions and corporate actions" (it covers tx/tx and tx/action).
+
+### Acceptance criteria
+- [x] Lots with sellableFrom and pending/sellable status: unchanged from attempt 1, tests green.
+- [x] Holdings with quantity, sellable, average cost, realized P&L, and unrealized P&L from prices: unchanged, tests green, regression scratch test matches.
+- [x] Sell method documented (`build-ledger.ts:254-271`), with tests.
+- [x] Cash and stock dividends: tests green.
+- [x] Oversell returns a typed error: tests green, regression scratch test.
+- [x] All money is integer VND, rounding defined once: all exported ledger sums are now checked (see Issue 1 above). Rounding is still only in `money.ts`.
+- [x] Unit tests cover the required scenarios, plus the new overflow, enum and duplicate-id tests.
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found. Scope: the attempt-2 commit (40f2088) touches only `money.ts`, `money.test.ts`, `build-ledger.ts`, `build-ledger.test.ts` (all in the plan's file list) and `impl-log.md`.
+
+### Nits (do not block)
+- Attempt-1 nits are still open: the tautological assertion at `build-ledger.test.ts:161`, the float `averageCost` fixture in `valuation.test.ts:9`, the fixed `field: 'amount'` on a caught RangeError, the negative market price accepted in `valuation.ts`, and no check that listingDate is on or after exDate.
+- `valuation.ts:23` `marketValue - h.totalCost` uses plain subtraction. Both values are non-negative safe integers, so the result is always safe, but `addVnd` would be more consistent.
+- `addVnd` is used for share quantities as well as VND. The behaviour is correct; only the name is misleading.
+
+### Follow-ups (out of scope)
+- Same as attempt 1: rights issue, deferred PIT on bonus shares, TCBS statement reconciliation, holiday calendar source.
