@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P1 |
 | Areas | finance, db |
-| Attempts | 0 |
+| Attempts | 2 |
 | Created | 2026-10-22 |
 
 ## Goal
