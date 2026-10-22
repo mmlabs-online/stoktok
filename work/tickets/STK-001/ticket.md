@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | IN_PROGRESS |
+| State | DONE |
 | Priority | P1 |
 | Areas | architecture |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-10-22 |
 
 ## Goal
