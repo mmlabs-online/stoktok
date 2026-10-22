@@ -27,7 +27,7 @@ export function roundDiv(numer: bigint, denom: bigint): bigint {
   return negative ? -q : q;
 }
 
-function toSafe(value: bigint): number {
+export function toSafe(value: bigint): number {
   const n = Number(value);
   if (!Number.isSafeInteger(n)) throw new RangeError('result exceeds safe integer range');
   return n;
@@ -44,4 +44,11 @@ export function mulDiv(a: number, b: number, c: number): number {
 /** amount * ratePpm / 1,000,000 (0.1% = 1000 ppm), rounded. */
 export function applyRatePpm(amount: number, ratePpm: number): number {
   return mulDiv(amount, ratePpm, PPM);
+}
+
+/** Exact sum of integers; throws RangeError if any input or the result is not a safe integer. */
+export function addVnd(...xs: number[]): number {
+  let sum = 0n;
+  for (const x of xs) sum += BigInt(assertVnd(x, 'amount'));
+  return toSafe(sum);
 }

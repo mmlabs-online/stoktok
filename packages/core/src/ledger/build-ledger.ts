@@ -1,5 +1,5 @@
 import { addTradingDays, isValidDate } from '../calendar';
-import { applyRatePpm, isVnd, mulDiv, roundDiv } from '../money';
+import { addVnd, applyRatePpm, isVnd, mulDiv, roundDiv, toSafe } from '../money';
 import { estimateFees } from './settings';
 import type {
   CorporateAction,
@@ -48,11 +48,18 @@ function validate(
   ] as const) {
     if (!isVnd(settings[f]) || settings[f] < 0) return bad('settings', f, 'must be integer >= 0');
   }
+  if (settings.cashDividendTreatment !== 'reduceCost' && settings.cashDividendTreatment !== 'income') {
+    return bad('settings', 'cashDividendTreatment', 'must be reduceCost or income');
+  }
+  if (settings.costMethod !== 'WAC') return bad('settings', 'costMethod', 'must be WAC');
   for (const h of settings.holidays) {
     if (!isValidDate(h)) return bad('settings', 'holidays', 'invalid date');
   }
+  const seen = new Set<string>();
   for (const t of transactions) {
     if (!t.id) return bad(String(t.id), 'id', 'required');
+    if (seen.has(t.id)) return bad(t.id, 'id', 'duplicate');
+    seen.add(t.id);
     if (!t.symbol) return bad(t.id, 'symbol', 'required');
     if (!Number.isInteger(t.seq)) return bad(t.id, 'seq', 'must be integer');
     if (!isValidDate(t.tradeDate)) return bad(t.id, 'tradeDate', 'invalid date');
@@ -64,6 +71,8 @@ function validate(
   }
   for (const a of actions) {
     if (!a.id) return bad(String(a.id), 'id', 'required');
+    if (seen.has(a.id)) return bad(a.id, 'id', 'duplicate');
+    seen.add(a.id);
     if (!a.symbol) return bad(a.id, 'symbol', 'required');
     if (!isValidDate(a.exDate)) return bad(a.id, 'exDate', 'invalid date');
     if (a.type === 'cash_dividend') {
@@ -122,7 +131,7 @@ function replay(
       const fee = tx.fee ?? est.fee;
       const value = mulDiv(tx.quantity, tx.price, 1);
       if (tx.side === 'buy') {
-        const cost = value + fee;
+        const cost = addVnd(value, fee);
         state.lots.push({
           id: `lot:${tx.id}`,
           symbol: tx.symbol,
@@ -134,13 +143,13 @@ function replay(
           costPerShare: mulDiv(cost, 1, tx.quantity),
           sellableFrom: settle(tx.tradeDate),
         });
-        state.quantity += tx.quantity;
-        state.totalCost += cost;
+        state.quantity = addVnd(state.quantity, tx.quantity);
+        state.totalCost = addVnd(state.totalCost, cost);
       } else {
         const tax = tx.tax ?? est.tax;
         const sellable = state.lots
           .filter((l) => l.sellableFrom <= tx.tradeDate)
-          .reduce((sum, l) => sum + l.quantityRemaining, 0);
+          .reduce((sum, l) => addVnd(sum, l.quantityRemaining), 0);
         if (tx.quantity > sellable) {
           return {
             ok: false,
@@ -158,8 +167,8 @@ function replay(
           tx.quantity === state.quantity
             ? state.totalCost
             : mulDiv(state.totalCost, tx.quantity, state.quantity);
-        const proceedsNet = value - fee - tax;
-        const realizedPnl = proceedsNet - costRemoved;
+        const proceedsNet = addVnd(value, -fee, -tax);
+        const realizedPnl = addVnd(proceedsNet, -costRemoved);
         let left = tx.quantity;
         for (const lot of state.lots) {
           if (left === 0) break;
@@ -169,9 +178,9 @@ function replay(
           left -= take;
         }
         state.lots = state.lots.filter((l) => l.quantityRemaining > 0);
-        state.quantity -= tx.quantity;
-        state.totalCost -= costRemoved;
-        state.realizedPnl += realizedPnl;
+        state.quantity = addVnd(state.quantity, -tx.quantity);
+        state.totalCost = addVnd(state.totalCost, -costRemoved);
+        state.realizedPnl = addVnd(state.realizedPnl, realizedPnl);
         realizations.push({
           sellTransactionId: tx.id,
           symbol: tx.symbol,
@@ -187,17 +196,17 @@ function replay(
       if (state.quantity === 0) continue;
       if (action.type === 'cash_dividend') {
         const gross = mulDiv(state.quantity, action.amountPerShare, 1);
-        const net = gross - applyRatePpm(gross, settings.dividendWithholdingRatePpm);
-        state.dividendCashNet += net;
+        const net = addVnd(gross, -applyRatePpm(gross, settings.dividendWithholdingRatePpm));
+        state.dividendCashNet = addVnd(state.dividendCashNet, net);
         if (settings.cashDividendTreatment === 'reduceCost') {
-          const excess = Math.max(0, net - state.totalCost);
-          state.totalCost -= net - excess;
-          state.realizedPnl += excess;
+          const excess = Math.max(0, addVnd(net, -state.totalCost));
+          state.totalCost = addVnd(state.totalCost, -addVnd(net, -excess));
+          state.realizedPnl = addVnd(state.realizedPnl, excess);
         } else {
-          state.realizedPnl += net;
+          state.realizedPnl = addVnd(state.realizedPnl, net);
         }
       } else {
-        const newShares = Number(
+        const newShares = toSafe(
           (BigInt(state.quantity) * BigInt(action.ratio.received)) / BigInt(action.ratio.held),
         );
         if (newShares > 0) {
@@ -212,7 +221,7 @@ function replay(
             costPerShare: 0,
             sellableFrom: action.listingDate ?? settle(action.exDate),
           });
-          state.quantity += newShares;
+          state.quantity = addVnd(state.quantity, newShares);
         }
       }
     }
@@ -225,7 +234,7 @@ function replay(
     let sellableQuantity = 0;
     for (const l of s.lots) {
       const status = l.sellableFrom <= asOf ? 'sellable' : 'pending';
-      if (status === 'sellable') sellableQuantity += l.quantityRemaining;
+      if (status === 'sellable') sellableQuantity = addVnd(sellableQuantity, l.quantityRemaining);
       lots.push({ ...l, status });
     }
     holdings.push({
@@ -234,7 +243,7 @@ function replay(
       sellableQuantity,
       totalCost: s.totalCost,
       averageCost:
-        s.quantity > 0 ? Number(roundDiv(BigInt(s.totalCost), BigInt(s.quantity))) : null,
+        s.quantity > 0 ? toSafe(roundDiv(BigInt(s.totalCost), BigInt(s.quantity))) : null,
       realizedPnl: s.realizedPnl,
       dividendCashNet: s.dividendCashNet,
     });

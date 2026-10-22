@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyRatePpm, assertVnd, mulDiv, roundDiv } from './money';
+import { addVnd, applyRatePpm, assertVnd, mulDiv, roundDiv } from './money';
 
 describe('roundDiv half-up', () => {
   it('rounds half away from zero', () => {
@@ -36,5 +36,14 @@ describe('assertVnd', () => {
     expect(() => assertVnd(NaN, 'x')).toThrow(RangeError);
     expect(() => assertVnd(2 ** 53, 'x')).toThrow(RangeError);
     expect(assertVnd(125400, 'x')).toBe(125400);
+  });
+});
+
+describe('addVnd', () => {
+  it('sums exactly and rejects unsafe results', () => {
+    expect(addVnd(1, 2, -5)).toBe(-2);
+    expect(addVnd()).toBe(0);
+    expect(() => addVnd(Number.MAX_SAFE_INTEGER, 1)).toThrow(RangeError);
+    expect(() => addVnd(1.5, 1)).toThrow(RangeError);
   });
 });

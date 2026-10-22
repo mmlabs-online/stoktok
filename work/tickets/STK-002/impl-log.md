@@ -39,3 +39,30 @@ None. One deviation within plan files: `buildLedger` wraps an internal `replay` 
 ### Scope self-check
 - Could the diff be smaller? No; tests are most of it.
 - Diff size: 11 files, about +900 / -0 lines (index.ts modified)
+
+## Attempt 2 (REWORK) — 2026-10-22
+
+### Issues fixed
+- Issue 1 (blocker): added `addVnd` (BigInt sum, RangeError if unsafe) and exported `toSafe` in money.ts. All accumulations/subtractions in build-ledger.ts now use `addVnd`; `Number(newShares)` and average-cost conversion use `toSafe`. The existing try/catch maps RangeError to INVALID_INPUT.
+- Issue 2: `validate` rejects unknown `cashDividendTreatment` and `costMethod`.
+- Issue 3: `validate` rejects duplicate ids across transactions and corporate actions.
+
+### Files touched
+| File | Required because |
+|---|---|
+| packages/core/src/money.ts | addVnd, export toSafe (Issue 1) |
+| packages/core/src/money.test.ts | addVnd test |
+| packages/core/src/ledger/build-ledger.ts | checked arithmetic, settings and id validation |
+| packages/core/src/ledger/build-ledger.test.ts | tests: accumulated overflow, settings enums, duplicate ids |
+
+### Checks
+- typecheck: pass (core, web, worker)
+- lint: pass
+- test: 5 files, 37 tests passed
+- build: pass (apps/web)
+
+### Out-of-plan files
+None. Review nits not addressed (not blocking).
+
+### Scope self-check
+Only the three listed issues were changed.

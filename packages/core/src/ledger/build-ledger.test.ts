@@ -251,6 +251,33 @@ describe('buildLedger', () => {
     expect(r.ok).toBe(false);
   });
 
+  it('rejects accumulated sums beyond the safe integer range', () => {
+    const r = buildLedger(
+      [buy('2026-03-02', 1, Number.MAX_SAFE_INTEGER), buy('2026-03-02', 1, 2)],
+      [],
+      settings,
+      '2026-03-04',
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe('INVALID_INPUT');
+  });
+
+  it('rejects unknown settings enums', () => {
+    const t = [buy('2026-03-02', 1, 1000)];
+    const a = buildLedger(t, [], { ...settings, cashDividendTreatment: 'foo' as never }, '2026-03-04');
+    expect(a).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT', field: 'cashDividendTreatment' } });
+    const b = buildLedger(t, [], { ...settings, costMethod: 'FIFO' as never }, '2026-03-04');
+    expect(b).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT', field: 'costMethod' } });
+  });
+
+  it('rejects duplicate ids across transactions and corporate actions', () => {
+    const dup = buildLedger([buy('2026-03-02', 1, 1000, { id: 'x' }), buy('2026-03-03', 1, 1000, { id: 'x' })], [], settings, '2026-03-04');
+    expect(dup).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT', id: 'x', field: 'id' } });
+    const act: CorporateAction = { id: 'x', symbol: 'FPT', type: 'cash_dividend', exDate: '2026-03-03', amountPerShare: 100 };
+    const dup2 = buildLedger([buy('2026-03-02', 1, 1000, { id: 'x' })], [act], settings, '2026-03-04');
+    expect(dup2).toMatchObject({ ok: false, error: { code: 'INVALID_INPUT', id: 'x' } });
+  });
+
   it('same-date ordering uses seq then id', () => {
     const a = buy('2026-03-02', 10, 1000, { id: 'b', seq: 2 });
     const b = buy('2026-03-02', 20, 1000, { id: 'a', seq: 2 });
