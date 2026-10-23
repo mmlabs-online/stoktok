@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P1 |
 | Areas | ui, finance |
-| Attempts | 2 |
+| Attempts | 3 |
 | Created | 2026-10-22 |
 | PR | — |
 

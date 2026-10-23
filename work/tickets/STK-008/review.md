@@ -55,3 +55,54 @@ No violations found.
 - Generic `app/(app)/error.tsx` boundary (security-review S2).
 - Per-symbol oversell checking so one bad symbol doesn't mask the others (see nit 1).
 - Plan F1–F6 stand.
+
+## Attempt 2 — 2026-10-23
+Verdict: REWORK
+
+### Checks (run by reviewer)
+- typecheck: green (core, worker, db, web `next typegen && tsc --noEmit`), exit 0
+- lint: green, all packages, exit 0
+- test: green. core 15 files / 136; db 8 files / 39 passed + 1 todo; web 8 files / 74. Matches impl-log.
+- build: green, same route table as attempt 1.
+- check:service-key: OK, 0 hits in `.next/static`.
+- Browser check: `next start` (fresh build of HEAD 8de3a88) against the same PostgREST stub, driven by Chromium through scratch playwright-core. Screenshots are in `/tmp/claude-0/-home-user-stoktok/a3b909eb-ece1-56b0-9d9d-9c54d1ddc6ba/scratchpad/stk-008/attempt2/`. Servers stopped afterwards.
+
+### Status of attempt 1 issues
+- Issue 1 (🔴 select reset): **NOT fixed**. See Issue 1 below. The attempt 1 fix instruction (make the selects controlled) was mine, and it was wrong. The implementer followed it correctly.
+- Issue 2 (🟡 CA table at 375px): fixed. `attempt2/list-375.png` shows padded columns ("Ngày GDKHQ | Mã | Loại | Mô tả"), and the date does not wrap.
+- Issue 3 (🟡 non-UUID id): fixed. `/transactions/not-a-uuid/edit` and `/transactions/not-a-uuid/delete` both return HTTP 404 with the Next not-found page (`attempt2/edit-not-a-uuid-375.png`, `delete-not-a-uuid-375.png`). The handlers short-circuit to NOT_FOUND before any DB call: `handlers.test.ts` › "returns NOT_FOUND for a non-UUID id without touching the db" (update and delete). `is-uuid.ts` is a single helper, and its out-of-plan status is justified in impl-log.
+
+### Acceptance criteria
+- [x] AC1: unchanged from attempt 1; the CA list is now readable on mobile.
+- [ ] AC2 add/edit/delete: FAILED, see Issue 1. On /transactions/new, a sell still becomes a buy after a validation error.
+- [ ] AC3 corporate actions: FAILED, see Issue 1. The `type` select still falls back to "Cổ tức tiền".
+- [x] AC4, AC5, AC6: unchanged from attempt 1 and still green. The new UUID tests add coverage.
+
+### Issues
+#### Issue 1 — 🔴 blocker — data integrity: select still resets after a failed submit (attempt 1 Issue 1, unresolved)
+- **Where**: `apps/web/components/transactions/transaction-form.tsx:30` (`<form action={formAction}>`), `apps/web/components/transactions/corporate-action-form.tsx:26` (same).
+- **Expected**: after a server validation error, the chosen side/type stays selected, and the next submit sends it.
+- **Actual**: reproduced in Chromium on the fresh build. On /transactions/new, choose Bán, qty 150, and submit. The POST is a client fetch (`next-action` header, no navigation) carrying `side=sell`. After the error, the DOM select reads **`buy` (Mua)**, while the React fiber props on the same element read `value: "sell"`. After a 2nd failed submit it is still `buy`. The CA form behaves the same way: choose `stock_dividend`, held 0, submit, and it comes back as `cash_dividend`. Root cause: for `<form action={fn}>`, React 19 calls `form.reset()` after the action, which sets the select back to its default option. Because the controlled `value` prop did not change, React never writes it back. The DOM is what the next submit reads, so the sell is still saved as a buy. The new SSR test (`transactions.test.tsx` › "keeps the submitted side selected") only checks the initial render, so it cannot catch this. The edit page passes only because the stored side is also the first value React renders; switching sell→buy on edit and hitting an error would revert it the same way.
+- **Fix instruction** (verified: I built a scratch copy outside the repo with this exact change, and Bán stayed selected after the 1st and 2nd failed submit, with errors still rendered): in both forms, stop React's automatic form reset by submitting through `onSubmit` instead of the `action` prop:
+  ```tsx
+  import { startTransition, useActionState, useState } from 'react';
+  …
+  <form
+    onSubmit={(e) => {
+      e.preventDefault();
+      const fd = new FormData(e.currentTarget);
+      startTransition(() => formAction(fd));
+    }}
+    className="max-w-xl space-y-4"
+  >
+  ```
+  Keep the controlled selects as they are. Leave `delete-transaction-form.tsx` alone, since it has no fields. In impl-log, record a real browser check for both forms: choose Bán (or Cổ tức cổ phiếu), trigger an error, confirm it is still selected, then trigger a second error and confirm again. Reading the DOM `.value` is enough; the SSR test does not count as evidence for this.
+
+### Rules R1–R10
+No violations found. The rework adds no calculation to the UI (R1), and R3 is unchanged (service-key check OK). R7: `is-uuid.ts` is justified.
+
+### Nits (do not block)
+- 💭 Attempt 1 nits stand (escape-hatch masking, Thuế column padding, `[...actions].reverse()`).
+
+### Follow-ups (out of scope)
+- Unchanged from attempt 1 (S2 `error.tsx`, per-symbol oversell check, plan F1–F6).
