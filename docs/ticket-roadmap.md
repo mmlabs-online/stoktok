@@ -16,7 +16,7 @@
 | How Authen hands over and signs the token | STK-004 | §9 Q1 |
 | Sample TCInvest statement export (CSV) | Statement import, TCBS reconciliation | §9 Q2, Q3 |
 | Primary/fallback market data source after license check | STK-005, financials, intraday | §9 Q4 |
-| UI from Figma Make (link to the Make file) | All UI tickets | `docs/figma-make-prompts.md` |
+| ~~UI from Figma Make~~ — not needed: UI designed in code from the brief (Ming, 2026-10-23) | All UI tickets | `docs/figma-make-prompts.md` |
 | News sources list | News ingestion | §9 Q5 |
 | LLM provider | AI tickets | §9 Q6 |
 | Subdomain for the app | Deployment | §9 Q7 |
@@ -30,7 +30,7 @@ Already on the board: STK-001 (done), STK-002 (done), STK-003 schema, STK-004 au
 | Expected ID | Ticket | Prio | Depends on | Input needed |
 |---|---|---|---|---|
 | STK-006 | Server data layer for ledger, assets, settings | P1 | 003, 004 | — |
-| STK-007 | App shell and shared UI components from Figma Make | P1 | 001 | ⛔ Figma Make link |
+| STK-007 | App shell and shared UI components | P1 | 001 | — (designed in code) |
 | STK-008 | Transactions ledger screen | P1 | 006, 007 | — |
 | STK-009 | Portfolio dashboard and other assets | P1 | 006, 007, 005 | — |
 | STK-010 | Settings screen | P2 | 006, 007 | — |

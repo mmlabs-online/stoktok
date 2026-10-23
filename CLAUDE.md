@@ -4,7 +4,7 @@ Personal stock-tracking and investment-assistant app for the Vietnamese market (
 Part of the mmlabs ecosystem (login via Authen). **v1 is single-user (allowlist) and not listed in the mmlabs gallery.**
 
 - Product spec: [docs/spec-v1.md](docs/spec-v1.md) — source of truth for scope. If this file and the spec disagree on scope, the spec wins; flag the conflict.
-- UI prompts for Figma Make: [docs/figma-make-prompts.md](docs/figma-make-prompts.md)
+- UI design brief: [docs/figma-make-prompts.md](docs/figma-make-prompts.md) — no Figma file; UI is designed directly in code from this brief (Ming, 2026-10-23).
 - Workflow (tickets, agents, commands): see **Workflow** below.
 
 ---
