@@ -45,8 +45,8 @@ const fd = (o: Record<string, string>) => {
 const txForm = (o: Record<string, string> = {}) =>
   fd({ tradeDate: '2026-10-20', symbol: 'FPT', side: 'buy', quantity: '100', price: '125.400', fee: '', tax: '', ...o });
 
-const buy: Transaction = { id: 'b1', seq: 1, tradeDate: '2026-10-12', symbol: 'FPT', side: 'buy', quantity: 300, price: 100000 };
-const sell: Transaction = { id: 's1', seq: 2, tradeDate: '2026-10-16', symbol: 'FPT', side: 'sell', quantity: 200, price: 100000 };
+const buy: Transaction = { id: '00000000-0000-4000-8000-0000000000b1', seq: 1, tradeDate: '2026-10-12', symbol: 'FPT', side: 'buy', quantity: 300, price: 100000 };
+const sell: Transaction = { id: '00000000-0000-4000-8000-0000000000a1', seq: 2, tradeDate: '2026-10-16', symbol: 'FPT', side: 'sell', quantity: 200, price: 100000 };
 
 function setLedger(txs: Transaction[], actions: CorporateAction[] = []) {
   vi.mocked(listTransactions).mockResolvedValue(txs);
@@ -109,15 +109,15 @@ describe('handleUpdateTransaction', () => {
   it('calls updateTransaction with the id and integer VND', async () => {
     setLedger([buy, sell]);
     const r = await handleUpdateTransaction(
-      db, 's1', txForm({ side: 'sell', tradeDate: '2026-10-16', quantity: '300', price: '100000', fee: '0', tax: '0' }), today,
+      db, '00000000-0000-4000-8000-0000000000a1', txForm({ side: 'sell', tradeDate: '2026-10-16', quantity: '300', price: '100000', fee: '0', tax: '0' }), today,
     );
     expect(r).toEqual({ ok: true });
-    expect(updateTransaction).toHaveBeenCalledWith(db, 's1', expect.objectContaining({ quantity: 300, price: 100000 }));
+    expect(updateTransaction).toHaveBeenCalledWith(db, '00000000-0000-4000-8000-0000000000a1', expect.objectContaining({ quantity: 300, price: 100000 }));
   });
 
   it('refuses an edit that breaks a later sell', async () => {
     setLedger([buy, sell]);
-    const r = await handleUpdateTransaction(db, 'b1', txForm({ tradeDate: '2026-10-12', quantity: '100', price: '100000' }), today);
+    const r = await handleUpdateTransaction(db, '00000000-0000-4000-8000-0000000000b1', txForm({ tradeDate: '2026-10-12', quantity: '100', price: '100000' }), today);
     if (r.ok) throw new Error('expected failure');
     expect(r.formError?.code).toBe('OVERSELL_OTHER');
     expect(updateTransaction).not.toHaveBeenCalled();
@@ -125,14 +125,22 @@ describe('handleUpdateTransaction', () => {
 
   it('returns NOT_FOUND for an unknown id and does not write', async () => {
     setLedger([buy]);
-    const r = await handleUpdateTransaction(db, 'nope', txForm(), today);
+    const r = await handleUpdateTransaction(db, '00000000-0000-4000-8000-0000000000ff', txForm(), today);
     if (r.ok) throw new Error('expected failure');
     expect(r.formError?.code).toBe('NOT_FOUND');
     expect(updateTransaction).not.toHaveBeenCalled();
   });
 
+  it('returns NOT_FOUND for a non-UUID id without touching the db', async () => {
+    const r = await handleUpdateTransaction(db, "1' or true", txForm(), today);
+    if (r.ok) throw new Error('expected failure');
+    expect(r.formError?.code).toBe('NOT_FOUND');
+    expect(listTransactions).not.toHaveBeenCalled();
+    expect(updateTransaction).not.toHaveBeenCalled();
+  });
+
   it('invalid input does not write', async () => {
-    const r = await handleUpdateTransaction(db, 'b1', txForm({ price: '0' }), today);
+    const r = await handleUpdateTransaction(db, '00000000-0000-4000-8000-0000000000b1', txForm({ price: '0' }), today);
     expect(r.ok).toBe(false);
     expect(updateTransaction).not.toHaveBeenCalled();
   });
@@ -141,20 +149,28 @@ describe('handleUpdateTransaction', () => {
 describe('handleDeleteTransaction', () => {
   it('deletes a valid target', async () => {
     setLedger([buy, sell]);
-    expect(await handleDeleteTransaction(db, 's1', today)).toEqual({ ok: true });
-    expect(deleteTransaction).toHaveBeenCalledWith(db, 's1');
+    expect(await handleDeleteTransaction(db, '00000000-0000-4000-8000-0000000000a1', today)).toEqual({ ok: true });
+    expect(deleteTransaction).toHaveBeenCalledWith(db, '00000000-0000-4000-8000-0000000000a1');
   });
 
   it('refuses a delete that breaks a later sell', async () => {
     setLedger([buy, sell]);
-    const r = await handleDeleteTransaction(db, 'b1', today);
+    const r = await handleDeleteTransaction(db, '00000000-0000-4000-8000-0000000000b1', today);
     if (r.ok) throw new Error('expected failure');
     expect(r.formError?.code).toBe('OVERSELL_OTHER');
     expect(deleteTransaction).not.toHaveBeenCalled();
   });
 
-  it('returns NOT_FOUND for an unknown id', async () => {
+  it('returns NOT_FOUND for a non-UUID id without touching the db', async () => {
     const r = await handleDeleteTransaction(db, 'zzz', today);
+    if (r.ok) throw new Error('expected failure');
+    expect(r.formError?.code).toBe('NOT_FOUND');
+    expect(listTransactions).not.toHaveBeenCalled();
+    expect(deleteTransaction).not.toHaveBeenCalled();
+  });
+
+  it('returns NOT_FOUND for an unknown id', async () => {
+    const r = await handleDeleteTransaction(db, '00000000-0000-4000-8000-0000000000ff', today);
     if (r.ok) throw new Error('expected failure');
     expect(r.formError?.code).toBe('NOT_FOUND');
     expect(deleteTransaction).not.toHaveBeenCalled();

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import type { CorporateActionFormState } from '../../server/transactions/handlers';
 import { Field, FormBanner, TextField, describedBy, inputClass, primaryButtonClass, secondaryLinkClass } from './form-fields';
 
@@ -18,6 +18,8 @@ export function CorporateActionForm({
   initial: CorporateActionFormState;
 }) {
   const [state, formAction, pending] = useActionState(action, initial);
+  // Controlled: React resets uncontrolled fields after the action, and a select would fall back to its first option.
+  const [type, setType] = useState(initial.ok ? 'cash_dividend' : initial.values.type);
   if (state.ok) return null;
   const { fieldErrors: errors, values } = state;
   return (
@@ -30,7 +32,8 @@ export function CorporateActionForm({
         <select
           id="type"
           name="type"
-          defaultValue={values.type}
+          value={type}
+          onChange={(e) => setType(e.target.value as typeof type)}
           aria-invalid={errors.type ? true : undefined}
           aria-describedby={describedBy('type', errors.type)}
           className={inputClass}

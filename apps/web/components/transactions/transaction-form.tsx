@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import type { TransactionFormState } from '../../server/transactions/handlers';
 import { CheckField, Field, FormBanner, TextField, describedBy, inputClass, primaryButtonClass, secondaryLinkClass } from './form-fields';
 
@@ -21,6 +21,8 @@ export function TransactionForm({
   submitLabel: string;
 }) {
   const [state, formAction, pending] = useActionState(action, initial);
+  // Controlled: React resets uncontrolled fields after the action, and a select would fall back to its first option.
+  const [side, setSide] = useState(initial.ok ? 'buy' : initial.values.side);
   if (state.ok) return null;
   const { fieldErrors: errors, values } = state;
   const sideError = errors.side;
@@ -41,7 +43,8 @@ export function TransactionForm({
         <select
           id="side"
           name="side"
-          defaultValue={values.side}
+          value={side}
+          onChange={(e) => setSide(e.target.value as typeof side)}
           aria-invalid={sideError ? true : undefined}
           aria-describedby={describedBy('side', sideError)}
           className={inputClass}

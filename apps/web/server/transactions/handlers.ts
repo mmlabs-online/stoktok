@@ -24,6 +24,7 @@ import {
   updateTransaction,
 } from '../db';
 import type { Db } from '../db';
+import { isUuid } from '../is-uuid';
 
 /**
  * FormData -> raw strings -> core validation -> repo. Every path re-validates on the server.
@@ -104,6 +105,7 @@ async function submitTransaction(
   target: { id?: string },
 ): Promise<TransactionFormState> {
   const values = readTransactionForm(formData);
+  if (target.id !== undefined && !isUuid(target.id)) return failForm(values, 'NOT_FOUND');
   try {
     const { settings, feeRateConfigured } = await getEntrySettings(db);
     const v = validateTransactionInput(values, { rules: DEFAULT_TRADING_RULES, today, feeRateConfigured });
@@ -132,6 +134,7 @@ export const handleUpdateTransaction = (db: Db, id: string, formData: FormData, 
   submitTransaction(db, formData, today, { id });
 
 export async function handleDeleteTransaction(db: Db, id: string, today: string): Promise<FormState<Record<string, never>>> {
+  if (!isUuid(id)) return failForm({}, 'NOT_FOUND');
   try {
     const { settings } = await getEntrySettings(db);
     const check = await checkChange(db, today, { kind: 'delete', id }, settings);

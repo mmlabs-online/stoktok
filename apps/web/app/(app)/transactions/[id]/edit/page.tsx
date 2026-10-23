@@ -3,10 +3,12 @@ import { notFound } from 'next/navigation';
 import { TransactionForm } from '../../../../../components/transactions/transaction-form';
 import { todayVn } from '../../../../../server/clock';
 import { DataError, getDb, getEntrySettings, getTransaction } from '../../../../../server/db';
+import { isUuid } from '../../../../../server/is-uuid';
 import { updateTransactionAction } from '../../actions';
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!isUuid(id)) notFound();
   const db = getDb();
   const [tx, { feeRateConfigured }] = await Promise.all([
     getTransaction(db, id).catch((e: unknown) => {

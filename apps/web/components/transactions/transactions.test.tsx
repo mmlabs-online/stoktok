@@ -58,4 +58,21 @@ describe('TransactionForm', () => {
     expect(out).toContain('Chưa cài đặt phí giao dịch');
     expect(out).toContain('max="2026-10-23"');
   });
+  it('keeps the submitted side selected (controlled select)', () => {
+    const out = html(
+      <TransactionForm
+        action={async (s) => s}
+        initial={{
+          ok: false,
+          fieldErrors: {},
+          values: { tradeDate: '2026-10-20', symbol: 'FPT', side: 'sell', quantity: '100', price: '125400', fee: '', tax: '', oddLot: false, confirmLowPrice: false },
+        }}
+        today="2026-10-23"
+        feeRateConfigured
+        submitLabel="Lưu"
+      />,
+    );
+    expect(out).toMatch(/<option value="sell" selected="">/);
+    expect(out).not.toMatch(/<option value="buy" selected="">/);
+  });
 });

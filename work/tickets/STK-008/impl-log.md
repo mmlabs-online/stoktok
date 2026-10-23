@@ -62,3 +62,31 @@ Manual checks at 375px and >= 768px were NOT run (no browser, no Supabase env in
 ### Scope self-check
 - Could the diff be smaller? No further: no migration, no new dependency, no rights issue, no CA edit/delete.
 - Diff size: ~+2,150 lines incl. tests (21 new files plus 10 modified); modified files are small additive edits.
+
+## Attempt 2 (REWORK) — 2026-10-23
+
+### Files touched
+- apps/web/components/transactions/transaction-form.tsx, corporate-action-form.tsx: `side` / `type` selects are now controlled (`useState` initialised from `initial.values`, hook placed before the `state.ok` early return). Required by review Issue 1.
+- apps/web/components/transactions/corporate-action-list.tsx: `px-2` on all cells, `whitespace-nowrap` on the date column (Issue 2).
+- apps/web/server/is-uuid.ts (new): single `isUuid` helper (Issue 3).
+- apps/web/server/transactions/handlers.ts: `handleUpdateTransaction` and `handleDeleteTransaction` return `NOT_FOUND` for a non-UUID id before any DB access. Both actions go through these handlers, so the guard covers them (Issue 3).
+- apps/web/app/(app)/transactions/[id]/edit/page.tsx, [id]/delete/page.tsx: `if (!isUuid(id)) notFound()` (Issue 3).
+
+### Tests
+- handlers.test.ts: non-UUID id for update and delete gives NOT_FOUND with no list/write call; existing fixture ids changed to UUIDs.
+- transactions.test.tsx: form rendered with `values.side='sell'` has the `sell` option selected (Issue 1, cheap SSR check).
+- Manual check still worth doing in a browser: choose Bán, trigger a validation error, confirm the select stays Bán (same for CA type). The browser form-reset behaviour is not covered by the SSR test.
+
+### Checks
+- typecheck, lint: pass
+- test: core 136, db 39 passed + 1 todo, web 74 (8 files), all pass
+- build: pass; check:service-key: OK, 0 hits
+
+### Out-of-plan files
+- apps/web/server/is-uuid.ts (new helper, requested by security-review S1).
+
+### Follow-ups
+- Unchanged (security S2 error.tsx, per-symbol oversell check).
+
+### Scope self-check
+Only the three review issues were changed. Nothing committed.

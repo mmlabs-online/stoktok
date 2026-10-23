@@ -11,21 +11,21 @@ export function CorporateActionList({ actions }: { actions: CorporateAction[] })
       <table className="w-full text-sm">
         <thead>
           <tr className="border-border text-fg-muted border-b text-left">
-            <th className="py-2">Ngày GDKHQ</th>
-            <th>Mã</th>
-            <th>Loại</th>
-            <th>Mô tả</th>
+            <th className="px-2 py-2 whitespace-nowrap">Ngày GDKHQ</th>
+            <th className="px-2">Mã</th>
+            <th className="px-2">Loại</th>
+            <th className="px-2">Mô tả</th>
           </tr>
         </thead>
         <tbody>
           {actions.map((a) => (
             <tr key={a.id} className="border-border border-b">
-              <td className="num py-2">{formatDate(a.exDate)}</td>
-              <td>
+              <td className="num px-2 py-2 whitespace-nowrap">{formatDate(a.exDate)}</td>
+              <td className="px-2">
                 <SymbolLink symbol={a.symbol} />
               </td>
-              <td>{TYPE_LABEL[a.type]}</td>
-              <td>{describeCorporateAction(a)}</td>
+              <td className="px-2">{TYPE_LABEL[a.type]}</td>
+              <td className="px-2">{describeCorporateAction(a)}</td>
             </tr>
           ))}
         </tbody>
