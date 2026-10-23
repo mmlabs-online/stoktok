@@ -49,3 +49,38 @@ The id comes from `.bind(null, id)` and from the route params. Anyone can POST t
 
 ## Open questions
 - None.
+
+---
+
+# Security review: STK-008, attempt 2 (rework)
+
+**Verdict: S1 is fixed for every string or non-UUID id. There are no 🔴 findings. One new 🟡 edge case: if the edit action gets an `undefined` id, it creates a transaction instead of rejecting the request.** I only read the code statically and ran nothing.
+
+## Findings
+
+✅ **S1 is fixed.**
+- `apps/web/server/is-uuid.ts:1-4`: the regex is `^…$`, anchored at both ends. It has the `i` flag but not `m`. In JS, `$` without `m` matches only at the true end of input, so a trailing `\n` or extra text is rejected. The pattern is strict: hex only, 8-4-4-4-12, with no version check, which suits Postgres `uuid`. `typeof v === 'string'` runs first, so numbers, objects, arrays and `null` all return false and nothing throws.
+- **Delete action:** `handlers.ts:137` runs the guard before `getEntrySettings`, `checkChange` and `deleteTransaction`, and returns `NOT_FOUND`.
+- **Update action:** `handlers.ts:108` runs the guard before any DB access and returns `NOT_FOUND`.
+- **Pages:** the edit page (`[id]/edit/page.tsx:11`) and the delete page (`[id]/delete/page.tsx:10`) both call `notFound()` before `getDb()`. The `.bind(null, id)` calls (`edit:24`, `delete:22`) only ever bind an id that passed the check.
+- **Tests:** `handlers.test.ts:134-140` and `:164-170` pass non-UUID ids and assert `NOT_FOUND`, no `listTransactions` call and no write. This meets recommendation 1 from attempt 1.
+- **Corporate-action create:** it takes no id from the client, so it needs no guard (confirmed).
+
+🟡 **S3 (new): an `undefined` id on the update action is treated as a create.** `handlers.ts:108` only validates when `target.id !== undefined`, and `:114` and `:122` take the *add* branch when `target.id === undefined`. React's server-action argument encoding can carry `undefined` (`$undefined`). So a direct POST to `updateTransactionAction` with `id = undefined` (`actions.ts:29-35`) skips the guard and calls `createTransaction`.
+- **Impact is low.** The input still goes through full core validation and the ledger check, `source` is still `'manual'`, and the create action already allows the same thing. The real problem is that it breaks the "edit never creates" invariant and the claim that every non-UUID id gets `NOT_FOUND`.
+- **Fix (one line):** in `handleUpdateTransaction` (`handlers.ts:133-134`), check `if (!isUuid(id)) return failForm(readTransactionForm(formData), 'NOT_FOUND');` before calling `submitTransaction`. Or pass an explicit `{ mode: 'edit', id }` instead of relying on whether `id` is undefined. Add a test that calls `handleUpdateTransaction(db, undefined as unknown as string, …)` and expects `NOT_FOUND` and that `createTransaction` was not called.
+- **Rule tied:** AC2 (server-side re-validation) and R8 (tests for changed logic).
+
+💭 **The rework added nothing else new.** No new sinks, redirects or error-leak paths. `failForm` echoes only the user's own form values. `null` reaches `isUuid` and returns `NOT_FOUND` correctly.
+
+💭 S2 (no `error.tsx` boundary) and N7 (no length cap on form strings) are still follow-ups (R7), unchanged. R6 is suspended and not flagged, but it must be resolved before STK-018 goes live.
+
+## Recommendations
+1. Fix S3 in this ticket with the guard in `handleUpdateTransaction` plus the test. It is small and should-fix, not blocking.
+2. Keep S2 and N7 on the follow-ups list.
+
+## Risks
+- Until R6 is restored, the ledger is open to anyone who can reach the app.
+
+## Open questions
+- None.
