@@ -106,3 +106,46 @@ No violations found. The rework adds no calculation to the UI (R1), and R3 is un
 
 ### Follow-ups (out of scope)
 - Unchanged from attempt 1 (S2 `error.tsx`, per-symbol oversell check, plan F1–F6).
+
+## Attempt 3 — 2026-10-23
+Verdict: PASS
+
+### Checks (run by reviewer)
+- install: `pnpm install --frozen-lockfile`, already up to date.
+- typecheck: green (core, worker, db, web `next typegen && tsc --noEmit`), exit 0
+- lint: green, all packages, exit 0
+- test: green. core 15 files / 136; db 8 files / 39 passed + 1 todo; web 8 files / 74. Matches impl-log.
+- build: green, same route table as attempts 1–2.
+- check:service-key: OK, 0 hits for `SUPABASE_SERVICE_ROLE_KEY` / `service_role` in `.next/static`.
+- Browser check: I ran a fresh build of HEAD bd1a73a with `next start -p 3931` against my own PostgREST stub (`scratchpad/r3stub.mjs`, which also handles POST inserts and DELETE). I drove it with Chromium 1194 through scratch playwright-core (`scratchpad/pw/r3.mjs`). Screenshots are in `/tmp/claude-0/-home-user-stoktok/a3b909eb-ece1-56b0-9d9d-9c54d1ddc6ba/scratchpad/stk-008/attempt3/reviewer/`. All servers were stopped afterwards.
+
+### Status of attempt 2 issues
+- Issue 1 (🔴 select reset): **fixed**. Both forms now submit through `onSubmit` → `preventDefault` → `startTransition(() => formAction(fd))`, so React no longer runs its automatic `form.reset()`. Verified in Chromium:
+  - /transactions/new: I chose Bán with qty 150 and submitted. After the error, `#side` = `sell` (Bán) and qty is still 150 (`new-err1-sell-375.png`). On a 2nd failed submit (price 0), it is still `sell` (`new-err2-sell-375.png`). Both server-action POSTs carry `_1_side=sell`, and both are client `next-action` requests.
+  - Valid submit: with qty 100 and price 130.000, the page redirects to `/transactions` (`new-valid-redirect-375.png`). The stub received the insert `{"side":"sell","quantity":100,"price":130000,"fee":1000,"tax":100,…}`, so the sell is stored as a sell.
+  - Edit: on the sell row (`2222…`), the prefill is `sell`, and after a price error it is still `sell` (`edit-sell-err-375.png`). On the buy row (`3333…`), I switched to sell and triggered an error, and it stays `sell`.
+  - Corporate actions: I chose Cổ tức cổ phiếu with held 0. After the 1st and 2nd errors, `#type` = `stock_dividend`, and the POST carries `stock_dividend` (`ca-err-stock-375.png`). With held 100, it redirects to `/transactions`, and the stub received `type: stock_dividend, ratio_num 20, ratio_den 100`.
+  - Delete (unchanged, still `<form action>`): deleting `1111…` shows the Vietnamese oversell banner and no DELETE request is sent (`delete-tx1-error-375.png`). Deleting `3333…` sends `DELETE …id=eq.3333…` and redirects to `/transactions` (`delete-valid-redirect-375.png`).
+- Issue 2 and Issue 3 (🟡): stay fixed. This rework does not touch those files.
+
+### Acceptance criteria
+- [x] AC1: unchanged since attempt 2.
+- [x] AC2 add/edit/delete (auth waived, R6): handler tests from attempts 1–2 plus the browser evidence above. Side survives errors on new and edit, a valid submit saves and redirects, and delete works in both the error and success paths.
+- [x] AC3 corporate actions: handler tests plus the browser evidence above. The type survives errors, and a valid stock dividend saves and redirects.
+- [x] AC4, AC5, AC6: unchanged and green.
+
+### Issues
+None.
+
+### Scope
+The rework diff (`git show HEAD`) touches only `transaction-form.tsx` and `corporate-action-form.tsx` (+20/−4), plus the work files. Both are in the plan. There are no out-of-plan files.
+
+### Rules R1–R10
+No violations found. The handler adds no math (R1). `new FormData(e.currentTarget)` only collects fields. R3 is unchanged and the service-key check passes. R6 is suspended and was not flagged.
+
+### Nits (do not block)
+- 💭 The handler bypasses native `<form action>` progressive enhancement, so the forms need JS to submit. This is acceptable for this app.
+- 💭 Attempt 1 nits stand (escape-hatch masking, Thuế column padding, `[...actions].reverse()`).
+
+### Follow-ups (out of scope)
+- Unchanged: S2 `error.tsx`, per-symbol oversell check, plan F1–F6.
