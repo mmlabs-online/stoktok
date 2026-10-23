@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P1 |
 | Areas | ui, finance |
 | Attempts | 0 |
