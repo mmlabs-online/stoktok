@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P1 |
 | Areas | architecture, security |
 | Attempts | 0 |
 | Created | 2026-10-22 |
+| PR | — |
 
 ## Goal
 Only Ming can use stoktok: every page, route handler and server action verifies the Authen (mmlabs SSO) JWT on the server and checks the allowlist before doing anything.
