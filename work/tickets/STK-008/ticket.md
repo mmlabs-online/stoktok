@@ -7,7 +7,7 @@
 | Areas | ui, finance |
 | Attempts | 3 |
 | Created | 2026-10-22 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/7 |
 
 ## Goal
 Ming can view, add, edit and delete transactions and add corporate actions on the `/transactions` screen, with validation coming from `packages/core`.
