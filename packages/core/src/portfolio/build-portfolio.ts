@@ -32,9 +32,10 @@ export interface PortfolioRow extends ValuedHolding {
 }
 
 export interface PortfolioTotals {
-  holdingsMarketValue: number;
+  /** null when holdings are open but none is priced (value unknown, not 0). */
+  holdingsMarketValue: number | null;
   holdingsCostPriced: number;
-  unrealizedPnl: number;
+  unrealizedPnl: number | null;
   unrealizedPnlPpm: number | null;
   /** All holdings, including fully sold ones. */
   realizedPnl: number;
@@ -112,13 +113,14 @@ export function buildPortfolio(input: BuildPortfolioInput): Portfolio {
   const cash = addVnd(0, ...input.assets.filter((a) => a.type === 'cash').map((a) => a.value));
   const otherAssets = addVnd(0, ...input.assets.filter((a) => a.type === 'other').map((a) => a.value));
   const missingCount = rows.length - pricedRows.length;
+  const nothingPriced = rows.length > 0 && pricedRows.length === 0;
 
   return {
     rows,
     totals: {
-      holdingsMarketValue: denom,
+      holdingsMarketValue: nothingPriced ? null : denom,
       holdingsCostPriced,
-      unrealizedPnl,
+      unrealizedPnl: nothingPriced ? null : unrealizedPnl,
       unrealizedPnlPpm:
         holdingsCostPriced > 0 ? toSafe(roundDiv(BigInt(unrealizedPnl) * PPM, BigInt(holdingsCostPriced))) : null,
       realizedPnl: addVnd(0, ...input.holdings.map((h) => h.realizedPnl)),

@@ -19,7 +19,7 @@ function Price({ row }: { row: PortfolioRow }) {
 }
 
 function Pnl({ row }: { row: PortfolioRow }) {
-  if (row.unrealizedPnl === null) return <MoneyText vnd={null} />;
+  if (row.unrealizedPnl === null) return <span className="flex flex-col items-end"><MoneyText vnd={null} /></span>;
   const tone = changeTone(row.unrealizedPnl);
   return (
     <span className="flex flex-col items-end">
@@ -36,7 +36,7 @@ function Pnl({ row }: { row: PortfolioRow }) {
 }
 
 function Weight({ row, thresholdPpm }: { row: PortfolioRow; thresholdPpm: number }) {
-  if (row.weightPpm === null) return <span className="num">—</span>;
+  if (row.weightPpm === null) return <span className="flex flex-col items-end"><span className="num">—</span></span>;
   return (
     <span className="flex flex-col items-end gap-1">
       <span className="num">{formatPercent(row.weightPpm)}</span>

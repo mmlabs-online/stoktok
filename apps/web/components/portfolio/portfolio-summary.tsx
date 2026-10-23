@@ -11,8 +11,7 @@ export function PortfolioSummary({
   totals: PortfolioTotals;
   feeRateConfigured: boolean;
 }) {
-  const tone = changeTone(totals.unrealizedPnl);
-  const style = TONE_STYLES[tone];
+  const style = totals.unrealizedPnl === null ? null : TONE_STYLES[changeTone(totals.unrealizedPnl)];
   const realizedTone = changeTone(totals.realizedPnl);
   const noteClass = 'text-fg-muted text-sm';
   return (
@@ -30,11 +29,15 @@ export function PortfolioSummary({
         <StatCard
           label="Lãi/lỗ chưa chốt"
           value={
-            <span className={`num ${style.text}`}>
-              <span aria-hidden>{style.glyph} </span>
-              {formatVnd(totals.unrealizedPnl, { signed: true })}
-              <span className="sr-only"> {style.srLabel}</span>
-            </span>
+            totals.unrealizedPnl === null || style === null ? (
+              <MoneyText vnd={null} />
+            ) : (
+              <span className={`num ${style.text}`}>
+                <span aria-hidden>{style.glyph} </span>
+                {formatVnd(totals.unrealizedPnl, { signed: true })}
+                <span className="sr-only"> {style.srLabel}</span>
+              </span>
+            )
           }
           sub={totals.unrealizedPnlPpm === null ? undefined : formatPercent(totals.unrealizedPnlPpm, { signed: true })}
         />

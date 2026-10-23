@@ -192,7 +192,8 @@ describe('net worth', () => {
   it('all missing: net worth = cash + other', () => {
     const p = build([holding('AAA', 10, 1)], [], assets);
     expect(p.totals).toMatchObject({
-      holdingsMarketValue: 0,
+      holdingsMarketValue: null,
+      unrealizedPnl: null,
       pricedCount: 0,
       complete: false,
       netWorth: 17_500,

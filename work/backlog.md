@@ -13,7 +13,7 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-006 | Server data layer for ledger, assets, settings | DONE | P1 | db, security | 1 | 2026-10-23 |
 | STK-007 | App shell and shared UI components | DONE | P1 | ui | 1 | 2026-10-23 |
 | STK-008 | Transactions ledger screen | DONE | P1 | ui, finance | 3 | 2026-10-23 |
-| STK-009 | Portfolio dashboard and other assets | REWORK | P1 | ui, finance | 2 | 2026-10-23 |
+| STK-009 | Portfolio dashboard and other assets | REVIEW | P1 | ui, finance | 2 | 2026-10-23 |
 | STK-010 | Settings screen | BACKLOG | P2 | ui | 0 | 2026-10-22 |
 | STK-011 | Watchlist screen | BACKLOG | P2 | ui, data | 0 | 2026-10-22 |
 | STK-012 | Statement CSV import and reconciliation | BACKLOG | P2 | data, finance, ui | 0 | 2026-10-22 |

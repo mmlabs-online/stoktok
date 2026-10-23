@@ -97,6 +97,7 @@ describe('loadDashboard', () => {
     if (r.kind !== 'ok') return;
     expect(r.portfolio.rows[0]).toMatchObject({ priceStatus: 'missing', marketValue: null, unrealizedPnl: null });
     expect(r.portfolio.totals.complete).toBe(false);
+    expect(r.portfolio.totals).toMatchObject({ holdingsMarketValue: null, unrealizedPnl: null });
   });
   it('ledger OVERSELL -> ledgerError, nothing thrown', async () => {
     vi.mocked(listTransactions).mockResolvedValue([buy('1', 'FPT', 100), sell('2', 'FPT', 300)]);

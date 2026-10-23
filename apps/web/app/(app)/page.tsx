@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { DisclaimerNote } from '../../components/disclaimer-note';
 import { EmptyState } from '../../components/empty-state';
 import { HoldingsTable } from '../../components/portfolio/holdings-table';
 import { PortfolioSummary } from '../../components/portfolio/portfolio-summary';
@@ -53,7 +52,6 @@ export default async function Page() {
       ) : (
         <HoldingsTable portfolio={portfolio} />
       )}
-      <DisclaimerNote />
     </div>
   );
 }

@@ -57,3 +57,33 @@ Slice 1 only (dashboard). Assets CRUD is STK-030 and was not built. R6 suspended
 ### Scope self-check
 - Could the diff be smaller? No. Every file is in the plan, plus the one fake-client line.
 - Diff size: see `git diff --shortstat` (new files are untracked). Nothing committed or pushed, per instructions.
+
+## Attempt 2 (REWORK) — 2026-10-23
+
+### Files touched
+- packages/core/src/portfolio/build-portfolio.ts — Issue 1: `holdingsMarketValue` and `unrealizedPnl` are `number | null`. Both are null when `rows.length > 0 && pricedCount === 0`. Net worth still uses the numeric denominator (0 when nothing is priced), so it stays cash + other.
+- apps/web/components/portfolio/portfolio-summary.tsx — Issue 1: Lãi/lỗ chưa chốt renders "—" with no tone, glyph or sr label when null. `changeTone` is called only for a non-null value. Giá trị cổ phiếu already goes through MoneyText, which renders "—" for null.
+- apps/web/app/(app)/page.tsx — Issue 2: removed the duplicate `DisclaimerNote` and its import (the shell renders it).
+- apps/web/components/portfolio/holdings-table.tsx — nit: null Lãi/lỗ and Tỷ trọng are wrapped in the same `items-end` span, so they right-align on mobile cards.
+
+### Tests changed / added
+- build-portfolio.test.ts › net worth › all missing: now expects `holdingsMarketValue: null, unrealizedPnl: null, netWorth: 17_500`.
+- load-dashboard.test.ts › empty prices_daily: also asserts the two totals are null.
+- portfolio.test.tsx › new case "all holdings unpriced": no "đứng giá", no "0 ₫" in the stock value card, "—" shown, note present.
+
+### Checks
+- pnpm install: done
+- typecheck: pass (core, worker, db, web)
+- lint: pass
+- test: core 17 files / 169 tests; db 9 files / 47 passed + 1 todo; web 10 files / 90 tests; all pass
+- build: pass
+- check:service-key: OK, 0 hits
+
+### Out-of-plan files
+- None.
+
+### Follow-ups
+- None new. Not done: the range-check nit on `resolveConcentrationThreshold` (the DB constraint covers it) and the "đứng giá" with no holdings nit (not required).
+
+### Scope self-check
+- Only the listed issues and one trivial nit were changed. Nothing committed or pushed.

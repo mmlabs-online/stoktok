@@ -96,6 +96,14 @@ describe('PortfolioSummary', () => {
     expect(out).toContain('Chưa cài tỷ lệ phí giao dịch');
     expect(out).toContain('Tổng tài sản');
   });
+  it('all holdings unpriced: stock value and unrealized P&L show a dash, never 0 or flat', () => {
+    const p = portfolio([holding('NOP', 10, 1_000_000)], []);
+    const out = html(<PortfolioSummary totals={p.totals} feeRateConfigured />);
+    expect(out).not.toContain('đứng giá');
+    expect(out).not.toMatch(/Giá trị cổ phiếu[^]*?0 ₫[^]*?Tiền mặt \+ tài sản khác/);
+    expect(out).toMatch(/Giá trị cổ phiếu<\/[^>]+>\s*<[^>]+><span class="num">—/);
+    expect(out).toContain('Chưa tính 1 mã chưa có giá');
+  });
   it('no fee banner and no notes when everything is complete', () => {
     const p = portfolio([holding('FPT', 100, 10_000_000)], [quote('FPT', 125_400)]);
     const out = html(<PortfolioSummary totals={p.totals} feeRateConfigured />);
