@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P1 |
 | Areas | ui, finance |
 | Attempts | 2 |
 | Created | 2026-10-22 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/7 |
 
 ## Goal
 The dashboard shows holdings and P&L derived from the ledger with the latest daily prices, holding weights with a concentration warning, and total net worth including cash and other assets that Ming can manage.
