@@ -90,3 +90,40 @@ Manual checks at 375px and >= 768px were NOT run (no browser, no Supabase env in
 
 ### Scope self-check
 Only the three review issues were changed. Nothing committed.
+
+## Attempt 3 (REWORK) — 2026-10-23
+
+### Files touched
+| File | Required because |
+|---|---|
+| apps/web/components/transactions/transaction-form.tsx | Review attempt 2 Issue 1: `<form action={formAction}>` replaced by `onSubmit` (preventDefault, `new FormData(e.currentTarget)`, `startTransition(() => formAction(fd))`), so React 19 no longer resets the form (and the selects) after the action. Controlled select kept. |
+| apps/web/components/transactions/corporate-action-form.tsx | Same change for the corporate-action form. |
+
+`delete-transaction-form.tsx` untouched (no fields). `pending` still comes from `useActionState` and disables the submit button, since the action runs inside a transition.
+
+### Tests added / changed
+- None. The bug is browser form-reset behaviour, which SSR/vitest cannot cover; verified in a real browser instead (below). `no-calc-in-ui.test.ts` stays green.
+
+### Browser check (done, real Chromium)
+Scratch playwright-core in `.../scratchpad/pw` (outside the repo), PostgREST-like stub `.../scratchpad/stub.mjs`, fresh `next build` + `next start -p 3921`. Scripts `pw/a3.mjs`, `pw/a3b.mjs`; screenshots in `.../scratchpad/stk-008/attempt3/`. Servers stopped afterwards.
+- /transactions/new: choose Bán, qty 150, submit: select value `sell` (label Bán). Second failed submit: still `sell`; the POST body contains `sell` (2 POSTs observed). Reselecting Mua still works (`buy`).
+- /transactions/<sell id>/edit: prefill `sell`, error on price: still `sell`.
+- /transactions/corporate-actions/new: choose Cổ tức cổ phiếu, held 0, submit twice: `stock_dividend` after both; the POST body contains `stock_dividend`.
+- Delete page still renders its form with the "Xóa" button (not submitted against the stub). The disabled-while-pending state was not observed visually (the stub responds instantly); the code path is unchanged (`disabled={pending}`).
+
+### Checks (actual output summary)
+- pnpm install: up to date
+- typecheck: pass (exit 0)
+- lint: pass
+- test: core 15 files / 136; db 8 files / 39 passed + 1 todo; web 8 files / 74, all pass
+- build: pass
+- check:service-key: OK, no service key material in client bundle
+
+### Out-of-plan files
+None.
+
+### Follow-ups (noticed, not done)
+- None new.
+
+### Scope self-check
+- Could the diff be smaller? No. +20 / -4 lines across two files, nothing committed.

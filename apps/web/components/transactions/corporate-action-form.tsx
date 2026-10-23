@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useState } from 'react';
+import { startTransition, useActionState, useState } from 'react';
 import type { CorporateActionFormState } from '../../server/transactions/handlers';
 import { Field, FormBanner, TextField, describedBy, inputClass, primaryButtonClass, secondaryLinkClass } from './form-fields';
 
@@ -23,7 +23,15 @@ export function CorporateActionForm({
   if (state.ok) return null;
   const { fieldErrors: errors, values } = state;
   return (
-    <form action={formAction} className="max-w-xl space-y-4">
+    <form
+      onSubmit={(e) => {
+        // Not <form action>: React 19 would reset the form after the action and put the selects back to their first option.
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        startTransition(() => formAction(fd));
+      }}
+      className="max-w-xl space-y-4"
+    >
       <p className="text-fg-muted text-sm">
         Quyền mua chưa được hỗ trợ. Tạm thời nhập cổ phiếu mua quyền như một lệnh Mua với giá phát hành, phí 0.
       </p>

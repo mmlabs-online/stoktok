@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useActionState, useState } from 'react';
+import { startTransition, useActionState, useState } from 'react';
 import type { TransactionFormState } from '../../server/transactions/handlers';
 import { CheckField, Field, FormBanner, TextField, describedBy, inputClass, primaryButtonClass, secondaryLinkClass } from './form-fields';
 
@@ -27,7 +27,15 @@ export function TransactionForm({
   const { fieldErrors: errors, values } = state;
   const sideError = errors.side;
   return (
-    <form action={formAction} className="max-w-xl space-y-4">
+    <form
+      onSubmit={(e) => {
+        // Not <form action>: React 19 would reset the form after the action and put the selects back to their first option.
+        e.preventDefault();
+        const fd = new FormData(e.currentTarget);
+        startTransition(() => formAction(fd));
+      }}
+      className="max-w-xl space-y-4"
+    >
       {!feeRateConfigured && (
         <p className="border-warn text-warn rounded-lg border p-3 text-sm">
           Chưa cài đặt phí giao dịch: nhập phí/thuế thủ công.{' '}
