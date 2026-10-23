@@ -12,7 +12,7 @@ You are the **orchestrator** for ticket `$ARGUMENTS`. You dispatch subagents and
 1. If `$ARGUMENTS` is empty, pick the `BACKLOG` ticket in `work/backlog.md` with the highest priority (P1 > P2 > P3), then the lowest ID. If none, report "Nothing in BACKLOG" and stop.
 2. Read `work/tickets/<ID>/ticket.md`. Refuse to run if state is `DONE` or `ESCALATED` (tell Ming why). A `BLOCKED` ticket may run only if its blocking questions now have answers in ticket.md.
 3. Make sure the working tree is clean (`git status --porcelain`). If not, stop and report.
-4. Create or switch to branch `ticket/<ID>` from `main`.
+4. Create or switch to branch `ticket/<ID>` from the latest `main` (`git fetch origin main` first). If the environment mandates a different working branch (e.g. a cloud session's designated branch), use that branch instead and say so in the report.
 5. Set state `PLANNING` in ticket.md and backlog.md.
 
 ## 1. Consult (only for the ticket's `areas`)
@@ -28,7 +28,7 @@ Dispatch the matching specialists **in parallel**, each with: the ticket path, "
 
 ## 2. Plan
 Dispatch `planner` with the ticket path. When it returns, read `plan.md`:
-- `Status: BLOCKED` → set state `BLOCKED`, commit `work/` changes (`STK-xxx: plan blocked`), and **stop**: show Ming the blocking questions.
+- `Status: BLOCKED` → set state `BLOCKED`, commit `work/` changes (`STK-xxx: plan blocked`), push the branch (no PR), and **stop**: show Ming the blocking questions.
 - `Status: READY` → set state `IN_PROGRESS`, commit `work/` (`STK-xxx: plan`), continue. (No human approval gate — Ming's decision.)
 
 ## 3. Implement
@@ -44,10 +44,24 @@ Set state `REVIEW`. Then:
 ## 5. Loop decision
 - **PASS** → set state `DONE`, update backlog row (state, attempts, updated date), commit `work/` (`STK-xxx: done`). Go to 6.
 - **REWORK** and reworks so far < 2 → increment `attempts` in ticket.md, set state `REWORK`, dispatch `implementer` with "REWORK attempt N: fix only the issues in the latest review.md section", then return to step 4.
-- **REWORK** and reworks so far = 2 → set state `ESCALATED`, write `work/tickets/<ID>/escalation.md` from `work/templates/escalation.md` (what failed each attempt, root-cause guess, options for Ming), commit, and **stop**.
+- **REWORK** and reworks so far = 2 → set state `ESCALATED`, write `work/tickets/<ID>/escalation.md` from `work/templates/escalation.md` (what failed each attempt, root-cause guess, options for Ming), commit, push the branch (no PR), and **stop**.
 
-## 6. Report to Ming
-Short summary in Vietnamese: ticket, final state, attempts, files changed (`git diff --stat main...HEAD`), check results, follow-ups the agents listed, and the next step (e.g. "merge `ticket/<ID>` into `main`" or the escalation questions). **Never push and never merge** — Ming does that.
+## 6. Open the pull request (DONE only)
+1. Push the branch: `git push -u origin <branch>`.
+2. Open a PR into `main` (GitHub MCP `create_pull_request`, or `gh pr create`). If a PR for this branch is already open, update it instead of opening a second one.
+   - Title: `STK-xxx: <ticket title>`.
+   - Body (English, short):
+     - **Summary**: what changed, 2–4 bullets.
+     - **Acceptance criteria**: the ticket's checklist, each ticked with one line of evidence from `review.md`.
+     - **Checks**: `typecheck` / `lint` / `test` (+ any ticket-specific check) results from the review.
+     - **Needs Ming's decision**: spec divergences and planner defaults to confirm (or "none").
+     - **Follow-ups**: from impl-log, review and security-review.
+     - Links to `plan.md`, `review.md`, `security-review.md` in the ticket folder.
+3. Write the PR URL into ticket.md (`| PR | <url> |` row in the field table), commit `STK-xxx: link PR`, and push.
+4. **Never approve, merge or enable auto-merge.** Ming reviews and merges the PR.
+
+## 7. Report to Ming
+Short summary in Vietnamese: ticket, final state, attempts, files changed (`git diff --stat main...HEAD`), check results, follow-ups the agents listed, and the next step: the PR link to approve and merge, or the escalation / blocking questions.
 
 ## Guardrails
 - Pass each subagent only what it needs (paths, attempt number, the exact instruction). Do not paste whole files into prompts.

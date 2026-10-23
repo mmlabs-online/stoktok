@@ -7,6 +7,7 @@
 | Areas | <finance, architecture, db, data, ui, security> |
 | Attempts | 0 |
 | Created | YYYY-MM-DD |
+| PR | — |
 
 ## Goal
 <One or two sentences.>

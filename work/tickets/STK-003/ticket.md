@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P1 |
 | Areas | db, security |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-10-22 |
+| PR | https://github.com/mmlabs-online/stoktok/pull/3 |
 
 ## Goal
 Create the stoktok database schema for v1.0 as Supabase migrations, aligned with the `packages/core` ledger types from STK-002, so later tickets can persist transactions, assets, watchlist, settings and daily prices.
