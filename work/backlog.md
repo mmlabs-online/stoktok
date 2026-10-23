@@ -7,7 +7,7 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 |---|---|---|---|---|---|---|
 | STK-001 | Scaffold pnpm workspace and tooling | DONE | P1 | architecture | 1 | 2026-10-22 |
 | STK-002 | Core ledger: transactions → lots → holdings with P&L | DONE | P1 | finance, db | 2 | 2026-10-22 |
-| STK-003 | Supabase schema and migrations for v1.0 data | REVIEW | P1 | db, security | 0 | 2026-10-23 |
+| STK-003 | Supabase schema and migrations for v1.0 data | DONE | P1 | db, security | 1 | 2026-10-23 |
 | STK-004 | Authen login and allowlist on the Next.js server | BACKLOG | P1 | architecture, security | 0 | 2026-10-22 |
 | STK-005 | End-of-day price adapter and sync job | BACKLOG | P2 | data, db | 0 | 2026-10-22 |
 | STK-006 | Server data layer for ledger, assets, settings | BACKLOG | P1 | db, security | 0 | 2026-10-22 |
