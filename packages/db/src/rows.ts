@@ -13,3 +13,12 @@ export interface WatchlistRow {
   group_name: string;
   added_at: string;
 }
+
+/** Selected columns only. */
+export interface PriceDailyRow {
+  symbol: string;
+  trade_date: string;
+  close: number;
+  source: string;
+  fetched_at: string;
+}

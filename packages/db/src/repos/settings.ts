@@ -1,4 +1,4 @@
-import { DEFAULT_MARKET_SETTINGS, RowMappingError, settingsFromRow, settingsToRow } from '@stoktok/core';
+import { DEFAULT_MARKET_SETTINGS, RowMappingError, settingsFromRow, settingsToRow, toSafeInt } from '@stoktok/core';
 import type { LedgerSettings, SettingsRow } from '@stoktok/core';
 import type { Db } from '../client';
 import { DataError, mapRow, unwrap, unwrapFound } from '../errors';
@@ -60,4 +60,16 @@ export async function saveSettings(
   const ctx = { table: 'settings', op: 'save' };
   const row = unwrap<SettingsRow>(await db.from('settings').upsert(settingsToRow(s), { onConflict: 'id' }).select(COLS).single(), ctx);
   return toSettings(row, ctx);
+}
+
+/**
+ * Separate from getSettings so the ledger settings path and saveSettings stay unchanged.
+ * Returns null when the row is missing or the threshold is unset (the caller applies the default, R5).
+ */
+export async function getConcentrationThreshold(db: Db): Promise<number | null> {
+  const ctx = { table: 'settings', op: 'get' };
+  const res = await db.from('settings').select('concentration_threshold_ppm').eq('id', 1).maybeSingle();
+  if (!res.error && res.data === null) return null;
+  const row = unwrap<{ concentration_threshold_ppm: number | null }>(res, ctx);
+  return row.concentration_threshold_ppm === null ? null : toSafeInt(row.concentration_threshold_ppm, 'concentration_threshold_ppm', ctx.table);
 }

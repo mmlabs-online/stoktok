@@ -1,6 +1,7 @@
 /** Row <-> domain conversions for assets and watchlist. No financial calculation (R1); integers only (R2). */
 import { RowMappingError, toSafeInt } from '@stoktok/core';
-import type { AssetRow, WatchlistRow } from './rows';
+import type { PriceQuote } from '@stoktok/core';
+import type { AssetRow, PriceDailyRow, WatchlistRow } from './rows';
 
 export interface Asset {
   id: string;
@@ -36,4 +37,19 @@ export function assetToRow(asset: Omit<Asset, 'id'>): Omit<AssetRow, 'id'> {
 
 export function watchlistFromRow(row: WatchlistRow): WatchlistEntry {
   return { symbol: row.symbol, group: row.group_name, addedAt: row.added_at };
+}
+
+/** R4: a quote without source or fetched_at is rejected, never shown as current. */
+export function priceQuoteFromRow(row: PriceDailyRow): PriceQuote {
+  const t = 'prices_daily';
+  if (typeof row.trade_date !== 'string' || !DATE_RE.test(row.trade_date)) {
+    throw new RowMappingError(t, 'trade_date', `invalid date: ${String(row.trade_date)}`);
+  }
+  const close = toSafeInt(row.close, 'close', t);
+  if (close < 0) throw new RowMappingError(t, 'close', `negative close: ${close}`);
+  if (typeof row.source !== 'string' || row.source === '') throw new RowMappingError(t, 'source', 'missing source');
+  if (typeof row.fetched_at !== 'string' || row.fetched_at === '') {
+    throw new RowMappingError(t, 'fetched_at', 'missing fetched_at');
+  }
+  return { symbol: row.symbol, close, tradeDate: row.trade_date, source: row.source, fetchedAt: row.fetched_at };
 }

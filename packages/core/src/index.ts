@@ -2,7 +2,7 @@ export function describeCore(): string {
   return '@stoktok/core';
 }
 
-export { addTradingDays, isTradingDay, isValidDate, vnDateOf } from './calendar';
+export { addTradingDays, isTradingDay, isValidDate, previousTradingDay, vnDateOf, vnMinutesOf } from './calendar';
 export { ROUNDING_MODE, applyRatePpm, mulDiv, roundDiv } from './money';
 export { buildLedger } from './ledger/build-ledger';
 export { DEFAULT_MARKET_SETTINGS, estimateFees } from './ledger/settings';
@@ -56,3 +56,18 @@ export type {
   ValidateCorporateActionResult,
 } from './entry/validate-corporate-action';
 export { describeCorporateAction } from './entry/describe';
+export { buildPortfolio } from './portfolio/build-portfolio';
+export type {
+  BuildPortfolioInput,
+  Portfolio,
+  PortfolioRow,
+  PortfolioTotals,
+  PriceQuote,
+} from './portfolio/build-portfolio';
+export {
+  DEFAULT_CONCENTRATION_THRESHOLD_PPM,
+  DEFAULT_PRICE_CUTOFF_MINUTES_VN,
+  resolveConcentrationThreshold,
+} from './portfolio/config';
+export { expectedPriceDate, priceStatus } from './portfolio/freshness';
+export type { PriceStatus } from './portfolio/freshness';

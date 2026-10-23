@@ -19,6 +19,7 @@ export {
   listCorporateActions,
   updateCorporateAction,
 } from './repos/corporate-actions';
-export { getEntrySettings, getSettings, saveSettings } from './repos/settings';
+export { getConcentrationThreshold, getEntrySettings, getSettings, saveSettings } from './repos/settings';
+export { getLatestCloses } from './repos/prices-daily';
 export { createAsset, deleteAsset, listAssets, updateAsset } from './repos/assets';
 export { addToWatchlist, listWatchlist, removeFromWatchlist } from './repos/watchlist';
