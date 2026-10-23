@@ -1,5 +1,7 @@
 /** Trading-day arithmetic on 'YYYY-MM-DD' strings. Holidays are an input (R5). */
 
+import { VN_TIME_ZONE } from './format';
+
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 function toUtc(date: string): Date {
@@ -37,4 +39,18 @@ export function addTradingDays(date: string, n: number, holidays: readonly strin
     if (isTradingDay(current, holidays)) left -= 1;
   }
   return current;
+}
+
+const vnDateFormat = new Intl.DateTimeFormat('en-GB', {
+  timeZone: VN_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
+/** The calendar date ('YYYY-MM-DD') of an instant in Vietnam time. */
+export function vnDateOf(instant: Date): string {
+  const p: Record<string, string> = {};
+  for (const part of vnDateFormat.formatToParts(instant)) p[part.type] = part.value;
+  return `${p.year}-${p.month}-${p.day}`;
 }
