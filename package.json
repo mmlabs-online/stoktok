@@ -10,6 +10,7 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
+    "db:check": "bash scripts/db-check.sh",
     "build": "pnpm -r --if-present build"
   },
   "devDependencies": {

@@ -9,3 +9,14 @@ export { DEFAULT_MARKET_SETTINGS, estimateFees } from './ledger/settings';
 export { valueHoldings } from './ledger/valuation';
 export type { ValuedHolding } from './ledger/valuation';
 export type * from './ledger/types';
+export {
+  RowMappingError,
+  corporateActionFromRow,
+  corporateActionToRow,
+  settingsFromRow,
+  settingsToRow,
+  toSafeInt,
+  transactionFromRow,
+  transactionToInsert,
+} from './db/mappers';
+export type * from './db/rows';

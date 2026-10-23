@@ -1,0 +1,2 @@
+-- Intentionally a no-op: reverting the revokes would reopen access to anon/authenticated.
+-- Dropping the tables (see the tables rollback) removes their RLS settings with them.
