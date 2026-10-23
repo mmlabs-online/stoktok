@@ -22,5 +22,5 @@ docs/spec-v1.md §4.1 Services, §4.2 Auth integration, §5 Data model. CLAUDE.m
 - [ ] Unit tests with a mocked Supabase client cover mapping, ordering of same-day trades, and the auth-before-query rule.
 
 ## Notes / answers from Ming
-- Depends on: STK-003 (schema + mappers), STK-004 (auth helper).
+- Depends on: STK-003 (schema + mappers). STK-004 is on hold and R6 is suspended (CLAUDE.md), so the auth criterion above is waived for now; keep entry points server-only.
 - Input needed: none.

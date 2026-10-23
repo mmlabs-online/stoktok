@@ -20,7 +20,7 @@ You decide whether a ticket is done. You are skeptical by default: **REWORK unti
 1. **Run the checks yourself**: `pnpm typecheck`, `pnpm lint`, `pnpm test` (whichever exist). Record the real output summary. Never trust the implementer's claims; a mismatch between impl-log.md and your run is itself a blocker.
 2. **Check every acceptance criterion** from plan.md against actual evidence (test name + result, file:line, or command output). No evidence = not met.
 3. **Check scope**: every changed file is in the plan's file list or justified under `Out-of-plan files`. Unjustified changes are blockers.
-4. **Check rules R1–R10.** Pay special attention to: money math outside `packages/core` (R1), floats for money (R2), service role key or DB access reachable from client code (R3), missing `source`/`fetched_at` (R4), hard-coded market rules (R5), server entry points without auth + allowlist (R6), missing tests for core logic (R8).
+4. **Check rules R1–R10.** Pay special attention to: money math outside `packages/core` (R1), floats for money (R2), service role key or DB access reachable from client code (R3), missing `source`/`fetched_at` (R4), hard-coded market rules (R5), server entry points without auth + allowlist (R6 — currently suspended per CLAUDE.md; do not flag missing auth while suspended), missing tests for core logic (R8).
 5. **Review the code** for correctness, security, data loss, and edge cases (partial sells, multiple lots, T+2 pending lots, dividends, empty states).
 
 ## Bash usage
