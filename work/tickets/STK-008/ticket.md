@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P1 |
 | Areas | ui, finance |
 | Attempts | 0 |
 | Created | 2026-10-22 |
+| PR | — |
 
 ## Goal
 Ming can view, add, edit and delete transactions and add corporate actions on the `/transactions` screen, with validation coming from `packages/core`.
