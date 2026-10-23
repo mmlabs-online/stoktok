@@ -67,13 +67,13 @@ One orchestrated loop per ticket. **The main session is the orchestrator** (suba
 
 ```
 /ticket "..."  →  BACKLOG
-/run STK-xxx   →  CONSULT (optional specialists) → PLAN → IMPLEMENT → REVIEW ─PASS→ DONE
+/run STK-xxx   →  CONSULT (optional specialists) → PLAN → IMPLEMENT → REVIEW ─PASS→ DONE → PR (Ming merges)
                                                       ^                  │
                                                       └──── REWORK ──────┘  max 2 reworks → ESCALATED (stop, ask Ming)
 ```
 
 - No human gate between PLAN and IMPLEMENT (Ming's decision). The loop stops only when: the planner returns blocking questions (`BLOCKED`), reviews are exhausted (`ESCALATED`), or the ticket is `DONE`.
-- Each ticket runs on branch `ticket/STK-xxx`. The loop commits there; **Ming merges** to `main`.
+- Each ticket runs on branch `ticket/STK-xxx` (or the session's mandated branch in cloud sessions). The loop commits and pushes there; when the ticket is `DONE` it **opens a PR into `main`** automatically. **Ming approves and merges** — agents never merge.
 
 ### Commands (`.claude/commands/`)
 | Command | Purpose |
