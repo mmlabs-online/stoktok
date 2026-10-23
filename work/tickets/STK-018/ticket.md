@@ -23,4 +23,5 @@ docs/spec-v1.md §4.1 Services, §7 Deployment, §9 Q7. CLAUDE.md Stack (Runtime
 
 ## Notes / answers from Ming
 - Depends on: STK-017 (images).
+- **Auth is off (R6 suspended, 2026-10-23).** Do not expose the app publicly without either STK-004 done or Cloudflare Access on the subdomain — ask Ming which.
 - **Input needed (⛔ blocking):** app subdomain (spec §9 Q7).

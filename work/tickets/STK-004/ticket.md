@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | BLOCKED |
 | Priority | P1 |
 | Areas | architecture, security |
 | Attempts | 0 |
 | Created | 2026-10-22 |
+| PR | — |
 
 ## Goal
 Only Ming can use stoktok: every page, route handler and server action verifies the Authen (mmlabs SSO) JWT on the server and checks the allowlist before doing anything.
@@ -23,4 +24,5 @@ docs/spec-v1.md §1.2 Users, §4.2 Auth integration, §9 Open question 1 (JWT tr
 - [ ] `.env.example` updated to the final auth keys (replacing the provisional ones).
 
 ## Notes / answers from Ming
+- **On hold (Ming, 2026-10-23):** ignore Authen for now; no page is authenticated. R6 is suspended in CLAUDE.md. Resume this ticket (and answer the plan.md questions) before public go-live.
 - **Open (spec §9 Q1), likely blocking:** how the Authen token reaches stoktok (shared cookie on `.mmlabs.online`, or redirect with token/code) and how it is verified. Recommendation from the consultant: verify with the Authen Supabase project's public JWKS (asymmetric signing keys), so no shared JWT secret is needed — confirm Authen's project uses JWT signing keys. Planner: if the CaleChip/Authen code does not answer this, return BLOCKED with the exact questions.
