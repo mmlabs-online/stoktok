@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P1 |
 | Areas | ui, finance |
 | Attempts | 0 |
 | Created | 2026-10-22 |
+| PR | — |
 
 ## Goal
 The dashboard shows holdings and P&L derived from the ledger with the latest daily prices, holding weights with a concentration warning, and total net worth including cash and other assets that Ming can manage.
