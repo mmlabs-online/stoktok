@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
-import { createTransaction, deleteTransaction, listTransactions, updateTransaction } from './transactions';
+import {
+  createTransaction,
+  deleteTransaction,
+  getTransaction,
+  listTransactions,
+  listTransactionsPage,
+  updateTransaction,
+} from './transactions';
 
 const row = (o: Record<string, unknown> = {}) => ({
   id: 'a',
@@ -91,5 +98,51 @@ describe('transactions repo', () => {
     const f = createFake();
     f.respond({ data: [] });
     await expect(deleteTransaction(f.db, 'a')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  test('listTransactionsPage pushes all filters to SQL, pages with range and counts', async () => {
+    const f = createFake();
+    f.respond({ data: [row()], count: 45 });
+    const out = await listTransactionsPage(f.db, {
+      symbol: 'FPT',
+      side: 'sell',
+      from: '2026-01-01',
+      to: '2026-06-30',
+      limit: 20,
+      offset: 20,
+    });
+    expect(f.methods('select')[0]?.args[1]).toEqual({ count: 'exact' });
+    expect(f.methods('eq').map((c) => c.args)).toEqual([
+      ['symbol', 'FPT'],
+      ['side', 'sell'],
+    ]);
+    expect(f.methods('gte')[0]?.args).toEqual(['trade_date', '2026-01-01']);
+    expect(f.methods('lte')[0]?.args).toEqual(['trade_date', '2026-06-30']);
+    expect(f.methods('range')[0]?.args).toEqual([20, 39]);
+    expect(f.methods('order').map((c) => c.args)).toEqual([
+      ['trade_date', { ascending: false }],
+      ['seq', { ascending: false }],
+    ]);
+    expect(out.total).toBe(45);
+    expect(out.rows).toHaveLength(1);
+  });
+
+  test('listTransactionsPage without filters adds none; null count is 0', async () => {
+    const f = createFake();
+    f.respond({ data: [], count: null });
+    const out = await listTransactionsPage(f.db, { limit: 20, offset: 0 });
+    expect(f.methods('eq')).toHaveLength(0);
+    expect(f.methods('gte')).toHaveLength(0);
+    expect(f.methods('lte')).toHaveLength(0);
+    expect(out).toEqual({ rows: [], total: 0 });
+  });
+
+  test('getTransaction returns the mapped row and NOT_FOUND on null', async () => {
+    const f = createFake();
+    f.respond({ data: row({ id: 'z' }) });
+    expect((await getTransaction(f.db, 'z')).id).toBe('z');
+    expect(f.methods('eq')[0]?.args).toEqual(['id', 'z']);
+    f.respond({ data: null });
+    await expect(getTransaction(f.db, 'q')).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

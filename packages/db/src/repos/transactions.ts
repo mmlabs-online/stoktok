@@ -30,6 +30,41 @@ export async function listTransactions(db: Db, opts: { symbol?: string } = {}): 
   return rows.map((r) => mapRow(transactionFromRow, r, ctx)).sort(compareTransactions);
 }
 
+export interface TransactionPageQuery {
+  symbol?: string;
+  side?: 'buy' | 'sell';
+  /** Inclusive 'YYYY-MM-DD' bounds. */
+  from?: string;
+  to?: string;
+  limit: number;
+  offset: number;
+}
+
+/** One page of transactions, newest first, with the total count for the same filters. */
+export async function listTransactionsPage(
+  db: Db,
+  opts: TransactionPageQuery,
+): Promise<{ rows: Transaction[]; total: number }> {
+  const ctx = { table: 'transactions', op: 'list-page' };
+  let q = db.from('transactions').select(COLS, { count: 'exact' });
+  if (opts.symbol !== undefined) q = q.eq('symbol', opts.symbol);
+  if (opts.side !== undefined) q = q.eq('side', opts.side);
+  if (opts.from !== undefined) q = q.gte('trade_date', opts.from);
+  if (opts.to !== undefined) q = q.lte('trade_date', opts.to);
+  const res = await q
+    .order('trade_date', { ascending: false })
+    .order('seq', { ascending: false })
+    .range(opts.offset, opts.offset + opts.limit - 1);
+  const rows = unwrap<TransactionRow[]>(res, ctx);
+  return { rows: rows.map((r) => mapRow(transactionFromRow, r, ctx)), total: res.count ?? 0 };
+}
+
+export async function getTransaction(db: Db, id: string): Promise<Transaction> {
+  const ctx = { table: 'transactions', op: 'get' };
+  const row = unwrapFound<TransactionRow>(await db.from('transactions').select(COLS).eq('id', id).maybeSingle(), ctx);
+  return mapRow(transactionFromRow, row, ctx);
+}
+
 export async function createTransaction(
   db: Db,
   input: TxInput,

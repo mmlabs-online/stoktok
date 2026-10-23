@@ -1,7 +1,7 @@
 import { RowMappingError } from '@stoktok/core';
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
-import { getSettings, saveSettings } from './settings';
+import { getEntrySettings, getSettings, saveSettings } from './settings';
 
 const row = {
   id: 1,
@@ -56,5 +56,29 @@ describe('settings repo', () => {
     expect(keys).not.toContain('rule_configs');
     expect(keys).not.toContain('concentration_threshold_ppm');
     expect(keys).toContain('fee_rate_ppm');
+  });
+
+  test('getEntrySettings with a fee rate is configured', async () => {
+    const f = createFake();
+    f.respond({ data: row });
+    expect(await getEntrySettings(f.db)).toMatchObject({ feeRateConfigured: true, settings: { feeRatePpm: 1500 } });
+  });
+
+  test('getEntrySettings with NULL fee keeps stored settings and uses fee rate 0', async () => {
+    const f = createFake();
+    f.respond({ data: { ...row, fee_rate_ppm: null, settlement_days: 3, holidays: ['2026-09-02'] } });
+    expect(await getEntrySettings(f.db)).toMatchObject({
+      feeRateConfigured: false,
+      settings: { feeRatePpm: 0, settlementDays: 3, holidays: ['2026-09-02'] },
+    });
+  });
+
+  test('getEntrySettings with no row returns defaults and not configured', async () => {
+    const f = createFake();
+    f.respond({ data: null });
+    expect(await getEntrySettings(f.db)).toMatchObject({
+      feeRateConfigured: false,
+      settings: { feeRatePpm: 0, settlementDays: 2 },
+    });
   });
 });

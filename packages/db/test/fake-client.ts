@@ -8,9 +8,10 @@ export interface Call {
 export interface Res {
   data: unknown;
   error: { code?: string; message?: string; details?: string } | null;
+  count?: number | null;
 }
 
-const METHODS = ['select', 'eq', 'order', 'range', 'insert', 'update', 'upsert', 'delete', 'single', 'maybeSingle'];
+const METHODS = ['select', 'eq', 'gte', 'lte', 'order', 'range', 'insert', 'update', 'upsert', 'delete', 'single', 'maybeSingle'];
 
 /** Chainable fake of the supabase-js query builder. Each awaited query consumes the next queued response. */
 export function createFake() {

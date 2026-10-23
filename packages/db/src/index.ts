@@ -4,13 +4,21 @@ export { DataError } from './errors';
 export type { DataErrorCode } from './errors';
 export type { Asset, WatchlistEntry } from './mappers';
 export { loadLedger } from './ledger';
-export { createTransaction, deleteTransaction, listTransactions, updateTransaction } from './repos/transactions';
+export {
+  createTransaction,
+  deleteTransaction,
+  getTransaction,
+  listTransactions,
+  listTransactionsPage,
+  updateTransaction,
+} from './repos/transactions';
+export type { TransactionPageQuery } from './repos/transactions';
 export {
   createCorporateAction,
   deleteCorporateAction,
   listCorporateActions,
   updateCorporateAction,
 } from './repos/corporate-actions';
-export { getSettings, saveSettings } from './repos/settings';
+export { getEntrySettings, getSettings, saveSettings } from './repos/settings';
 export { createAsset, deleteAsset, listAssets, updateAsset } from './repos/assets';
 export { addToWatchlist, listWatchlist, removeFromWatchlist } from './repos/watchlist';

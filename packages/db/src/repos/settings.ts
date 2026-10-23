@@ -1,4 +1,4 @@
-import { RowMappingError, settingsFromRow, settingsToRow } from '@stoktok/core';
+import { DEFAULT_MARKET_SETTINGS, RowMappingError, settingsFromRow, settingsToRow } from '@stoktok/core';
 import type { LedgerSettings, SettingsRow } from '@stoktok/core';
 import type { Db } from '../client';
 import { DataError, mapRow, unwrap, unwrapFound } from '../errors';
@@ -30,6 +30,27 @@ export async function getSettings(db: Db): Promise<LedgerSettings> {
     throw e;
   }
   return toSettings(row, ctx);
+}
+
+/**
+ * Settings for entry validation. Never throws NOT_CONFIGURED: while the fee rate is unset the
+ * ledger replay still works (fees do not affect quantities), and the caller asks for manual fees.
+ */
+export async function getEntrySettings(db: Db): Promise<{ settings: LedgerSettings; feeRateConfigured: boolean }> {
+  const ctx = { table: 'settings', op: 'get' };
+  let row: SettingsRow;
+  try {
+    row = unwrapFound<SettingsRow>(await db.from('settings').select(COLS).eq('id', 1).maybeSingle(), ctx);
+  } catch (e) {
+    if (e instanceof DataError && e.code === 'NOT_FOUND') {
+      return { settings: { ...DEFAULT_MARKET_SETTINGS, feeRatePpm: 0 }, feeRateConfigured: false };
+    }
+    throw e;
+  }
+  if (row.fee_rate_ppm === null) {
+    return { settings: mapRow(settingsFromRow, { ...row, fee_rate_ppm: 0 }, ctx), feeRateConfigured: false };
+  }
+  return { settings: mapRow(settingsFromRow, row, ctx), feeRateConfigured: true };
 }
 
 export async function saveSettings(
