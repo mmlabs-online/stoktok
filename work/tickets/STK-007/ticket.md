@@ -7,7 +7,7 @@
 | Areas | ui |
 | Attempts | 1 |
 | Created | 2026-10-22 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/6 |
 
 ## Goal
 Design and build the app shell and shared presentational components directly in `apps/web` (no Figma file — Ming's decision 2026-10-23), with formatting helpers in `packages/core`, so every screen ticket builds on the same layout and components.
