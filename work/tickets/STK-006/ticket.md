@@ -7,7 +7,7 @@
 | Areas | db, security |
 | Attempts | 1 |
 | Created | 2026-10-22 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/5 |
 
 ## Goal
 Server-only repositories give the web app and worker one safe way to read and write transactions, corporate actions, assets, settings and watchlist, using the service role behind the auth helper, with all calculation left to `packages/core`.
