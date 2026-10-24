@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P2 |
 | Areas | data, db |
 | Attempts | 0 |
@@ -19,7 +19,7 @@ docs/spec-v1.md §2.2 Data constraints, §4.3 Data source adapters, §4.4 Job sc
 - [ ] A `PriceSource` interface (daily OHLCV for a symbol and date range) with one concrete implementation; adding a second source requires no change to callers.
 - [ ] A worker job syncs daily prices for all watchlist symbols, upserting `prices_daily` idempotently (re-running the same day changes nothing) with `source` and `fetched_at` (R4).
 - [ ] Prices are converted to integer VND at the adapter boundary (R2); invalid or missing fields are rejected, not stored.
-- [ ] Missing trading days for a symbol are written to `data_gaps`; weekends are not gaps. Exchange holidays use a configurable list (holiday data source is a later ticket).
+- [ ] ~~Missing trading days written to `data_gaps`~~ — *moved to STK-031 (split 2026-10-24, same as the STK-009 split Ming approved).*
 - [ ] Unit tests use recorded fixtures / mocked HTTP only — no live network in tests.
 - [ ] The job can be run once manually via a documented `pnpm` script; scheduling (cron) wiring is minimal and documented.
 
