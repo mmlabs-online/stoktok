@@ -12,7 +12,8 @@
     "test": "pnpm -r --if-present test",
     "db:check": "bash scripts/db-check.sh",
     "build": "pnpm -r --if-present build",
-    "check:service-key": "bash scripts/check-no-service-key-in-client.sh"
+    "check:service-key": "bash scripts/check-no-service-key-in-client.sh",
+    "worker:eod": "pnpm --filter @stoktok/worker run job eod-prices"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

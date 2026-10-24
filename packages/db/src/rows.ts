@@ -22,3 +22,17 @@ export interface PriceDailyRow {
   source: string;
   fetched_at: string;
 }
+
+/** Upsert payload (all columns; R4 source + fetched_at). */
+export interface PriceDailyInsert {
+  symbol: string;
+  trade_date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  foreign_net: number | null;
+  source: string;
+  fetched_at: string;
+}

@@ -2,7 +2,19 @@ export function describeCore(): string {
   return '@stoktok/core';
 }
 
-export { addTradingDays, isTradingDay, isValidDate, previousTradingDay, vnDateOf, vnMinutesOf } from './calendar';
+export {
+  addTradingDays,
+  isTradingDay,
+  isValidDate,
+  previousTradingDay,
+  subtractTradingDays,
+  vnDateOf,
+  vnMinutesOf,
+} from './calendar';
+export { DEFAULT_PRICE_SANITY } from './market/config';
+export type { PriceSanity } from './market/config';
+export { normalizeDailyBar, toVnd } from './market/daily-bar';
+export type { DailyBar, NormalizeResult, PriceUnit, RawDailyBar } from './market/daily-bar';
 export { ROUNDING_MODE, applyRatePpm, mulDiv, roundDiv } from './money';
 export { buildLedger } from './ledger/build-ledger';
 export { DEFAULT_MARKET_SETTINGS, estimateFees } from './ledger/settings';
