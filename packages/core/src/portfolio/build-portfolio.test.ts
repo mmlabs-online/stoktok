@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Holding } from '../ledger/types';
+import { ASSET_VALUE_MAX } from '../entry/rules';
 import { buildPortfolio } from './build-portfolio';
 import type { PriceQuote } from './build-portfolio';
 import { DEFAULT_CONCENTRATION_THRESHOLD_PPM, resolveConcentrationThreshold } from './config';
@@ -199,6 +200,11 @@ describe('net worth', () => {
       netWorth: 17_500,
     });
     expect(p.rows[0]?.marketValue).toBeNull();
+  });
+  it('several rows at ASSET_VALUE_MAX plus holdings do not throw', () => {
+    const rows = Array.from({ length: 10 }, () => ({ type: 'cash' as const, value: ASSET_VALUE_MAX }));
+    const p = build([holding('AAA', 10, 1)], [quote('AAA', 1000)], rows);
+    expect(p.totals.netWorth).toBe(10 * ASSET_VALUE_MAX + 10_000);
   });
   it('no assets', () => {
     const p = build([holding('AAA', 10, 1)], [quote('AAA', 1000)]);

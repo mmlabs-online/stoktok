@@ -32,7 +32,13 @@ export {
 export { PRICE_TONES, changeTone, priceTone } from './tone';
 export type { PriceTone } from './tone';
 export { normalizeSymbol } from './symbol';
-export { DEFAULT_TRADING_RULES, INT32_MAX, LOW_PRICE_CONFIRM_BELOW } from './entry/rules';
+export {
+  ASSET_NAME_MAX_LENGTH,
+  ASSET_VALUE_MAX,
+  DEFAULT_TRADING_RULES,
+  INT32_MAX,
+  LOW_PRICE_CONFIRM_BELOW,
+} from './entry/rules';
 export type { TradingRules } from './entry/rules';
 export { parseIntegerInput } from './entry/parse-input';
 export type { ParseIntegerResult } from './entry/parse-input';
@@ -46,6 +52,8 @@ export type {
   ValidateContext,
   ValidateTransactionResult,
 } from './entry/validate-transaction';
+export { assetToFormValues, validateAssetInput } from './entry/validate-asset';
+export type { AssetField, AssetFormRaw, AssetInput, ValidateAssetResult } from './entry/validate-asset';
 export { checkLedgerChange } from './entry/check-ledger-change';
 export type { LedgerChange, LedgerChangeResult } from './entry/check-ledger-change';
 export { validateCorporateActionInput } from './entry/validate-corporate-action';

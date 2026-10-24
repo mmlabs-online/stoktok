@@ -1,5 +1,6 @@
 import { changeTone, formatPercent, formatVnd } from '@stoktok/core';
 import type { PortfolioTotals } from '@stoktok/core';
+import Link from 'next/link';
 import { MoneyText } from '../money-text';
 import { StatCard } from '../stat-card';
 import { TONE_STYLES } from '../tone';
@@ -47,6 +48,9 @@ export function PortfolioSummary({
           sub={`Cổ tức nhận (ròng) ${formatVnd(totals.dividendCashNet)}`}
         />
       </div>
+      <Link href="/assets" className="inline-flex min-h-11 items-center text-sm underline">
+        Quản lý tiền mặt &amp; tài sản khác
+      </Link>
       {totals.missingCount > 0 && <p className={noteClass}>Chưa tính {totals.missingCount} mã chưa có giá</p>}
       {totals.staleCount > 0 && <p className="text-warn text-sm">Gồm {totals.staleCount} mã dùng giá cũ</p>}
       {!totals.complete && <p className={noteClass}>Tỷ trọng chỉ tính trên mã có giá</p>}

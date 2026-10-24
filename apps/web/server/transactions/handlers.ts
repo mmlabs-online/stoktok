@@ -41,15 +41,15 @@ export type FormState<V> =
   | { ok: true }
   | { ok: false; fieldErrors: FieldErrors; formError?: FormMessage; values: V };
 
-const message = (e: EntryError): FormMessage => ({ code: e.code, message: entryMessage(e.code, e.params) });
+export const message = (e: EntryError): FormMessage => ({ code: e.code, message: entryMessage(e.code, e.params) });
 
-function fieldErrors(errors: Partial<Record<string, EntryError>>): FieldErrors {
+export function fieldErrors(errors: Partial<Record<string, EntryError>>): FieldErrors {
   const out: FieldErrors = {};
   for (const [field, e] of Object.entries(errors)) if (e) out[field] = message(e);
   return out;
 }
 
-function failForm<V>(values: V, code: EntryErrorCode): FormState<V> {
+export function failForm<V>(values: V, code: EntryErrorCode): FormState<V> {
   return { ok: false, fieldErrors: {}, formError: message({ code }), values };
 }
 

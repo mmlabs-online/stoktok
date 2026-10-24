@@ -21,5 +21,5 @@ export {
 } from './repos/corporate-actions';
 export { getConcentrationThreshold, getEntrySettings, getSettings, saveSettings } from './repos/settings';
 export { getLatestCloses } from './repos/prices-daily';
-export { createAsset, deleteAsset, listAssets, updateAsset } from './repos/assets';
+export { createAsset, deleteAsset, getAsset, listAssets, updateAsset } from './repos/assets';
 export { addToWatchlist, listWatchlist, removeFromWatchlist } from './repos/watchlist';

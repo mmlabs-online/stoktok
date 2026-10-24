@@ -84,6 +84,11 @@ describe('HoldingsTable', () => {
 });
 
 describe('PortfolioSummary', () => {
+  it('summary links to /assets, also with no holdings', () => {
+    const out = html(<PortfolioSummary totals={portfolio([], []).totals} feeRateConfigured />);
+    expect(out).toContain('href="/assets"');
+    expect(out).toContain('Quản lý tiền mặt &amp; tài sản khác');
+  });
   it('shows incomplete, stale and partial-weights notes and the fee banner', () => {
     const p = portfolio(
       [holding('FPT', 100, 10_000_000), holding('VNM', 100, 6_000_000), holding('NOP', 10, 1_000_000)],
