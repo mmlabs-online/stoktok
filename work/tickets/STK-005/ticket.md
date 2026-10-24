@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P2 |
 | Areas | data, db |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-10-22 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/8 |
 
 ## Goal
 The worker fetches daily OHLCV for watchlist symbols after market close from a swappable data source and stores it with `source` and `fetched_at`, recording any missing trading days as gaps.
