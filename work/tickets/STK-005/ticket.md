@@ -24,4 +24,7 @@ docs/spec-v1.md §2.2 Data constraints, §4.3 Data source adapters, §4.4 Job sc
 - [ ] The job can be run once manually via a documented `pnpm` script; scheduling (cron) wiring is minimal and documented.
 
 ## Notes / answers from Ming
+- **Answer to §9 Q4 (Ming, 2026-10-24):** use the **TCBS public API** (the unofficial endpoint TCBS's own web uses, no registration) as the primary source. Ming accepts the risk that it is unlicensed for automated use and may change or block without notice. Keep request volume low (tens/day), use a descriptive User-Agent, no header spoofing. Keep the `PriceSource` interface so SSI FastConnect / VNDirect can be swapped in later. Record this in an ADR.
+- **Symbol scope (Ming, 2026-10-24):** sync **watchlist ∪ currently held symbols**, not just the watchlist.
+- The sandbox cannot reach Vietnamese hosts, so live fixtures can't be captured here: fixtures may be synthetic from the documented/recalled shape, clearly labelled "synthetic, verify against live", and units (VND vs thousand VND) must be guarded by tests and a plausibility check.
 - **Open (spec §9 Q4):** which primary source to use after a license/terms check for personal use. Planner: propose the source with the license finding; if no source is clearly usable, return BLOCKED.
