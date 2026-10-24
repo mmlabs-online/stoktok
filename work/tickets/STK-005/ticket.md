@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P2 |
 | Areas | data, db |
 | Attempts | 0 |
 | Created | 2026-10-22 |
+| PR | — |
 
 ## Goal
 The worker fetches daily OHLCV for watchlist symbols after market close from a swappable data source and stores it with `source` and `fetched_at`, recording any missing trading days as gaps.
