@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P1 |
 | Areas | ui, finance |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-10-23 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/8 |
 
 ## Goal
 Ming can list, add, edit and delete cash and other assets (the `assets` table), so net worth on the dashboard reflects them. Split out of STK-009 (Ming, 2026-10-23).

@@ -23,4 +23,4 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-016 | Symbol detail screen | BACKLOG | P2 | ui, finance | 0 | 2026-10-22 |
 | STK-017 | Docker images and CI build | BACKLOG | P2 | architecture, security | 0 | 2026-10-22 |
 | STK-018 | Deployment to the WSL server | BACKLOG | P2 | architecture, security | 0 | 2026-10-22 |
-| STK-030 | Cash and other assets management | REVIEW | P1 | ui, finance | 0 | 2026-10-24 |
+| STK-030 | Cash and other assets management | DONE | P1 | ui, finance | 1 | 2026-10-24 |
