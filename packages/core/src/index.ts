@@ -11,8 +11,10 @@ export {
   vnDateOf,
   vnMinutesOf,
 } from './calendar';
-export { DEFAULT_PRICE_SANITY } from './market/config';
-export type { PriceSanity } from './market/config';
+export { DEFAULT_PRICE_SANITY, DEFAULT_TICK_BANDS } from './market/config';
+export type { PriceSanity, TickBand } from './market/config';
+export { buildPriceBoardRow, isOnTick, priceLimits, splitWatchlistGroups, tickSize } from './market/price-board';
+export type { PriceBoardRow, StoredClose } from './market/price-board';
 export { normalizeDailyBar, toVnd } from './market/daily-bar';
 export type { DailyBar, NormalizeResult, PriceUnit, RawDailyBar } from './market/daily-bar';
 export { ROUNDING_MODE, applyRatePpm, mulDiv, roundDiv } from './money';
@@ -90,6 +92,13 @@ export type {
 } from './entry/validate-transaction';
 export { assetToFormValues, validateAssetInput } from './entry/validate-asset';
 export type { AssetField, AssetFormRaw, AssetInput, ValidateAssetResult } from './entry/validate-asset';
+export { parseExchangeInput, validateWatchlistInput } from './entry/validate-watchlist';
+export type {
+  ValidateWatchlistResult,
+  WatchlistField,
+  WatchlistFormRaw,
+  WatchlistInput,
+} from './entry/validate-watchlist';
 export { checkLedgerChange } from './entry/check-ledger-change';
 export type { LedgerChange, LedgerChangeResult } from './entry/check-ledger-change';
 export { validateCorporateActionInput } from './entry/validate-corporate-action';

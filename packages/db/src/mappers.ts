@@ -1,7 +1,7 @@
 /** Row <-> domain conversions for assets and watchlist. No financial calculation (R1); integers only (R2). */
-import { RowMappingError, toSafeInt } from '@stoktok/core';
-import type { PriceQuote } from '@stoktok/core';
-import type { AssetRow, PriceDailyRow, WatchlistRow } from './rows';
+import { EXCHANGES, RowMappingError, toSafeInt } from '@stoktok/core';
+import type { Exchange, PriceQuote, StoredClose } from '@stoktok/core';
+import type { AssetRow, PriceCloseRow, PriceDailyRow, WatchlistRow } from './rows';
 
 export interface Asset {
   id: string;
@@ -52,4 +52,18 @@ export function priceQuoteFromRow(row: PriceDailyRow): PriceQuote {
     throw new RowMappingError(t, 'fetched_at', 'missing fetched_at');
   }
   return { symbol: row.symbol, close, tradeDate: row.trade_date, source: row.source, fetchedAt: row.fetched_at };
+}
+
+/** null = unknown exchange. A stored value outside EXCHANGES is a mapping error, never coerced. */
+export function symbolExchangeFromRow(row: { symbol: string; exchange: string | null }): Exchange | null {
+  if (row.exchange === null) return null;
+  const found = EXCHANGES.find((e) => e === row.exchange);
+  if (!found) throw new RowMappingError('symbols', 'exchange', `invalid exchange: ${String(row.exchange)}`);
+  return found;
+}
+
+export function storedCloseFromRow(row: PriceCloseRow): StoredClose {
+  const volume = toSafeInt(row.volume, 'volume', 'prices_daily');
+  if (volume < 0) throw new RowMappingError('prices_daily', 'volume', `negative volume: ${volume}`);
+  return { ...priceQuoteFromRow(row), volume };
 }

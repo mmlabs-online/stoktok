@@ -31,7 +31,7 @@ do $$ -- tables_exist
 declare got text[];
 begin
   select array_agg(tablename order by tablename) into got from pg_tables where schemaname = 'public';
-  if got is distinct from array['assets','corporate_actions','data_gaps','prices_daily','settings','transactions','watchlist'] then
+  if got is distinct from array['assets','corporate_actions','data_gaps','prices_daily','settings','symbols','transactions','watchlist'] then
     raise exception 'CHECK FAILED: tables_exist (got %)', got;
   end if;
 end $$;
@@ -106,6 +106,12 @@ begin
   if n < 1 then raise exception 'CHECK FAILED: settings_columns (no check on cash_dividend_treatment)'; end if;
 end $$;
 
+do $$ -- symbols_columns
+begin
+  perform pg_temp.assert_col('symbols', 'symbol', 'text', true);
+  perform pg_temp.assert_col('symbols', 'exchange', 'text', false);
+end $$;
+
 do $$ -- rls_enabled_all_tables
 declare n int;
 begin
@@ -173,6 +179,17 @@ begin
   if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write'; end if;
 end $$;
 
+do $$ -- service_role_can_read_write_symbols
+declare n int;
+begin
+  set local role service_role;
+  insert into public.symbols (symbol, exchange) values ('FPT', 'HOSE');
+  select count(*) into n from public.symbols where symbol = 'FPT';
+  delete from public.symbols where symbol = 'FPT';
+  reset role;
+  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_symbols'; end if;
+end $$;
+
 do $$ -- rejects_bad_rows
 declare tx text := 'insert into public.transactions (trade_date, symbol, side, quantity, price, fee) values ';
         ca text := 'insert into public.corporate_actions (symbol, type, ex_date, amount_per_share, ratio_num, ratio_den) values ';
@@ -192,6 +209,10 @@ begin
   perform pg_temp.expect_fail('gap to<from',
     'insert into public.data_gaps (data_type, from_ts, to_ts, source, fetched_at) values (''prices'', ''2026-01-02'', ''2026-01-01'', ''x'', now())',
     array['23514']);
+  perform pg_temp.expect_fail('symbols lowercase symbol', 'insert into public.symbols (symbol) values (''vnm'')', array['23514']);
+  perform pg_temp.expect_fail('symbols exchange HSX', 'insert into public.symbols (symbol, exchange) values (''VNM'', ''HSX'')', array['23514']);
+  perform pg_temp.expect_fail('symbols exchange hose', 'insert into public.symbols (symbol, exchange) values (''VNM'', ''hose'')', array['23514']);
+  insert into public.symbols (symbol, exchange) values ('VNM', null);
   insert into public.corporate_actions (symbol, type, ex_date, amount_per_share) values ('VNM', 'cash_dividend', '2026-01-05', 1000);
   perform pg_temp.expect_fail('duplicate corporate action', ca || '(''VNM'',''cash_dividend'',''2026-01-05'',2000,null,null)', array['23505']);
 end $$;

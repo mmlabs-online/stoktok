@@ -23,6 +23,16 @@ export interface PriceDailyRow {
   fetched_at: string;
 }
 
+export interface SymbolRow {
+  symbol: string;
+  exchange: string | null;
+}
+
+/** Selected columns only: a daily close with its volume. */
+export interface PriceCloseRow extends PriceDailyRow {
+  volume: Int8;
+}
+
 /** Upsert payload (all columns; R4 source + fetched_at). */
 export interface PriceDailyInsert {
   symbol: string;

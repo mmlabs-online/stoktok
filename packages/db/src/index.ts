@@ -29,7 +29,8 @@ export {
   saveAppSettings,
   saveSettings,
 } from './repos/settings';
-export { getLatestCloses, upsertPricesDaily } from './repos/prices-daily';
+export { getLatestCloses, getRecentCloses, upsertPricesDaily } from './repos/prices-daily';
 export type { PriceDailyInsert } from './rows';
 export { createAsset, deleteAsset, getAsset, listAssets, updateAsset } from './repos/assets';
 export { addToWatchlist, listWatchlist, removeFromWatchlist } from './repos/watchlist';
+export { getSymbolExchanges, setSymbolExchange } from './repos/symbols';

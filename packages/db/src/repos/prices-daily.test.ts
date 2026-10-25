@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
-import { getLatestCloses, upsertPricesDaily } from './prices-daily';
+import { getLatestCloses, getRecentCloses, upsertPricesDaily } from './prices-daily';
 
 const row = (symbol: string, over: Record<string, unknown> = {}) => ({
   symbol,
@@ -46,6 +46,32 @@ describe('getLatestCloses', () => {
       const f = createFake();
       f.respond({ data: row('FPT', bad) });
       await expect(getLatestCloses(f.db, ['FPT'])).rejects.toMatchObject({ code: 'MAPPING' });
+    }
+  });
+});
+
+describe('getRecentCloses', () => {
+  test('per-symbol eq/order desc/limit 2; maps volume; symbol with 0 rows -> []', async () => {
+    const f = createFake();
+    f.respond({ data: [row('FPT', { volume: 500 }), row('FPT', { trade_date: '2026-10-22', volume: 400 })] });
+    f.respond({ data: [] });
+    const out = await getRecentCloses(f.db, ['FPT', 'VNM']);
+    expect(f.methods('eq').map((c) => c.args)).toEqual([['symbol', 'FPT'], ['symbol', 'VNM']]);
+    expect(f.methods('order')[0]?.args).toEqual(['trade_date', { ascending: false }]);
+    expect(f.methods('limit')[0]?.args).toEqual([2]);
+    expect(out.FPT?.map((q) => [q.tradeDate, q.volume])).toEqual([['2026-10-23', 500], ['2026-10-22', 400]]);
+    expect(out.VNM).toEqual([]);
+  });
+  test('empty input runs no query', async () => {
+    const f = createFake();
+    expect(await getRecentCloses(f.db, [])).toEqual({});
+    expect(f.calls).toHaveLength(0);
+  });
+  test('missing source or bad volume -> MAPPING', async () => {
+    for (const bad of [{ source: '' }, { volume: -1 }]) {
+      const f = createFake();
+      f.respond({ data: [row('FPT', { volume: 1, ...bad })] });
+      await expect(getRecentCloses(f.db, ['FPT'])).rejects.toMatchObject({ code: 'MAPPING' });
     }
   });
 });

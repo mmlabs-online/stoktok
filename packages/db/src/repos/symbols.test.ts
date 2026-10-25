@@ -1,0 +1,53 @@
+import { describe, expect, test } from 'vitest';
+import { createFake } from '../../test/fake-client';
+import { getSymbolExchanges, setSymbolExchange } from './symbols';
+
+describe('getSymbolExchanges', () => {
+  test('empty input -> {} with no query', async () => {
+    const f = createFake();
+    expect(await getSymbolExchanges(f.db, [])).toEqual({});
+    expect(f.calls).toHaveLength(0);
+  });
+  test('one .in() call; null exchange kept; symbols without a row omitted', async () => {
+    const f = createFake();
+    f.respond({ data: [{ symbol: 'VNM', exchange: 'HOSE' }, { symbol: 'FPT', exchange: null }] });
+    const out = await getSymbolExchanges(f.db, ['VNM', 'FPT', 'HPG']);
+    expect(f.methods('in')).toHaveLength(1);
+    expect(f.methods('in')[0]?.args).toEqual(['symbol', ['VNM', 'FPT', 'HPG']]);
+    expect(out).toEqual({ VNM: 'HOSE', FPT: null });
+  });
+  test('invalid stored exchange -> MAPPING', async () => {
+    const f = createFake();
+    f.respond({ data: [{ symbol: 'VNM', exchange: 'HSX' }] });
+    await expect(getSymbolExchanges(f.db, ['VNM'])).rejects.toMatchObject({ code: 'MAPPING' });
+  });
+  test('DB error -> DataError', async () => {
+    const f = createFake();
+    f.respond({ error: { code: '42501' } });
+    await expect(getSymbolExchanges(f.db, ['VNM'])).rejects.toMatchObject({ code: 'DB_ERROR' });
+  });
+});
+
+describe('setSymbolExchange', () => {
+  test('upserts {symbol, exchange, updated_at} on conflict symbol', async () => {
+    const f = createFake();
+    f.respond({});
+    await setSymbolExchange(f.db, 'VNM', 'HNX');
+    const [payload, opts] = f.methods('upsert')[0]?.args ?? [];
+    expect(payload).toMatchObject({ symbol: 'VNM', exchange: 'HNX' });
+    expect(typeof (payload as { updated_at: unknown }).updated_at).toBe('string');
+    expect(opts).toEqual({ onConflict: 'symbol' });
+    expect(f.methods('select')).toHaveLength(0);
+  });
+  test('null exchange writes null', async () => {
+    const f = createFake();
+    f.respond({});
+    await setSymbolExchange(f.db, 'VNM', null);
+    expect(f.methods('upsert')[0]?.args[0]).toMatchObject({ exchange: null });
+  });
+  test('error -> DataError', async () => {
+    const f = createFake();
+    f.respond({ error: { code: '23514' } });
+    await expect(setSymbolExchange(f.db, 'VNM', null)).rejects.toMatchObject({ code: 'VALIDATION' });
+  });
+});

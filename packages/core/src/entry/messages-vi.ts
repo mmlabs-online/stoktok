@@ -33,6 +33,8 @@ export type EntryErrorCode =
   | 'OUT_OF_RANGE'
   | 'WHOLE_NUMBER_INVALID'
   | 'TREATMENT_INVALID'
+  | 'EXCHANGE_INVALID'
+  | 'WATCHLIST_DUPLICATE'
   | 'SAVE_FAILED';
 
 export type EntryParams = Record<string, string | number>;
@@ -110,6 +112,10 @@ export function entryMessage(code: EntryErrorCode, params: EntryParams = {}): st
       return 'Nhập số nguyên, ví dụ 100.';
     case 'TREATMENT_INVALID':
       return 'Chọn cách xử lý cổ tức tiền mặt.';
+    case 'EXCHANGE_INVALID':
+      return 'Chọn sàn HOSE, HNX, UPCoM hoặc để trống.';
+    case 'WATCHLIST_DUPLICATE':
+      return 'Mã đã có trong danh sách theo dõi.';
     case 'SAVE_FAILED':
       return 'Không lưu được, vui lòng thử lại.';
   }
