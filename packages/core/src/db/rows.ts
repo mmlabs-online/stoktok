@@ -54,3 +54,8 @@ export interface SettingsRow {
   cash_dividend_treatment: string;
   cost_method: string;
 }
+
+export type SettingsFullRow = SettingsRow & {
+  concentration_threshold_ppm: number | null;
+  rule_configs: unknown;
+};

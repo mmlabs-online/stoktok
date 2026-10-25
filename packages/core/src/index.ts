@@ -23,9 +23,11 @@ export type { ValuedHolding } from './ledger/valuation';
 export type * from './ledger/types';
 export {
   RowMappingError,
+  appSettingsFromRow,
   corporateActionFromRow,
   corporateActionToRow,
   settingsFromRow,
+  settingsInputToRow,
   settingsToRow,
   toSafeInt,
   transactionFromRow,
@@ -52,8 +54,30 @@ export {
   LOW_PRICE_CONFIRM_BELOW,
 } from './entry/rules';
 export type { TradingRules } from './entry/rules';
-export { parseIntegerInput } from './entry/parse-input';
-export type { ParseIntegerResult } from './entry/parse-input';
+export { formatRatePercentInput, parseIntegerInput, parseRatePercentInput } from './entry/parse-input';
+export type { ParseIntegerResult, ParseRateResult } from './entry/parse-input';
+export {
+  DEFAULT_MARKET_RULES,
+  EXCHANGES,
+  EXCHANGE_LABELS,
+  mergeRuleConfigs,
+  parseMarketRules,
+} from './settings/market-rules';
+export type { Exchange, MarketRules } from './settings/market-rules';
+export {
+  CASH_DIVIDEND_TREATMENTS,
+  SETTINGS_BOUNDS,
+  concentrationDefaultText,
+  settingsToFormValues,
+  validateSettingsInput,
+} from './settings/validate-settings';
+export type {
+  AppSettings,
+  SettingsField,
+  SettingsFormRaw,
+  SettingsInput,
+  ValidateSettingsResult,
+} from './settings/validate-settings';
 export { entryMessage } from './entry/messages-vi';
 export type { EntryError, EntryErrorCode, EntryParams } from './entry/messages-vi';
 export { transactionToFormValues, validateTransactionInput } from './entry/validate-transaction';

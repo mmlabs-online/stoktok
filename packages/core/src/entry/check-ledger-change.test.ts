@@ -39,7 +39,7 @@ describe('checkLedgerChange add', () => {
       ok: false,
       error: {
         code: 'OVERSELL_SELF',
-        params: { symbol: 'FPT', date: '2026-10-14', requested: 400, sellable: 300 },
+        params: { symbol: 'FPT', date: '2026-10-14', requested: 400, sellable: 300, settlementDays: 2 },
       },
     });
   });
@@ -119,5 +119,19 @@ describe('checkLedgerChange on an already oversold ledger', () => {
   it('rejects a change that creates an earlier oversell', () => {
     const r = check(bad, { kind: 'add', input: input('2026-10-14', 'sell', 400) });
     expect(r).toMatchObject({ ok: false, error: { code: 'OVERSELL_SELF' } });
+  });
+});
+
+describe('OVERSELL params carry settlementDays', () => {
+  it('uses the stored settlement days', () => {
+    // T+3: a buy on Mon 2026-10-12 is not sellable on Wed 2026-10-14.
+    const r = checkLedgerChange({
+      transactions: [buy1],
+      actions: [],
+      settings: { ...settings, settlementDays: 3 },
+      today,
+      change: { kind: 'add', input: input('2026-10-14', 'sell', 100) },
+    });
+    expect(r).toMatchObject({ ok: false, error: { code: 'OVERSELL_SELF', params: { settlementDays: 3 } } });
   });
 });

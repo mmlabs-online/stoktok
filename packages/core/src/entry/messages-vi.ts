@@ -28,6 +28,11 @@ export type EntryErrorCode =
   | 'AS_OF_IN_FUTURE'
   | 'ASSET_NOT_FOUND'
   | 'NOT_FOUND'
+  | 'PERCENT_INVALID'
+  | 'PERCENT_TOO_PRECISE'
+  | 'OUT_OF_RANGE'
+  | 'WHOLE_NUMBER_INVALID'
+  | 'TREATMENT_INVALID'
   | 'SAVE_FAILED';
 
 export type EntryParams = Record<string, string | number>;
@@ -70,7 +75,7 @@ export function entryMessage(code: EntryErrorCode, params: EntryParams = {}): st
     case 'TAX_REQUIRED_NO_RATE':
       return 'Chưa cài đặt tỷ lệ phí giao dịch, hãy nhập thuế cho lệnh bán.';
     case 'OVERSELL_SELF':
-      return `Vượt số lượng có thể bán: chỉ có ${qty('sellable')} cổ phiếu ${p('symbol')} khả dụng ngày ${day()} (bạn nhập ${qty('requested')}). Cổ phiếu mua về sau T+2 mới bán được.`;
+      return `Vượt số lượng có thể bán: chỉ có ${qty('sellable')} cổ phiếu ${p('symbol')} khả dụng ngày ${day()} (bạn nhập ${qty('requested')}). Cổ phiếu mua về sau T+${p('settlementDays')} mới bán được.`;
     case 'OVERSELL_OTHER':
       return `Không thể lưu: thay đổi này làm lệnh bán ${p('symbol')} ngày ${day()} vượt số lượng có thể bán (cần ${qty('requested')}, khả dụng ${qty('sellable')}).`;
     case 'LEDGER_INVALID':
@@ -95,6 +100,16 @@ export function entryMessage(code: EntryErrorCode, params: EntryParams = {}): st
       return 'Không tìm thấy tài sản.';
     case 'NOT_FOUND':
       return 'Không tìm thấy giao dịch.';
+    case 'PERCENT_INVALID':
+      return 'Nhập phần trăm, ví dụ 0,15.';
+    case 'PERCENT_TOO_PRECISE':
+      return 'Tối đa 4 chữ số sau dấu phẩy.';
+    case 'OUT_OF_RANGE':
+      return `Giá trị phải từ ${p('min')} đến ${p('max')}.`;
+    case 'WHOLE_NUMBER_INVALID':
+      return 'Nhập số nguyên, ví dụ 100.';
+    case 'TREATMENT_INVALID':
+      return 'Chọn cách xử lý cổ tức tiền mặt.';
     case 'SAVE_FAILED':
       return 'Không lưu được, vui lòng thử lại.';
   }

@@ -1,7 +1,10 @@
 /** Row <-> core conversions only. No financial calculation (R1); integers only (R2). */
 import { isValidDate } from '../calendar';
 import type { CorporateAction, LedgerSettings, Transaction } from '../ledger/types';
-import type { CorporateActionRow, SettingsRow, TransactionInsert, TransactionRow } from './rows';
+import { DEFAULT_MARKET_SETTINGS } from '../ledger/settings';
+import { DEFAULT_MARKET_RULES, mergeRuleConfigs, parseMarketRules } from '../settings/market-rules';
+import type { AppSettings, SettingsInput } from '../settings/validate-settings';
+import type { CorporateActionRow, SettingsFullRow, SettingsRow, TransactionInsert, TransactionRow } from './rows';
 
 export class RowMappingError extends Error {
   constructor(
@@ -173,5 +176,54 @@ export function settingsToRow(s: Omit<LedgerSettings, 'feeRatePpm'> & { feeRateP
     holidays: [...s.holidays],
     cash_dividend_treatment: s.cashDividendTreatment,
     cost_method: s.costMethod,
+  };
+}
+
+/** Row -> settings screen model. A missing row gives the market defaults; fee and concentration may be null. */
+export function appSettingsFromRow(row: SettingsFullRow | null): AppSettings {
+  if (row === null) {
+    return {
+      ...DEFAULT_MARKET_SETTINGS,
+      feeRatePpm: null,
+      concentrationThresholdPpm: null,
+      marketRules: DEFAULT_MARKET_RULES,
+    };
+  }
+  const t = 'settings';
+  if (row.cash_dividend_treatment !== 'reduceCost' && row.cash_dividend_treatment !== 'income') {
+    throw new RowMappingError(t, 'cash_dividend_treatment', `invalid value: ${row.cash_dividend_treatment}`);
+  }
+  if (row.cost_method !== 'WAC') throw new RowMappingError(t, 'cost_method', `invalid value: ${row.cost_method}`);
+  return {
+    feeRatePpm: row.fee_rate_ppm === null ? null : toSafeInt(row.fee_rate_ppm, 'fee_rate_ppm', t),
+    sellTaxRatePpm: toSafeInt(row.sell_tax_rate_ppm, 'sell_tax_rate_ppm', t),
+    settlementDays: toSafeInt(row.settlement_days, 'settlement_days', t),
+    holidays: row.holidays,
+    dividendWithholdingRatePpm: toSafeInt(row.dividend_withholding_rate_ppm, 'dividend_withholding_rate_ppm', t),
+    cashDividendTreatment: row.cash_dividend_treatment,
+    costMethod: row.cost_method,
+    concentrationThresholdPpm:
+      row.concentration_threshold_ppm === null ? null : toSafeInt(row.concentration_threshold_ppm, 'concentration_threshold_ppm', t),
+    marketRules: parseMarketRules(row.rule_configs),
+  };
+}
+
+/**
+ * Settings form input -> full row. Withholding, holidays and cost method are not on the form: they are
+ * kept from the existing row (or the defaults), and rule_configs is merged so other namespaces survive.
+ */
+export function settingsInputToRow(input: SettingsInput, existing: SettingsFullRow | null): SettingsFullRow {
+  return {
+    id: 1,
+    fee_rate_ppm: input.feeRatePpm,
+    sell_tax_rate_ppm: input.sellTaxRatePpm,
+    dividend_withholding_rate_ppm:
+      existing?.dividend_withholding_rate_ppm ?? DEFAULT_MARKET_SETTINGS.dividendWithholdingRatePpm,
+    settlement_days: input.settlementDays,
+    holidays: existing ? [...existing.holidays] : [...DEFAULT_MARKET_SETTINGS.holidays],
+    cash_dividend_treatment: input.cashDividendTreatment,
+    cost_method: existing?.cost_method ?? DEFAULT_MARKET_SETTINGS.costMethod,
+    concentration_threshold_ppm: input.concentrationThresholdPpm,
+    rule_configs: mergeRuleConfigs(existing?.rule_configs, { lotSize: input.lotSize, priceLimitPpm: input.priceLimitPpm }),
   };
 }

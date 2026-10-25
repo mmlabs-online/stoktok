@@ -20,7 +20,15 @@ export {
   listCorporateActions,
   updateCorporateAction,
 } from './repos/corporate-actions';
-export { getConcentrationThreshold, getEntrySettings, getSettings, saveSettings } from './repos/settings';
+export {
+  getAppSettings,
+  getConcentrationThreshold,
+  getEntrySettings,
+  getMarketRules,
+  getSettings,
+  saveAppSettings,
+  saveSettings,
+} from './repos/settings';
 export { getLatestCloses, upsertPricesDaily } from './repos/prices-daily';
 export type { PriceDailyInsert } from './rows';
 export { createAsset, deleteAsset, getAsset, listAssets, updateAsset } from './repos/assets';

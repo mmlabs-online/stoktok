@@ -1,4 +1,4 @@
-import { DEFAULT_MARKET_SETTINGS } from '@stoktok/core';
+import { DEFAULT_MARKET_RULES, DEFAULT_MARKET_SETTINGS } from '@stoktok/core';
 import type { CorporateAction, Transaction } from '@stoktok/core';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +12,7 @@ vi.mock('../db', async (importActual) => ({
   listTransactions: vi.fn(),
   listCorporateActions: vi.fn(),
   getEntrySettings: vi.fn(),
+  getMarketRules: vi.fn(),
   createCorporateAction: vi.fn(),
 }));
 
@@ -21,6 +22,7 @@ import {
   createTransaction,
   deleteTransaction,
   getEntrySettings,
+  getMarketRules,
   listCorporateActions,
   listTransactions,
   updateTransaction,
@@ -56,6 +58,7 @@ function setLedger(txs: Transaction[], actions: CorporateAction[] = []) {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(getEntrySettings).mockResolvedValue({ settings, feeRateConfigured: true });
+  vi.mocked(getMarketRules).mockResolvedValue(DEFAULT_MARKET_RULES);
   setLedger([]);
 });
 
@@ -102,6 +105,22 @@ describe('handleCreateTransaction', () => {
     if (r.ok) throw new Error('expected failure');
     expect(r.formError).toEqual({ code: 'SAVE_FAILED', message: 'Không lưu được, vui lòng thử lại.' });
     expect(JSON.stringify(r)).not.toContain('08006');
+  });
+});
+
+describe('lot size comes from stored rules', () => {
+  it('accepts qty 50 when the stored lot size is 10', async () => {
+    vi.mocked(getMarketRules).mockResolvedValue({ ...DEFAULT_MARKET_RULES, lotSize: 10 });
+    expect(await handleCreateTransaction(db, txForm({ quantity: '50' }), today)).toEqual({ ok: true });
+    expect(getMarketRules).toHaveBeenCalledWith(db);
+    expect(createTransaction).toHaveBeenCalled();
+  });
+
+  it('rejects qty 50 when the stored lot size is 100', async () => {
+    const r = await handleCreateTransaction(db, txForm({ quantity: '50' }), today);
+    if (r.ok) throw new Error('expected failure');
+    expect(r.fieldErrors.quantity?.message).toContain('bội số của 100');
+    expect(createTransaction).not.toHaveBeenCalled();
   });
 });
 

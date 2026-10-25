@@ -8,6 +8,7 @@ const CODES: EntryErrorCode[] = [
   'TAX_REQUIRED_NO_RATE', 'OVERSELL_SELF', 'OVERSELL_OTHER', 'LEDGER_INVALID', 'CA_TYPE_UNSUPPORTED',
   'AMOUNT_NOT_POSITIVE', 'RATIO_NOT_POSITIVE', 'DATE_BEFORE_EX', 'CA_DUPLICATE', 'NOT_FOUND', 'SAVE_FAILED',
   'ASSET_TYPE_INVALID', 'NAME_TOO_LONG', 'AS_OF_IN_FUTURE', 'ASSET_NOT_FOUND',
+  'PERCENT_INVALID', 'PERCENT_TOO_PRECISE', 'OUT_OF_RANGE', 'WHOLE_NUMBER_INVALID', 'TREATMENT_INVALID',
 ];
 
 describe('entryMessage', () => {
@@ -26,5 +27,13 @@ describe('entryMessage', () => {
   });
   it('includes the lot size in QTY_NOT_LOT', () => {
     expect(entryMessage('QTY_NOT_LOT', { lotSize: 100 })).toContain('100');
+  });
+  it('OVERSELL_SELF shows the stored settlement days', () => {
+    const m = entryMessage('OVERSELL_SELF', { symbol: 'FPT', date: '2026-10-14', requested: 2, sellable: 1, settlementDays: 3 });
+    expect(m).toContain('T+3');
+    expect(m).not.toContain('T+2');
+  });
+  it('OUT_OF_RANGE shows min and max', () => {
+    expect(entryMessage('OUT_OF_RANGE', { min: '0%', max: '5%' })).toBe('Giá trị phải từ 0% đến 5%.');
   });
 });
