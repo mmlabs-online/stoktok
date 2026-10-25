@@ -1,7 +1,7 @@
 import { RowMappingError } from '@stoktok/core';
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
-import { getEntrySettings, getSettings, saveSettings } from './settings';
+import { getConcentrationThreshold, getEntrySettings, getSettings, saveSettings } from './settings';
 
 const row = {
   id: 1,
@@ -80,5 +80,27 @@ describe('settings repo', () => {
       feeRateConfigured: false,
       settings: { feeRatePpm: 0, settlementDays: 2 },
     });
+  });
+});
+
+describe('getConcentrationThreshold', () => {
+  test('returns the value and selects only its column', async () => {
+    const f = createFake();
+    f.respond({ data: { concentration_threshold_ppm: 300000 } });
+    expect(await getConcentrationThreshold(f.db)).toBe(300000);
+    expect(f.methods('select')[0]?.args).toEqual(['concentration_threshold_ppm']);
+    expect(f.methods('eq')[0]?.args).toEqual(['id', 1]);
+  });
+  test('NULL -> null; no row -> null', async () => {
+    const f = createFake();
+    f.respond({ data: { concentration_threshold_ppm: null } });
+    expect(await getConcentrationThreshold(f.db)).toBeNull();
+    f.respond({ data: null });
+    expect(await getConcentrationThreshold(f.db)).toBeNull();
+  });
+  test('DB error -> DataError', async () => {
+    const f = createFake();
+    f.respond({ error: { code: '42501' } });
+    await expect(getConcentrationThreshold(f.db)).rejects.toMatchObject({ code: 'DB_ERROR' });
   });
 });

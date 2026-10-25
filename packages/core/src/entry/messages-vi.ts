@@ -1,4 +1,5 @@
 import { formatDate, formatQuantity } from '../format';
+import { ASSET_NAME_MAX_LENGTH } from './rules';
 
 export type EntryErrorCode =
   | 'REQUIRED'
@@ -22,6 +23,10 @@ export type EntryErrorCode =
   | 'RATIO_NOT_POSITIVE'
   | 'DATE_BEFORE_EX'
   | 'CA_DUPLICATE'
+  | 'ASSET_TYPE_INVALID'
+  | 'NAME_TOO_LONG'
+  | 'AS_OF_IN_FUTURE'
+  | 'ASSET_NOT_FOUND'
   | 'NOT_FOUND'
   | 'SAVE_FAILED';
 
@@ -80,6 +85,14 @@ export function entryMessage(code: EntryErrorCode, params: EntryParams = {}): st
       return 'Ngày phải bằng hoặc sau ngày GDKHQ.';
     case 'CA_DUPLICATE':
       return 'Đã có sự kiện này cho mã và ngày GDKHQ.';
+    case 'ASSET_TYPE_INVALID':
+      return 'Chọn Tiền mặt hoặc Khác.';
+    case 'NAME_TOO_LONG':
+      return `Tên tối đa ${ASSET_NAME_MAX_LENGTH} ký tự.`;
+    case 'AS_OF_IN_FUTURE':
+      return 'Ngày cập nhật không được ở tương lai.';
+    case 'ASSET_NOT_FOUND':
+      return 'Không tìm thấy tài sản.';
     case 'NOT_FOUND':
       return 'Không tìm thấy giao dịch.';
     case 'SAVE_FAILED':

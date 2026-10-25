@@ -4,3 +4,8 @@ import { vnDateOf } from '@stoktok/core';
 export function todayVn(): string {
   return vnDateOf(new Date());
 }
+
+/** The current instant: the one server-side clock for code that needs the time of day. */
+export function nowInstant(): Date {
+  return new Date();
+}

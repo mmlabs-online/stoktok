@@ -75,6 +75,12 @@ importers:
       '@stoktok/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@stoktok/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@supabase/supabase-js':
+        specifier: ^2.118.0
+        version: 2.118.0
     devDependencies:
       '@types/node':
         specifier: ^26.6.5
@@ -85,6 +91,9 @@ importers:
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
+      vitest:
+        specifier: ^5.0.5
+        version: 5.0.5(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15))
 
   packages/core:
     devDependencies:

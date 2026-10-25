@@ -15,6 +15,12 @@ export async function listAssets(db: Db): Promise<Asset[]> {
   return rows.map((r) => mapRow(assetFromRow, r, ctx));
 }
 
+export async function getAsset(db: Db, id: string): Promise<Asset> {
+  const ctx = { table: 'assets', op: 'get' };
+  const row = unwrapFound<AssetRow>(await db.from('assets').select(COLS).eq('id', id).maybeSingle(), ctx);
+  return mapRow(assetFromRow, row, ctx);
+}
+
 export async function createAsset(db: Db, asset: Omit<Asset, 'id'>): Promise<Asset> {
   const ctx = { table: 'assets', op: 'create' };
   const row = unwrap<AssetRow>(await db.from('assets').insert(assetToRow(asset)).select(COLS).single(), ctx);

@@ -2,7 +2,19 @@ export function describeCore(): string {
   return '@stoktok/core';
 }
 
-export { addTradingDays, isTradingDay, isValidDate, vnDateOf } from './calendar';
+export {
+  addTradingDays,
+  isTradingDay,
+  isValidDate,
+  previousTradingDay,
+  subtractTradingDays,
+  vnDateOf,
+  vnMinutesOf,
+} from './calendar';
+export { DEFAULT_PRICE_SANITY } from './market/config';
+export type { PriceSanity } from './market/config';
+export { normalizeDailyBar, toVnd } from './market/daily-bar';
+export type { DailyBar, NormalizeResult, PriceUnit, RawDailyBar } from './market/daily-bar';
 export { ROUNDING_MODE, applyRatePpm, mulDiv, roundDiv } from './money';
 export { buildLedger } from './ledger/build-ledger';
 export { DEFAULT_MARKET_SETTINGS, estimateFees } from './ledger/settings';
@@ -32,7 +44,13 @@ export {
 export { PRICE_TONES, changeTone, priceTone } from './tone';
 export type { PriceTone } from './tone';
 export { normalizeSymbol } from './symbol';
-export { DEFAULT_TRADING_RULES, INT32_MAX, LOW_PRICE_CONFIRM_BELOW } from './entry/rules';
+export {
+  ASSET_NAME_MAX_LENGTH,
+  ASSET_VALUE_MAX,
+  DEFAULT_TRADING_RULES,
+  INT32_MAX,
+  LOW_PRICE_CONFIRM_BELOW,
+} from './entry/rules';
 export type { TradingRules } from './entry/rules';
 export { parseIntegerInput } from './entry/parse-input';
 export type { ParseIntegerResult } from './entry/parse-input';
@@ -46,6 +64,8 @@ export type {
   ValidateContext,
   ValidateTransactionResult,
 } from './entry/validate-transaction';
+export { assetToFormValues, validateAssetInput } from './entry/validate-asset';
+export type { AssetField, AssetFormRaw, AssetInput, ValidateAssetResult } from './entry/validate-asset';
 export { checkLedgerChange } from './entry/check-ledger-change';
 export type { LedgerChange, LedgerChangeResult } from './entry/check-ledger-change';
 export { validateCorporateActionInput } from './entry/validate-corporate-action';
@@ -56,3 +76,18 @@ export type {
   ValidateCorporateActionResult,
 } from './entry/validate-corporate-action';
 export { describeCorporateAction } from './entry/describe';
+export { buildPortfolio } from './portfolio/build-portfolio';
+export type {
+  BuildPortfolioInput,
+  Portfolio,
+  PortfolioRow,
+  PortfolioTotals,
+  PriceQuote,
+} from './portfolio/build-portfolio';
+export {
+  DEFAULT_CONCENTRATION_THRESHOLD_PPM,
+  DEFAULT_PRICE_CUTOFF_MINUTES_VN,
+  resolveConcentrationThreshold,
+} from './portfolio/config';
+export { expectedPriceDate, priceStatus } from './portfolio/freshness';
+export type { PriceStatus } from './portfolio/freshness';

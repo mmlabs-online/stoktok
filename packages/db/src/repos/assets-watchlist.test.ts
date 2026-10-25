@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
-import { listAssets } from './assets';
+import { getAsset, listAssets } from './assets';
 import { addToWatchlist, listWatchlist, removeFromWatchlist } from './watchlist';
 
 describe('assets repo', () => {
@@ -13,6 +13,23 @@ describe('assets repo', () => {
       ['id', { ascending: true }],
     ]);
     expect(out).toEqual([{ id: 'a', type: 'cash', name: 'TCBS cash', value: 5000000, asOf: '2026-01-05' }]);
+  });
+
+  test('getAsset filters by id with maybeSingle and maps the value', async () => {
+    const f = createFake();
+    f.respond({ data: { id: 'a', type: 'other', name: 'Vàng', value: '50000000', as_of: '2026-01-05' } });
+    const out = await getAsset(f.db, 'a');
+    expect(f.methods('eq')[0]?.args).toEqual(['id', 'a']);
+    expect(f.methods('maybeSingle').length).toBe(1);
+    expect(out).toEqual({ id: 'a', type: 'other', name: 'Vàng', value: 50000000, asOf: '2026-01-05' });
+  });
+
+  test('getAsset: no row → NOT_FOUND; db error → DataError', async () => {
+    const f = createFake();
+    f.respond({ data: null });
+    await expect(getAsset(f.db, 'a')).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    f.respond({ error: { code: '08006' } });
+    await expect(getAsset(f.db, 'a')).rejects.toMatchObject({ name: 'DataError' });
   });
 
   test('asset with invalid type throws MAPPING', async () => {

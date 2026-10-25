@@ -1,0 +1,10 @@
+{
+  "ticker": "VNM",
+  "data": [
+    { "open": 61000, "high": 62000, "low": 60500, "close": 61500, "volume": 1200000, "tradingDate": "2026-10-21T00:00:00.000Z" },
+    { "open": 61000, "high": 62000, "low": 60500, "volume": 1200000, "tradingDate": "2026-10-22T00:00:00.000Z" },
+    { "open": 61.0, "high": 62.0, "low": 60.5, "close": 61.5, "volume": 1200000, "tradingDate": "2026-10-23T00:00:00.000Z" },
+    { "open": 61000, "high": 62000, "low": 60500, "close": 61500, "volume": 1200000, "tradingDate": "not a date" },
+    "garbage"
+  ]
+}
