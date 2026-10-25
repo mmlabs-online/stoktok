@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P2 |
 | Areas | ui |
 | Attempts | 0 |
 | Created | 2026-10-22 |
+| PR | — |
 
 ## Goal
 Ming can view and change the market-rule and portfolio settings on `/settings`; the values are stored in `settings` and used by `packages/core`.
