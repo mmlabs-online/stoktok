@@ -16,8 +16,8 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-009 | Portfolio dashboard and other assets | DONE | P1 | ui, finance | 2 | 2026-10-23 |
 | STK-010 | Settings screen | DONE | P2 | ui | 1 | 2026-10-25 |
 | STK-011 | Watchlist screen | DONE | P2 | ui, data, db | 1 | 2026-10-25 |
-| STK-012 | Statement CSV import and reconciliation | BACKLOG | P2 | data, finance, ui | 0 | 2026-10-22 |
-| STK-013 | Reconcile ledger defaults with a real TCBS statement | BACKLOG | P2 | finance | 0 | 2026-10-22 |
+| STK-012 | Statement CSV import and reconciliation | BLOCKED | P2 | data, finance, ui | 0 | 2026-10-25 |
+| STK-013 | Reconcile ledger defaults with a real TCBS statement | BLOCKED | P2 | finance | 0 | 2026-10-25 |
 | STK-014 | Quarterly financials adapter | BACKLOG | P2 | data, db | 0 | 2026-10-22 |
 | STK-015 | Medium-term signal rules and job | BACKLOG | P2 | finance, db | 0 | 2026-10-22 |
 | STK-016 | Symbol detail screen | BACKLOG | P2 | ui, finance | 0 | 2026-10-22 |
