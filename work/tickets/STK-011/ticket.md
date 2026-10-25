@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P2 |
 | Areas | ui, data |
 | Attempts | 0 |
 | Created | 2026-10-22 |
+| PR | — |
 
 ## Goal
 The `/watchlist` screen shows a Holdings group (automatic from the portfolio) and a Watching group (manual) as a price board with Vietnamese price colors and data freshness.
