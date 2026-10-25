@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P2 |
 | Areas | ui, data, db |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-10-22 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/9 |
 
 ## Goal
 The `/watchlist` screen shows a Holdings group (automatic from the portfolio) and a Watching group (manual) as a price board with Vietnamese price colors and data freshness.
