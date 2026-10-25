@@ -4,7 +4,7 @@
 |---|---|
 | State | PLANNING |
 | Priority | P2 |
-| Areas | ui, data |
+| Areas | ui, data, db |
 | Attempts | 0 |
 | Created | 2026-10-22 |
 | PR | — |
@@ -24,5 +24,6 @@ docs/spec-v1.md §3 F3 Watchlist, §2.1 price limits, §5 `watchlist`. CLAUDE.md
 - [ ] Unit tests for the core reference/ceiling/floor helper.
 
 ## Notes / answers from Ming
+- **Exchange per symbol (Ming, 2026-10-25):** add a small `symbols` table (symbol → exchange, nullable exchange) via a migration, shared by held and watched symbols. Ming picks the exchange when adding a symbol (may leave it blank). Unknown exchange → ceiling/floor shown as "—", never defaulted to HOSE. Areas now include `db`.
 - Depends on: STK-005 (daily prices), STK-006 (data layer), STK-007 (app shell).
 - Input needed: none.
