@@ -7,7 +7,7 @@
 | Areas | ui, finance |
 | Attempts | 1 |
 | Created | 2026-10-22 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/11 |
 
 ## Goal
 `/symbols/[symbol]` shows everything about one symbol: price with reference/ceiling/floor, a chart with gaps, Ming's position and lots, medium-term signals, and the symbol's transactions.
