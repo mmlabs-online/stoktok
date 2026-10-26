@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
-import { getSymbolExchanges, setSymbolExchange, setSymbolSector } from './symbols';
+import { getSymbolExchanges, listSymbolSectors, setSymbolExchange, setSymbolSector } from './symbols';
 
 describe('getSymbolExchanges', () => {
   test('empty input -> {} with no query', async () => {
@@ -71,5 +71,33 @@ describe('setSymbolSector', () => {
     const f = createFake();
     f.respond({ error: { code: '23514' } });
     await expect(setSymbolSector(f.db, 'VNM', { sector: 'x', source: 's', fetchedAt: 't' })).rejects.toMatchObject({ code: 'VALIDATION' });
+  });
+});
+
+describe('listSymbolSectors', () => {
+  test('in(symbols), maps provenance, null sector kept, symbols without a row omitted', async () => {
+    const f = createFake();
+    f.respond({
+      data: [
+        { symbol: 'A', sector: 'Banks', sector_source: 's', sector_fetched_at: '2026-10-25T00:00:00.000Z' },
+        { symbol: 'B', sector: null, sector_source: null, sector_fetched_at: null },
+      ],
+    });
+    const out = await listSymbolSectors(f.db, ['A', 'B', 'C']);
+    expect(f.methods('in')[0]?.args).toEqual(['symbol', ['A', 'B', 'C']]);
+    expect(out).toEqual({
+      A: { sector: 'Banks', source: 's', fetchedAt: '2026-10-25T00:00:00.000Z' },
+      B: { sector: null, source: null, fetchedAt: null },
+    });
+  });
+  test('sector without source -> MAPPING', async () => {
+    const f = createFake();
+    f.respond({ data: [{ symbol: 'A', sector: 'Banks', sector_source: null, sector_fetched_at: null }] });
+    await expect(listSymbolSectors(f.db, ['A'])).rejects.toMatchObject({ code: 'MAPPING' });
+  });
+  test('empty -> no call', async () => {
+    const f = createFake();
+    expect(await listSymbolSectors(f.db, [])).toEqual({});
+    expect(f.calls).toHaveLength(0);
   });
 });

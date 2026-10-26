@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
-import { insertGaps, listOpenGaps, resolveGaps } from './data-gaps';
+import { insertGaps, listOpenGaps, listOpenMarketGaps, resolveGaps } from './data-gaps';
 
 const gap = { symbol: 'A', data_type: 'financials', from_ts: '2025-12-31T17:00:00.000Z', to_ts: '2026-03-31T16:59:59.000Z', source: 's', fetched_at: '2026-10-26T00:00:00.000Z' };
 
@@ -13,6 +13,14 @@ describe('data-gaps repo', () => {
     expect(f.methods('in')[0]?.args).toEqual(['symbol', ['A']]);
     expect(f.methods('is')[0]?.args).toEqual(['resolved_at', null]);
     expect(out).toEqual([{ id: 5, symbol: 'A', fromTs: gap.from_ts, toTs: gap.to_ts }]);
+  });
+  test('listOpenMarketGaps filters data_type, symbol is null, resolved_at is null; maps ids', async () => {
+    const f = createFake();
+    f.respond({ data: [{ id: '9', symbol: null, from_ts: gap.from_ts, to_ts: gap.to_ts }] });
+    const out = await listOpenMarketGaps(f.db, 'prices_daily');
+    expect(f.methods('eq')[0]?.args).toEqual(['data_type', 'prices_daily']);
+    expect(f.methods('is').map((c) => c.args)).toEqual([['symbol', null], ['resolved_at', null]]);
+    expect(out).toEqual([{ id: 9, symbol: null, fromTs: gap.from_ts, toTs: gap.to_ts }]);
   });
   test('listOpenGaps with no symbols -> no call', async () => {
     const f = createFake();

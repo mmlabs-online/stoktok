@@ -19,9 +19,11 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-012 | Statement CSV import and reconciliation | BLOCKED | P2 | data, finance, ui | 0 | 2026-10-25 |
 | STK-013 | Reconcile ledger defaults with a real TCBS statement | BLOCKED | P2 | finance | 0 | 2026-10-25 |
 | STK-014 | Quarterly financials adapter | DONE | P2 | data, db | 1 | 2026-10-25 |
-| STK-015 | Medium-term signal rules and job | BACKLOG | P2 | finance, db | 0 | 2026-10-22 |
+| STK-015 | Medium-term signal rules and job | DONE | P2 | finance, db | 1 | 2026-10-26 |
 | STK-016 | Symbol detail screen | BACKLOG | P2 | ui, finance | 0 | 2026-10-22 |
 | STK-017 | Docker images and CI build | BACKLOG | P2 | architecture, security | 0 | 2026-10-22 |
 | STK-018 | Deployment to the WSL server | BACKLOG | P2 | architecture, security | 0 | 2026-10-22 |
 | STK-030 | Cash and other assets management | DONE | P1 | ui, finance | 1 | 2026-10-24 |
 | STK-031 | Daily price gap detection | BACKLOG | P2 | data, db | 0 | 2026-10-24 |
+| STK-032 | Historical daily price backfill | BACKLOG | P2 | data | 0 | 2026-10-26 |
+| STK-033 | Signal-rules section on the Settings screen | BACKLOG | P2 | ui, finance | 0 | 2026-10-26 |

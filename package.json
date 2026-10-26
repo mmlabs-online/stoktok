@@ -14,7 +14,8 @@
     "build": "pnpm -r --if-present build",
     "check:service-key": "bash scripts/check-no-service-key-in-client.sh",
     "worker:eod": "pnpm --filter @stoktok/worker run job eod-prices",
-    "worker:financials": "pnpm --filter @stoktok/worker run job financials"
+    "worker:financials": "pnpm --filter @stoktok/worker run job financials",
+    "worker:signals": "pnpm --filter @stoktok/worker run job signals"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

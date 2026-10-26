@@ -1,8 +1,8 @@
-import type { Exchange } from '@stoktok/core';
+import type { Exchange, SectorInfo } from '@stoktok/core';
 import type { Db } from '../client';
 import { mapRow, unwrap } from '../errors';
-import { symbolExchangeFromRow } from '../mappers';
-import type { SymbolRow } from '../rows';
+import { symbolExchangeFromRow, symbolSectorFromRow } from '../mappers';
+import type { SymbolRow, SymbolSectorRow } from '../rows';
 
 /** Exchange per symbol in one query; symbols without a row are omitted, null means unknown. */
 export async function getSymbolExchanges(
@@ -38,4 +38,17 @@ export async function setSymbolSector(
     { onConflict: 'symbol' },
   );
   if (res.error) unwrap(res, ctx);
+}
+
+/** Sector with provenance per symbol in one query; symbols without a row are omitted, sector null means unknown. */
+export async function listSymbolSectors(db: Db, symbols: readonly string[]): Promise<Record<string, SectorInfo>> {
+  if (symbols.length === 0) return {};
+  const ctx = { table: 'symbols', op: 'list_sectors' };
+  const rows = unwrap<SymbolSectorRow[]>(
+    await db.from('symbols').select('symbol,sector,sector_source,sector_fetched_at').in('symbol', [...symbols]),
+    ctx,
+  );
+  const out: Record<string, SectorInfo> = {};
+  for (const row of rows) out[row.symbol] = mapRow(symbolSectorFromRow, row, ctx);
+  return out;
 }

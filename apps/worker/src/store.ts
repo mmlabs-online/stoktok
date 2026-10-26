@@ -1,20 +1,26 @@
 import {
   getEntrySettings,
   getLatestCloses,
+  getRecentCloses,
+  getSignalRules,
   insertGaps,
   listFinancials,
   listHeldSymbols,
   listOpenGaps,
+  listOpenMarketGaps,
+  listSymbolSectors,
   listWatchlist,
   resolveGaps,
   setSymbolSector,
   upsertFinancials,
   upsertPricesDaily,
+  upsertSignals,
 } from '@stoktok/db';
 import type { Db } from '@stoktok/db';
 import type { EodStore } from './jobs/eod-sync';
 import { FINANCIALS_GAP_TYPE } from './jobs/financials-sync';
 import type { FinancialsStore } from './jobs/financials-sync';
+import type { SignalsStore } from './jobs/medium-signals';
 
 /** Wiring only: all reads and writes go through @stoktok/db. */
 export function createDbEodStore(db: Db, opts: { upsertChunkSize: number }): EodStore {
@@ -41,5 +47,27 @@ export function createDbFinancialsStore(db: Db, opts: { upsertChunkSize: number 
     insertGaps: (rows) => insertGaps(db, rows),
     resolveGaps: (ids, resolvedAt) => resolveGaps(db, ids, resolvedAt),
     setSymbolSector: (symbol, v) => setSymbolSector(db, symbol, v),
+  };
+}
+
+/** Wiring only. Financials are read in symbol chunks so one response stays under the PostgREST row cap. */
+export function createDbSignalsStore(db: Db, opts: { upsertChunkSize: number; financialsSymbolChunk: number }): SignalsStore {
+  return {
+    getHolidays: async () => (await getEntrySettings(db)).settings.holidays,
+    getSignalRules: () => getSignalRules(db),
+    listWatchlistSymbols: async () => (await listWatchlist(db)).map((w) => w.symbol),
+    listHeldSymbols: (asOf) => listHeldSymbols(db, asOf),
+    getRecentCloses: (symbols, n) => getRecentCloses(db, symbols, n),
+    listFinancials: async (symbols, fromPeriod) => {
+      const out = [];
+      for (let i = 0; i < symbols.length; i += opts.financialsSymbolChunk) {
+        out.push(...(await listFinancials(db, symbols.slice(i, i + opts.financialsSymbolChunk), fromPeriod)));
+      }
+      return out;
+    },
+    listSymbolSectors: (symbols) => listSymbolSectors(db, symbols),
+    listOpenGaps: (dataType, symbols) => listOpenGaps(db, dataType, symbols),
+    listOpenMarketGaps: (dataType) => listOpenMarketGaps(db, dataType),
+    upsertSignals: (rows) => upsertSignals(db, rows, { chunkSize: opts.upsertChunkSize }),
   };
 }

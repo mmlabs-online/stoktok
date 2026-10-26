@@ -31,7 +31,7 @@ do $$ -- tables_exist
 declare got text[];
 begin
   select array_agg(tablename order by tablename) into got from pg_tables where schemaname = 'public';
-  if got is distinct from array['assets','corporate_actions','data_gaps','financials','prices_daily','settings','symbols','transactions','watchlist'] then
+  if got is distinct from array['assets','corporate_actions','data_gaps','financials','prices_daily','settings','signals','symbols','transactions','watchlist'] then
     raise exception 'CHECK FAILED: tables_exist (got %)', got;
   end if;
 end $$;
@@ -127,6 +127,18 @@ begin
   perform pg_temp.assert_col('financials', 'net_income', 'bigint', true);
 end $$;
 
+do $$ -- signals_columns
+begin
+  perform pg_temp.assert_col('signals', 'symbol', 'text', true);
+  perform pg_temp.assert_col('signals', 'status', 'text', true);
+  perform pg_temp.assert_col('signals', 'value', 'bigint', false);
+  perform pg_temp.assert_col('signals', 'signal_date', 'date', true);
+  perform pg_temp.assert_col('signals', 'data_fresh', 'boolean', true);
+  perform pg_temp.assert_col('signals', 'reason_codes', 'ARRAY', true);
+  perform pg_temp.assert_col('signals', 'inputs_snapshot', 'jsonb', true);
+  perform pg_temp.assert_col('signals', 'computed_at', 'timestamp with time zone', true);
+end $$;
+
 do $$ -- rls_enabled_all_tables
 declare n int;
 begin
@@ -217,11 +229,29 @@ begin
   if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_financials'; end if;
 end $$;
 
+do $$ -- service_role_can_read_write_signals
+declare n int; id1 bigint; id2 bigint;
+begin
+  set local role service_role;
+  insert into public.signals (symbol, rule_id, horizon, signal_date, status, label, value, data_fresh, inputs_snapshot, rule_version, computed_at)
+    values ('FPT', 'price_vs_ma_50', 'medium', '2026-10-26', 'ok', 'neutral', 0, true, '{}', 1, now())
+    returning id into id1;
+  insert into public.signals (symbol, rule_id, horizon, signal_date, status, label, value, data_fresh, inputs_snapshot, rule_version, computed_at)
+    values ('FPT', 'price_vs_ma_50', 'medium', '2026-10-26', 'ok', 'bullish', 30000, true, '{}', 1, now())
+    on conflict (symbol, rule_id, horizon, signal_date) do update set label = excluded.label, value = excluded.value
+    returning id into id2;
+  select count(*) into n from public.signals where symbol = 'FPT';
+  delete from public.signals where symbol = 'FPT';
+  reset role;
+  if n <> 1 or id1 <> id2 then raise exception 'CHECK FAILED: service_role_can_read_write_signals'; end if;
+end $$;
+
 do $$ -- rejects_bad_rows
 declare tx text := 'insert into public.transactions (trade_date, symbol, side, quantity, price, fee) values ';
         ca text := 'insert into public.corporate_actions (symbol, type, ex_date, amount_per_share, ratio_num, ratio_den) values ';
         pd text := 'insert into public.prices_daily (symbol, trade_date, open, high, low, close, volume, source, fetched_at) values ';
         fi text := 'insert into public.financials (symbol, period, eps, bvps, revenue, net_income, source, fetched_at) values ';
+        sg text := 'insert into public.signals (symbol, rule_id, horizon, signal_date, status, label, value, data_fresh, reason_codes, inputs_snapshot, rule_version, computed_at) values ';
         st text := 'insert into public.settings (id, sell_tax_rate_ppm, dividend_withholding_rate_ppm, settlement_days, cash_dividend_treatment, cost_method) values ';
 begin
   perform pg_temp.expect_fail('qty<=0', tx || '(''2026-01-05'',''VNM'',''buy'',0,100,null)', array['23514']);
@@ -255,6 +285,22 @@ begin
     'insert into public.symbols (symbol, sector) values (''VNM'', ''x'')', array['23514']);
   perform pg_temp.expect_fail('symbols provenance without sector',
     'insert into public.symbols (symbol, sector_source, sector_fetched_at) values (''VNM'', ''x'', now())', array['23514']);
+  perform pg_temp.expect_fail('sig lowercase symbol', sg || '(''vnm'',''pe_vs_sector'',''medium'',''2026-10-26'',''ok'',''neutral'',1,true,''{}'',''{}'',1,now())', array['23514']);
+  perform pg_temp.expect_fail('sig bad rule_id', sg || '(''VNM'',''PE'',''medium'',''2026-10-26'',''ok'',''neutral'',1,true,''{}'',''{}'',1,now())', array['23514']);
+  perform pg_temp.expect_fail('sig horizon long', sg || '(''VNM'',''pe_vs_sector'',''long'',''2026-10-26'',''ok'',''neutral'',1,true,''{}'',''{}'',1,now())', array['23514']);
+  perform pg_temp.expect_fail('sig label buy', sg || '(''VNM'',''pe_vs_sector'',''medium'',''2026-10-26'',''ok'',''buy'',1,true,''{}'',''{}'',1,now())', array['23514']);
+  perform pg_temp.expect_fail('sig ok null value', sg || '(''VNM'',''pe_vs_sector'',''medium'',''2026-10-26'',''ok'',''neutral'',null,true,''{}'',''{}'',1,now())', array['23514']);
+  perform pg_temp.expect_fail('sig ok with reasons', sg || '(''VNM'',''pe_vs_sector'',''medium'',''2026-10-26'',''ok'',''neutral'',1,true,''{price_stale}'',''{}'',1,now())', array['23514']);
+  perform pg_temp.expect_fail('sig suppressed with value', sg || '(''VNM'',''pe_vs_sector'',''medium'',''2026-10-26'',''suppressed'',null,1,false,''{price_stale}'',''{}'',1,now())', array['23514']);
+  perform pg_temp.expect_fail('sig suppressed without reasons', sg || '(''VNM'',''pe_vs_sector'',''medium'',''2026-10-26'',''suppressed'',null,null,false,''{}'',''{}'',1,now())', array['23514']);
+  perform pg_temp.expect_fail('sig ok but not fresh', sg || '(''VNM'',''pe_vs_sector'',''medium'',''2026-10-26'',''ok'',''neutral'',1,false,''{}'',''{}'',1,now())', array['23514']);
+  perform pg_temp.expect_fail('sig bad reason', sg || '(''VNM'',''pe_vs_sector'',''medium'',''2026-10-26'',''suppressed'',null,null,false,''{"Bad Code"}'',''{}'',1,now())', array['23514']);
+  perform pg_temp.expect_fail('sig snapshot array', sg || '(''VNM'',''pe_vs_sector'',''medium'',''2026-10-26'',''ok'',''neutral'',1,true,''{}'',''[]'',1,now())', array['23514']);
+  perform pg_temp.expect_fail('sig null snapshot', sg || '(''VNM'',''pe_vs_sector'',''medium'',''2026-10-26'',''ok'',''neutral'',1,true,''{}'',null,1,now())', array['23502']);
+  perform pg_temp.expect_fail('sig null data_fresh', sg || '(''VNM'',''pe_vs_sector'',''medium'',''2026-10-26'',''ok'',''neutral'',1,null,''{}'',''{}'',1,now())', array['23502']);
+  insert into public.signals (symbol, rule_id, horizon, signal_date, status, label, value, data_fresh, inputs_snapshot, rule_version, computed_at)
+    values ('VNM', 'pe_vs_sector', 'medium', '2026-10-26', 'ok', 'neutral', 1, true, '{}', 1, now());
+  perform pg_temp.expect_fail('sig duplicate key', sg || '(''VNM'',''pe_vs_sector'',''medium'',''2026-10-26'',''ok'',''neutral'',1,true,''{}'',''{}'',1,now())', array['23505']);
   insert into public.financials (symbol, period, eps, bvps, revenue, net_income, source, fetched_at)
     values ('VNM', '2026Q1', -5, -7, 0, -9, 'x', now());
   perform pg_temp.expect_fail('fin duplicate period', fi || '(''VNM'',''2026Q1'',1,1,1,1,''x'',now())', array['23505']);

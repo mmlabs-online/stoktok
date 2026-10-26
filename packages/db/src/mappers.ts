@@ -1,7 +1,7 @@
 /** Row <-> domain conversions for assets and watchlist. No financial calculation (R1); integers only (R2). */
 import { EXCHANGES, RowMappingError, toSafeInt } from '@stoktok/core';
-import type { Exchange, PriceQuote, StoredClose } from '@stoktok/core';
-import type { AssetRow, FinancialRow, OpenGapRow, PriceCloseRow, PriceDailyRow, WatchlistRow } from './rows';
+import type { Exchange, PriceQuote, SectorInfo, StoredClose } from '@stoktok/core';
+import type { AssetRow, FinancialRow, OpenGapRow, PriceCloseRow, PriceDailyRow, SymbolSectorRow, WatchlistRow } from './rows';
 
 export interface Asset {
   id: string;
@@ -115,4 +115,15 @@ export interface OpenGapRecord {
 
 export function openGapFromRow(row: OpenGapRow): OpenGapRecord {
   return { id: toSafeInt(row.id, 'id', 'data_gaps'), symbol: row.symbol, fromTs: row.from_ts, toTs: row.to_ts };
+}
+
+/** R4: a sector without source or fetched_at is rejected; no sector means unknown. */
+export function symbolSectorFromRow(row: SymbolSectorRow): SectorInfo {
+  if (row.sector === null) return { sector: null, source: null, fetchedAt: null };
+  const t = 'symbols';
+  if (typeof row.sector_source !== 'string' || row.sector_source === '') throw new RowMappingError(t, 'sector_source', 'missing sector source');
+  if (typeof row.sector_fetched_at !== 'string' || row.sector_fetched_at === '') {
+    throw new RowMappingError(t, 'sector_fetched_at', 'missing sector fetched_at');
+  }
+  return { sector: row.sector, source: row.sector_source, fetchedAt: row.sector_fetched_at };
 }

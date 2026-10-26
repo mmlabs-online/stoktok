@@ -8,6 +8,7 @@ import {
   getEntrySettings,
   getMarketRules,
   getSettings,
+  getSignalRules,
   saveAppSettings,
   saveSettings,
 } from './settings';
@@ -166,6 +167,28 @@ describe('getMarketRules', () => {
     const f = createFake();
     f.respond({ error: { code: '08006' } });
     await expect(getMarketRules(f.db)).rejects.toBeInstanceOf(DataError);
+  });
+});
+
+describe('getSignalRules', () => {
+  test('no row gives defaults', async () => {
+    const f = createFake();
+    f.respond({ data: null });
+    expect(await getSignalRules(f.db)).toMatchObject({ peVsSector: { minPeers: 5 } });
+  });
+  test('stored signals namespace is parsed; market namespace ignored', async () => {
+    const f = createFake();
+    f.respond({ data: { rule_configs: { market: { lotSize: 10 }, signals: { medium: { peVsSector: { minPeers: 7 } } } } } });
+    const r = await getSignalRules(f.db);
+    expect(f.methods('select')[0]?.args).toEqual(['rule_configs']);
+    expect(f.methods('eq')[0]?.args).toEqual(['id', 1]);
+    expect(r.peVsSector.minPeers).toBe(7);
+    expect(r.pbVsSector.minPeers).toBe(5);
+  });
+  test('database error throws DataError', async () => {
+    const f = createFake();
+    f.respond({ error: { code: '08006' } });
+    await expect(getSignalRules(f.db)).rejects.toBeInstanceOf(DataError);
   });
 });
 

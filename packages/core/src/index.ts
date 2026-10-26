@@ -11,7 +11,12 @@ export {
   vnDateOf,
   vnMinutesOf,
 } from './calendar';
-export { DEFAULT_FINANCIALS_SANITY, DEFAULT_PRICE_SANITY, DEFAULT_TICK_BANDS } from './market/config';
+export {
+  DEFAULT_FINANCIALS_PUBLISH_LAG_DAYS,
+  DEFAULT_FINANCIALS_SANITY,
+  DEFAULT_PRICE_SANITY,
+  DEFAULT_TICK_BANDS,
+} from './market/config';
 export type { FinancialsSanity, PriceSanity, TickBand } from './market/config';
 export { buildPriceBoardRow, isOnTick, priceLimits, splitWatchlistGroups, tickSize } from './market/price-board';
 export type { PriceBoardRow, StoredClose } from './market/price-board';
@@ -141,3 +146,19 @@ export {
 } from './portfolio/config';
 export { expectedPriceDate, priceStatus } from './portfolio/freshness';
 export type { PriceStatus } from './portfolio/freshness';
+export { DEFAULT_SIGNAL_RULES, SIGNAL_RULE_BOUNDS, parseSignalRules } from './signals/config';
+export type { SignalRules, ValuationRuleParams } from './signals/config';
+export { evaluateMediumSignals } from './signals/evaluate';
+export type { EvaluateInput } from './signals/evaluate';
+export { resolveSignalDate } from './signals/inputs';
+export { DATA_REASONS, REASON_ORDER, RULE_IDS, RULE_REASONS, RULE_VERSION, SIGNAL_HORIZON, maRuleId } from './signals/types';
+export type {
+  EpsBasis,
+  GapRef,
+  ReasonCode,
+  SectorInfo,
+  SignalLabel,
+  SignalResult,
+  SignalStatus,
+  StoredFinancials,
+} from './signals/types';
