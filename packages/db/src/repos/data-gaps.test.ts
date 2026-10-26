@@ -1,0 +1,47 @@
+import { describe, expect, test } from 'vitest';
+import { createFake } from '../../test/fake-client';
+import { insertGaps, listOpenGaps, resolveGaps } from './data-gaps';
+
+const gap = { symbol: 'A', data_type: 'financials', from_ts: '2025-12-31T17:00:00.000Z', to_ts: '2026-03-31T16:59:59.000Z', source: 's', fetched_at: '2026-10-26T00:00:00.000Z' };
+
+describe('data-gaps repo', () => {
+  test('listOpenGaps filters data_type, in symbols, is resolved_at null; maps ids', async () => {
+    const f = createFake();
+    f.respond({ data: [{ id: '5', symbol: 'A', from_ts: gap.from_ts, to_ts: gap.to_ts }] });
+    const out = await listOpenGaps(f.db, 'financials', ['A']);
+    expect(f.methods('eq')[0]?.args).toEqual(['data_type', 'financials']);
+    expect(f.methods('in')[0]?.args).toEqual(['symbol', ['A']]);
+    expect(f.methods('is')[0]?.args).toEqual(['resolved_at', null]);
+    expect(out).toEqual([{ id: 5, symbol: 'A', fromTs: gap.from_ts, toTs: gap.to_ts }]);
+  });
+  test('listOpenGaps with no symbols -> no call', async () => {
+    const f = createFake();
+    expect(await listOpenGaps(f.db, 'financials', [])).toEqual([]);
+    expect(f.calls).toHaveLength(0);
+  });
+  test('insertGaps sends rows without select; empty -> no call', async () => {
+    const f = createFake();
+    f.respond({});
+    await insertGaps(f.db, [gap]);
+    expect(f.methods('insert')[0]?.args[0]).toEqual([gap]);
+    expect(f.methods('select')).toHaveLength(0);
+    const g = createFake();
+    await insertGaps(g.db, []);
+    expect(g.calls).toHaveLength(0);
+  });
+  test('resolveGaps updates resolved_at in ids; empty -> no call', async () => {
+    const f = createFake();
+    f.respond({});
+    await resolveGaps(f.db, [1, 2], '2026-10-26T00:00:00.000Z');
+    expect(f.methods('update')[0]?.args[0]).toEqual({ resolved_at: '2026-10-26T00:00:00.000Z' });
+    expect(f.methods('in')[0]?.args).toEqual(['id', [1, 2]]);
+    const g = createFake();
+    await resolveGaps(g.db, [], 'x');
+    expect(g.calls).toHaveLength(0);
+  });
+  test('DB error -> DataError', async () => {
+    const f = createFake();
+    f.respond({ error: { code: '42501' } });
+    await expect(insertGaps(f.db, [gap])).rejects.toMatchObject({ code: 'DB_ERROR' });
+  });
+});

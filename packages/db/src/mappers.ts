@@ -1,7 +1,7 @@
 /** Row <-> domain conversions for assets and watchlist. No financial calculation (R1); integers only (R2). */
 import { EXCHANGES, RowMappingError, toSafeInt } from '@stoktok/core';
 import type { Exchange, PriceQuote, StoredClose } from '@stoktok/core';
-import type { AssetRow, PriceCloseRow, PriceDailyRow, WatchlistRow } from './rows';
+import type { AssetRow, FinancialRow, OpenGapRow, PriceCloseRow, PriceDailyRow, WatchlistRow } from './rows';
 
 export interface Asset {
   id: string;
@@ -66,4 +66,53 @@ export function storedCloseFromRow(row: PriceCloseRow): StoredClose {
   const volume = toSafeInt(row.volume, 'volume', 'prices_daily');
   if (volume < 0) throw new RowMappingError('prices_daily', 'volume', `negative volume: ${volume}`);
   return { ...priceQuoteFromRow(row), volume };
+}
+
+export interface FinancialRecord {
+  symbol: string;
+  /** 'YYYYQn'. */
+  period: string;
+  /** Integer VND per share, as published (basis UNVERIFIED, see docs/adr/0002). */
+  eps: number;
+  bvps: number;
+  /** Integer VND. */
+  revenue: number;
+  netIncome: number;
+  source: string;
+  fetchedAt: string;
+}
+
+const PERIOD_RE = /^\d{4}Q[1-4]$/;
+
+/** R4: a row without source or fetched_at is rejected. */
+export function financialFromRow(row: FinancialRow): FinancialRecord {
+  const t = 'financials';
+  if (typeof row.period !== 'string' || !PERIOD_RE.test(row.period)) {
+    throw new RowMappingError(t, 'period', `invalid period: ${String(row.period)}`);
+  }
+  if (typeof row.source !== 'string' || row.source === '') throw new RowMappingError(t, 'source', 'missing source');
+  if (typeof row.fetched_at !== 'string' || row.fetched_at === '') {
+    throw new RowMappingError(t, 'fetched_at', 'missing fetched_at');
+  }
+  return {
+    symbol: row.symbol,
+    period: row.period,
+    eps: toSafeInt(row.eps, 'eps', t),
+    bvps: toSafeInt(row.bvps, 'bvps', t),
+    revenue: toSafeInt(row.revenue, 'revenue', t),
+    netIncome: toSafeInt(row.net_income, 'net_income', t),
+    source: row.source,
+    fetchedAt: row.fetched_at,
+  };
+}
+
+export interface OpenGapRecord {
+  id: number;
+  symbol: string | null;
+  fromTs: string;
+  toTs: string;
+}
+
+export function openGapFromRow(row: OpenGapRow): OpenGapRecord {
+  return { id: toSafeInt(row.id, 'id', 'data_gaps'), symbol: row.symbol, fromTs: row.from_ts, toTs: row.to_ts };
 }

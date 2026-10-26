@@ -25,3 +25,17 @@ export async function setSymbolExchange(db: Db, symbol: string, exchange: Exchan
     .upsert({ symbol, exchange, updated_at: new Date().toISOString() }, { onConflict: 'symbol' });
   if (res.error) unwrap(res, ctx);
 }
+
+/** Writes only the sector columns (never `exchange`); a new row gets exchange NULL = unknown. R4: source + fetched_at. */
+export async function setSymbolSector(
+  db: Db,
+  symbol: string,
+  { sector, source, fetchedAt }: { sector: string; source: string; fetchedAt: string },
+): Promise<void> {
+  const ctx = { table: 'symbols', op: 'set_sector' };
+  const res = await db.from('symbols').upsert(
+    { symbol, sector, sector_source: source, sector_fetched_at: fetchedAt, updated_at: new Date().toISOString() },
+    { onConflict: 'symbol' },
+  );
+  if (res.error) unwrap(res, ctx);
+}

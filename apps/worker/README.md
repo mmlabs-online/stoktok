@@ -34,3 +34,25 @@ A run on a non-trading day or before the cutoff re-syncs up to the previous trad
 ### Holidays
 
 Holidays come from `settings.holidays`. They only shift the target date and the fetch window; an incomplete list cannot corrupt prices. Keep it current.
+
+## Financials sync (`financials`)
+
+Fetches quarterly EPS, BVPS, revenue and net income plus a sector label for watchlist and held symbols from the TCBS public API. It upserts `financials` (idempotent; `source` and `fetched_at` on every row), records missing quarters in `data_gaps` (never filled) and writes `symbols.sector`. See `docs/adr/0002-financials-source.md`.
+
+```
+pnpm worker:financials              # fetch and write
+pnpm worker:financials --dry-run    # fetch and validate, write nothing
+```
+
+Env as for the EOD sync. **First live run: use `--dry-run` and check** that EPS is in the thousands of VND, BVPS is above 100 VND, revenue is in billions of VND (stored as integer VND) and which EPS basis the source uses (quarterly vs TTM; this is unverified). Wrong units are rejected (see `rejectedBySymbol`) instead of stored; `missingPeriods` is reported on dry-run too.
+
+Output: one JSON summary line on stdout (logs on stderr). Exit code: 0 ok; 1 partial or failed run (a symbol failed or was skipped, a period was rejected, the sector fetch failed, the ledger could not be read, or a fatal error); 2 usage error. Symbols with no data (ETFs) do not fail the run.
+
+Schedule (documented only), after the EOD sync:
+
+```
+TZ=Asia/Ho_Chi_Minh
+45 18 * * 1-5 cd <repo> && pnpm worker:financials
+```
+
+Tuning (lookback, publish lag, delay, caps) is in `src/config.ts`.

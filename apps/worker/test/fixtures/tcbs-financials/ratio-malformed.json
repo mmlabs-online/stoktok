@@ -1,0 +1,51 @@
+[
+  {
+    "ticker": "TSTA",
+    "year": 2026,
+    "quarter": 1,
+    "earningPerShare": 1400,
+    "bookValuePerShare": 22000
+  },
+  {
+    "ticker": "TSTA",
+    "year": 2025,
+    "quarter": 4,
+    "earningPerShare": null,
+    "bookValuePerShare": 21500
+  },
+  {
+    "ticker": "TSTA",
+    "year": 2025,
+    "quarter": 5,
+    "earningPerShare": 1300,
+    "bookValuePerShare": 21500
+  },
+  {
+    "ticker": "TSTA",
+    "year": 2025,
+    "quarter": 3,
+    "earningPerShare": 1200,
+    "bookValuePerShare": 21000
+  },
+  {
+    "ticker": "TSTA",
+    "year": 2025,
+    "quarter": 3,
+    "earningPerShare": 1201,
+    "bookValuePerShare": 21001
+  },
+  {
+    "ticker": "TSTB",
+    "year": 2026,
+    "quarter": 2,
+    "earningPerShare": 9,
+    "bookValuePerShare": 9
+  },
+  {
+    "ticker": "TSTA",
+    "year": 2025,
+    "quarter": 2,
+    "earningPerShare": 1100,
+    "bookValuePerShare": 20500
+  }
+]

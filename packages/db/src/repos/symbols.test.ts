@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
-import { getSymbolExchanges, setSymbolExchange } from './symbols';
+import { getSymbolExchanges, setSymbolExchange, setSymbolSector } from './symbols';
 
 describe('getSymbolExchanges', () => {
   test('empty input -> {} with no query', async () => {
@@ -49,5 +49,27 @@ describe('setSymbolExchange', () => {
     const f = createFake();
     f.respond({ error: { code: '23514' } });
     await expect(setSymbolExchange(f.db, 'VNM', null)).rejects.toMatchObject({ code: 'VALIDATION' });
+  });
+});
+
+describe('setSymbolSector', () => {
+  test('payload keys are exactly symbol, sector, sector_source, sector_fetched_at, updated_at (no exchange)', async () => {
+    const f = createFake();
+    f.respond({});
+    await setSymbolSector(f.db, 'VNM', { sector: 'Thực phẩm', source: 'tcbs-public', fetchedAt: '2026-10-26T00:00:00.000Z' });
+    const [payload, opts] = f.methods('upsert')[0]?.args ?? [];
+    expect(Object.keys(payload as object).sort()).toEqual(['sector', 'sector_fetched_at', 'sector_source', 'symbol', 'updated_at']);
+    expect(opts).toEqual({ onConflict: 'symbol' });
+  });
+  test('setSymbolExchange payload has no sector keys', async () => {
+    const f = createFake();
+    f.respond({});
+    await setSymbolExchange(f.db, 'VNM', 'HOSE');
+    expect(Object.keys(f.methods('upsert')[0]?.args[0] as object).sort()).toEqual(['exchange', 'symbol', 'updated_at']);
+  });
+  test('error -> DataError', async () => {
+    const f = createFake();
+    f.respond({ error: { code: '23514' } });
+    await expect(setSymbolSector(f.db, 'VNM', { sector: 'x', source: 's', fetchedAt: 't' })).rejects.toMatchObject({ code: 'VALIDATION' });
   });
 });
