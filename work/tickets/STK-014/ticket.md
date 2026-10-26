@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P2 |
 | Areas | data, db |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-10-22 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/9 |
 
 ## Goal
 The worker stores quarterly EPS, BVPS, revenue and net income plus a sector for each watchlist symbol from a swappable data source, so medium-term valuation signals have inputs.
