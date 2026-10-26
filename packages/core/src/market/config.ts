@@ -61,3 +61,6 @@ export const DEFAULT_FINANCIALS_SANITY: FinancialsSanity = {
   minNonZeroRevenueVnd: 1_000_000,
   maxAbsTotalVnd: 1_000_000_000_000_000,
 };
+
+/** Days after quarter end by which a quarterly report is expected (VN deadline, 30/45 days). Shared by the financials sync and the signal freshness check. */
+export const DEFAULT_FINANCIALS_PUBLISH_LAG_DAYS = 45;

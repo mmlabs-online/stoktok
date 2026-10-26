@@ -1,5 +1,5 @@
 import { DEFAULT_FINANCIALS_SANITY, normalizeQuarterlyFinancials, normalizeSectorLabel, normalizeSymbol, parsePeriod, periodOf } from '@stoktok/core';
-import type { FinancialUnit, FinancialsSanity } from '@stoktok/core';
+import type { EpsBasis, FinancialUnit, FinancialsSanity } from '@stoktok/core';
 import { FINANCIALS_SYNC_CONFIG, TCBS_CONFIG } from '../config';
 import type { FinancialsSource, QuarterlyResult, RejectedPeriod } from './financials-source';
 import { getJson } from './http';
@@ -16,6 +16,14 @@ export const TCBS_FINANCIALS_UNITS: { perShare: FinancialUnit; totals: Financial
   totals: 'BILLION_VND',
 };
 
+export const TCBS_FINANCIALS_SOURCE_NAME = 'tcbs-public';
+
+/**
+ * UNVERIFIED (docs/adr/0002): whether the EPS is per quarter or trailing 12 months. Signals do not assume one:
+ * P/E stays suppressed (eps_basis_unverified) until the financials dry-run confirms the basis and this is flipped.
+ */
+export const TCBS_FINANCIALS_EPS_BASIS: EpsBasis = 'unverified';
+
 export interface TcbsFinancialsOptions {
   fetchImpl: typeof fetch;
   http: Omit<GetJsonOptions, 'userAgent'>;
@@ -30,7 +38,7 @@ export interface TcbsFinancialsOptions {
 type Row = Record<string, unknown>;
 
 export class TcbsFinancialsSource implements FinancialsSource {
-  readonly name = 'tcbs-public';
+  readonly name = TCBS_FINANCIALS_SOURCE_NAME;
 
   constructor(private readonly o: TcbsFinancialsOptions) {}
 

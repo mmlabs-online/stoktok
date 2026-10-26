@@ -56,3 +56,26 @@ TZ=Asia/Ho_Chi_Minh
 ```
 
 Tuning (lookback, publish lag, delay, caps) is in `src/config.ts`.
+
+## Medium-term signals (`signals`)
+
+Computes the medium-term rules (P/E and P/B vs sector, earnings growth trend, price vs 50/200-day MA) for watchlist and held symbols from stored data only, and upserts `signals`. All rules, freshness checks and gap checks are in `packages/core`; parameters come from `settings.rule_configs.signals.medium` (defaults apply when unset). Nothing is fetched.
+
+```
+pnpm worker:signals              # compute and write
+pnpm worker:signals --dry-run    # compute, write nothing
+```
+
+A signal is stored for every symbol and rule. When the price or financials data is stale, gapped or missing, or the rule cannot give a value, the row is `suppressed` with its `reason_codes` and no label or value. `signal_date` is the data date (the newest stored trade date, never earlier than the expected one), so a re-run on the same data overwrites the same rows (idempotent); a weekend re-run uses Friday. `inputs_snapshot` lists the stored inputs used (with source and fetched_at) and the rule parameters.
+
+Schedule (documented only), after the EOD sync and the financials sync:
+
+```
+TZ=Asia/Ho_Chi_Minh
+55 18 * * 1-5 cd <repo> && pnpm worker:signals
+15 21 * * 1-5 cd <repo> && pnpm worker:signals   # after the 21:00 EOD catch-up
+```
+
+**P/E stays suppressed (`eps_basis_unverified`)** until the EPS basis of the financials source is verified. After the financials dry-run confirms whether TCBS EPS is quarterly or trailing 12 months, set `TCBS_FINANCIALS_EPS_BASIS` in `src/sources/tcbs-financials.ts` and update `docs/adr/0002-financials-source.md`. MA rules report `insufficient_history` until 200 closes are stored (backfill is STK-032).
+
+Output: one JSON summary line on stdout. Exit code: 0 ok (suppressed signals are not a failure); 1 the ledger could not be read or a fatal error; 2 usage error.

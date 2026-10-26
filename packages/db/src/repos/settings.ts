@@ -3,12 +3,21 @@ import {
   RowMappingError,
   appSettingsFromRow,
   parseMarketRules,
+  parseSignalRules,
   settingsFromRow,
   settingsInputToRow,
   settingsToRow,
   toSafeInt,
 } from '@stoktok/core';
-import type { AppSettings, LedgerSettings, MarketRules, SettingsFullRow, SettingsInput, SettingsRow } from '@stoktok/core';
+import type {
+  AppSettings,
+  LedgerSettings,
+  MarketRules,
+  SettingsFullRow,
+  SettingsInput,
+  SettingsRow,
+  SignalRules,
+} from '@stoktok/core';
 import type { Db } from '../client';
 import { DataError, mapRow, unwrap, unwrapFound } from '../errors';
 
@@ -101,6 +110,15 @@ export async function getMarketRules(db: Db): Promise<MarketRules> {
   if (!res.error && res.data === null) return parseMarketRules(null);
   const row = unwrap<{ rule_configs: unknown }>(res, ctx);
   return parseMarketRules(row.rule_configs);
+}
+
+/** Medium-term signal rules from settings.rule_configs.signals; no row gives the core defaults (R5). */
+export async function getSignalRules(db: Db): Promise<SignalRules> {
+  const ctx = { table: 'settings', op: 'get' };
+  const res = await db.from('settings').select('rule_configs').eq('id', 1).maybeSingle();
+  if (!res.error && res.data === null) return parseSignalRules(null);
+  const row = unwrap<{ rule_configs: unknown }>(res, ctx);
+  return parseSignalRules(row.rule_configs);
 }
 
 /**

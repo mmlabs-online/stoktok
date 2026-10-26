@@ -1,19 +1,24 @@
 import { pathToFileURL } from 'node:url';
 import { createServiceClient } from '@stoktok/db';
-import { EOD_SYNC_CONFIG, FINANCIALS_SYNC_CONFIG, TCBS_CONFIG } from './config';
+import { EOD_SYNC_CONFIG, FINANCIALS_SYNC_CONFIG, SIGNALS_JOB_CONFIG, TCBS_CONFIG } from './config';
 import { runEodSync } from './jobs/eod-sync';
 import { runFinancialsSync } from './jobs/financials-sync';
-import { TcbsFinancialsSource } from './sources/tcbs-financials';
+import { runMediumSignals } from './jobs/medium-signals';
+import {
+  TCBS_FINANCIALS_EPS_BASIS,
+  TCBS_FINANCIALS_SOURCE_NAME,
+  TcbsFinancialsSource,
+} from './sources/tcbs-financials';
 import { TcbsPriceSource } from './sources/tcbs';
-import { createDbEodStore, createDbFinancialsStore } from './store';
+import { createDbEodStore, createDbFinancialsStore, createDbSignalsStore } from './store';
 
-export type ParsedArgs = { ok: true; job: 'eod-prices' | 'financials'; dryRun: boolean } | { ok: false; usage: string };
+export type ParsedArgs = { ok: true; job: 'eod-prices' | 'financials' | 'signals'; dryRun: boolean } | { ok: false; usage: string };
 
-const USAGE = 'usage: cli.ts <eod-prices|financials> [--dry-run]';
+const USAGE = 'usage: cli.ts <eod-prices|financials|signals> [--dry-run]';
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const [job, ...flags] = argv;
-  if (job !== 'eod-prices' && job !== 'financials') return { ok: false, usage: USAGE };
+  if (job !== 'eod-prices' && job !== 'financials' && job !== 'signals') return { ok: false, usage: USAGE };
   if (flags.some((f) => f !== '--dry-run')) return { ok: false, usage: USAGE };
   return { ok: true, job, dryRun: flags.includes('--dry-run') };
 }
@@ -29,7 +34,15 @@ async function main(): Promise<void> {
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   const db = createServiceClient(process.env);
   let summary: { ok: boolean };
-  if (args.job === 'financials') {
+  if (args.job === 'signals') {
+    summary = await runMediumSignals({
+      store: createDbSignalsStore(db, SIGNALS_JOB_CONFIG),
+      now: new Date(),
+      log,
+      dryRun: args.dryRun,
+      epsBasisBySource: { [TCBS_FINANCIALS_SOURCE_NAME]: TCBS_FINANCIALS_EPS_BASIS },
+    });
+  } else if (args.job === 'financials') {
     const c = FINANCIALS_SYNC_CONFIG;
     const source = new TcbsFinancialsSource({
       fetchImpl: fetch,

@@ -20,6 +20,16 @@ export async function listOpenGaps(db: Db, dataType: string, symbols: readonly s
   return rows.map((r) => mapRow(openGapFromRow, r, ctx));
 }
 
+/** Unresolved market-wide gaps (symbol IS NULL) of one data type; `listOpenGaps` filters by symbol and misses them. */
+export async function listOpenMarketGaps(db: Db, dataType: string): Promise<OpenGapRecord[]> {
+  const ctx = { table: 'data_gaps', op: 'list_open_market' };
+  const rows = unwrap<OpenGapRow[]>(
+    await db.from('data_gaps').select('id,symbol,from_ts,to_ts').eq('data_type', dataType).is('symbol', null).is('resolved_at', null),
+    ctx,
+  );
+  return rows.map((r) => mapRow(openGapFromRow, r, ctx));
+}
+
 /** No `.select()`: supabase returns data: null on success. */
 export async function insertGaps(db: Db, rows: readonly DataGapInsert[]): Promise<void> {
   if (rows.length === 0) return;

@@ -4,6 +4,11 @@ import type { Db } from '@stoktok/db';
 vi.mock('@stoktok/db', () => ({
   getEntrySettings: vi.fn(),
   getLatestCloses: vi.fn(),
+  getRecentCloses: vi.fn(async () => ({})),
+  getSignalRules: vi.fn(),
+  listOpenMarketGaps: vi.fn(async () => []),
+  listSymbolSectors: vi.fn(async () => ({})),
+  upsertSignals: vi.fn(async () => 7),
   insertGaps: vi.fn(async () => undefined),
   listFinancials: vi.fn(async () => []),
   listOpenGaps: vi.fn(async () => []),
@@ -19,7 +24,7 @@ vi.mock('@stoktok/db', () => ({
 }));
 
 import * as dbMock from '@stoktok/db';
-import { createDbEodStore, createDbFinancialsStore } from './store';
+import { createDbEodStore, createDbFinancialsStore, createDbSignalsStore } from './store';
 
 describe('createDbEodStore', () => {
   test('listWatchlistSymbols reads listWatchlist', async () => {
@@ -46,5 +51,31 @@ describe('createDbFinancialsStore', () => {
     const v = { sector: 'x', source: 's', fetchedAt: 'T' };
     await store.setSymbolSector('VNM', v);
     expect(dbMock.setSymbolSector).toHaveBeenCalledWith(db, 'VNM', v);
+  });
+});
+
+describe('createDbSignalsStore', () => {
+  test('listFinancials chunks by financialsSymbolChunk and concatenates', async () => {
+    const db = {} as Db;
+    vi.mocked(dbMock.listFinancials).mockClear();
+    vi.mocked(dbMock.listFinancials).mockImplementation(async (_db, symbols) => symbols.map((symbol) => ({ symbol })) as never);
+    const store = createDbSignalsStore(db, { upsertChunkSize: 3, financialsSymbolChunk: 2 });
+    const out = await store.listFinancials(['A', 'B', 'C', 'D', 'E'], '2025Q1');
+    expect(vi.mocked(dbMock.listFinancials).mock.calls.map((c) => c[1])).toEqual([['A', 'B'], ['C', 'D'], ['E']]);
+    expect(out.map((r) => r.symbol)).toEqual(['A', 'B', 'C', 'D', 'E']);
+  });
+  test('wires the other reads and the upsert chunk size', async () => {
+    const db = {} as Db;
+    const store = createDbSignalsStore(db, { upsertChunkSize: 3, financialsSymbolChunk: 2 });
+    await store.getRecentCloses(['A'], 200);
+    expect(dbMock.getRecentCloses).toHaveBeenCalledWith(db, ['A'], 200);
+    await store.listOpenGaps('prices_daily', ['A']);
+    expect(dbMock.listOpenGaps).toHaveBeenCalledWith(db, 'prices_daily', ['A']);
+    await store.listOpenMarketGaps('prices_daily');
+    expect(dbMock.listOpenMarketGaps).toHaveBeenCalledWith(db, 'prices_daily');
+    await store.listSymbolSectors(['A']);
+    expect(dbMock.listSymbolSectors).toHaveBeenCalledWith(db, ['A']);
+    expect(await store.upsertSignals([])).toBe(7);
+    expect(dbMock.upsertSignals).toHaveBeenCalledWith(db, [], { chunkSize: 3 });
   });
 });
