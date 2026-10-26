@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P2 |
 | Areas | finance, db |
 | Attempts | 0 |
 | Created | 2026-10-22 |
+| PR | — |
 
 ## Goal
 Deterministic medium-term signal rules in `packages/core` run after the EOD sync and store auditable signals, suppressed whenever the input data is stale or has gaps.
