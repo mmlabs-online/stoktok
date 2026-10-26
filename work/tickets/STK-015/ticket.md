@@ -7,7 +7,7 @@
 | Areas | finance, db |
 | Attempts | 1 |
 | Created | 2026-10-22 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/10 |
 
 ## Goal
 Deterministic medium-term signal rules in `packages/core` run after the EOD sync and store auditable signals, suppressed whenever the input data is stale or has gaps.
