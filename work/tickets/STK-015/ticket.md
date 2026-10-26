@@ -24,5 +24,7 @@ docs/spec-v1.md §3 F4 Signals (medium term), §4.4 Signal computation after EOD
 - [ ] "Plan completion vs annual target" is out of scope unless the data source provides it (listed as a follow-up).
 
 ## Notes / answers from Ming
+- **Price history (Ming, 2026-10-26):** the ~1-year price backfill is a separate ticket (STK-032). Build the MA rules now; they suppress with `insufficient_history` until 200 closes exist.
+- **Sector peers (Ming, 2026-10-26):** minimum **5** peers in the same sector for P/E and P/B vs sector; fewer → suppress with `peers_insufficient` (configurable, R5).
 - Depends on: STK-005 (daily prices), STK-014 (financials). The settings section builds on STK-010.
 - Input needed: none.
