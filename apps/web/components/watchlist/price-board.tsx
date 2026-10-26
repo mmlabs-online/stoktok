@@ -44,7 +44,7 @@ function Warn({ children }: { children: ReactNode }) {
 }
 
 /** A reference/ceiling/floor value: label + glyph + color, "—" when unknown. */
-function LimitValue({ value, tone, label }: { value: number | null; tone: 'ref' | 'ceiling' | 'floor'; label: string }) {
+export function LimitValue({ value, tone, label }: { value: number | null; tone: 'ref' | 'ceiling' | 'floor'; label: string }) {
   const s = TONE_STYLES[tone];
   if (value === null) {
     return (
@@ -64,7 +64,7 @@ function LimitValue({ value, tone, label }: { value: number | null; tone: 'ref' 
   );
 }
 
-function Close({ row }: { row: WatchRow }) {
+export function Close({ row }: { row: WatchRow }) {
   if (row.close === null) return <span className="num text-fg-muted">{DASH}</span>;
   const tone: PriceTone | null = row.tone;
   const s = tone ? TONE_STYLES[tone] : null;
@@ -99,7 +99,7 @@ function ChangeCells({ row }: { row: WatchRow }) {
   );
 }
 
-function Status({ row }: { row: WatchRow }) {
+export function Status({ row }: { row: WatchRow }) {
   const f = row.flags;
   return (
     <span className="flex flex-col items-end gap-0.5 text-right">

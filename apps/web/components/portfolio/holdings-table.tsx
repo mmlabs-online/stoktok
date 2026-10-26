@@ -8,7 +8,7 @@ import { TONE_STYLES } from '../tone';
 
 const badgeFresh = (s: PortfolioRow['priceStatus']) => (s === 'fresh' ? true : s === 'stale' ? false : null);
 
-function Price({ row }: { row: PortfolioRow }) {
+export function Price({ row }: { row: PortfolioRow }) {
   return (
     <span className="flex flex-col items-end gap-0.5">
       <span className="num">{row.marketPrice === null ? '—' : formatPrice(row.marketPrice)}</span>
@@ -18,7 +18,7 @@ function Price({ row }: { row: PortfolioRow }) {
   );
 }
 
-function Pnl({ row }: { row: PortfolioRow }) {
+export function Pnl({ row }: { row: PortfolioRow }) {
   if (row.unrealizedPnl === null) return <span className="flex flex-col items-end"><MoneyText vnd={null} /></span>;
   const tone = changeTone(row.unrealizedPnl);
   return (
