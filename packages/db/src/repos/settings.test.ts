@@ -1,7 +1,16 @@
 import { RowMappingError } from '@stoktok/core';
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
-import { getConcentrationThreshold, getEntrySettings, getSettings, saveSettings } from './settings';
+import { DataError } from '../errors';
+import {
+  getAppSettings,
+  getConcentrationThreshold,
+  getEntrySettings,
+  getMarketRules,
+  getSettings,
+  saveAppSettings,
+  saveSettings,
+} from './settings';
 
 const row = {
   id: 1,
@@ -102,5 +111,89 @@ describe('getConcentrationThreshold', () => {
     const f = createFake();
     f.respond({ error: { code: '42501' } });
     await expect(getConcentrationThreshold(f.db)).rejects.toMatchObject({ code: 'DB_ERROR' });
+  });
+});
+
+const fullRow = { ...row, concentration_threshold_ppm: 250000, rule_configs: { signals: { a: 1 }, market: { lotSize: 10 } } };
+const input = {
+  feeRatePpm: null,
+  sellTaxRatePpm: 1000,
+  settlementDays: 2,
+  lotSize: 10,
+  priceLimitPpm: { HOSE: 70000, HNX: 100000, UPCOM: 150000 },
+  concentrationThresholdPpm: 250000,
+  cashDividendTreatment: 'reduceCost' as const,
+};
+
+describe('getAppSettings', () => {
+  test('no row gives defaults with source default', async () => {
+    const f = createFake();
+    f.respond({ data: null });
+    const r = await getAppSettings(f.db);
+    expect(r.source).toBe('default');
+    expect(r.settings.feeRatePpm).toBeNull();
+  });
+  test('stored row with null fee does not throw', async () => {
+    const f = createFake();
+    f.respond({ data: { ...fullRow, fee_rate_ppm: null } });
+    const r = await getAppSettings(f.db);
+    expect(r.source).toBe('stored');
+    expect(r.settings).toMatchObject({ feeRatePpm: null, concentrationThresholdPpm: 250000 });
+  });
+  test('database error throws DataError', async () => {
+    const f = createFake();
+    f.respond({ error: { code: '08006' } });
+    await expect(getAppSettings(f.db)).rejects.toBeInstanceOf(DataError);
+  });
+});
+
+describe('getMarketRules', () => {
+  test('selects rule_configs only for id 1', async () => {
+    const f = createFake();
+    f.respond({ data: { rule_configs: { market: { lotSize: 10 } } } });
+    const r = await getMarketRules(f.db);
+    expect(f.methods('select')[0]?.args).toEqual(['rule_configs']);
+    expect(f.methods('eq')[0]?.args).toEqual(['id', 1]);
+    expect(r.lotSize).toBe(10);
+    expect(r.priceLimitPpm.HOSE).toBe(70000);
+  });
+  test('no row gives defaults', async () => {
+    const f = createFake();
+    f.respond({ data: null });
+    expect(await getMarketRules(f.db)).toMatchObject({ lotSize: 100 });
+  });
+  test('database error throws DataError', async () => {
+    const f = createFake();
+    f.respond({ error: { code: '08006' } });
+    await expect(getMarketRules(f.db)).rejects.toBeInstanceOf(DataError);
+  });
+});
+
+describe('saveAppSettings', () => {
+  test('reads first, then upserts the merged payload', async () => {
+    const f = createFake();
+    f.respond({ data: fullRow });
+    f.respond({ data: fullRow });
+    await saveAppSettings(f.db, input);
+    expect(f.calls.map((c) => c.method).slice(0, 5)).toEqual(['select', 'eq', 'maybeSingle', 'upsert', 'select']);
+    const call = f.methods('upsert')[0];
+    expect(call?.args[1]).toEqual({ onConflict: 'id' });
+    expect(call?.args[0]).toMatchObject({
+      concentration_threshold_ppm: 250000,
+      fee_rate_ppm: null,
+      holidays: ['2026-01-01'],
+      dividend_withholding_rate_ppm: 50000,
+      rule_configs: { signals: { a: 1 }, market: { lotSize: 10 } },
+    });
+  });
+  test('save then read round trip gives the saved lot size', async () => {
+    const f = createFake();
+    f.respond({ data: null });
+    f.respond({ data: fullRow });
+    await saveAppSettings(f.db, { ...input, lotSize: 10 });
+    const saved = (f.methods('upsert')[0]?.args[0] as { rule_configs: unknown }).rule_configs;
+    const g = createFake();
+    g.respond({ data: { rule_configs: saved } });
+    expect((await getMarketRules(g.db)).lotSize).toBe(10);
   });
 });

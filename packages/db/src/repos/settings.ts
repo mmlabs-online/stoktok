@@ -1,5 +1,14 @@
-import { DEFAULT_MARKET_SETTINGS, RowMappingError, settingsFromRow, settingsToRow, toSafeInt } from '@stoktok/core';
-import type { LedgerSettings, SettingsRow } from '@stoktok/core';
+import {
+  DEFAULT_MARKET_SETTINGS,
+  RowMappingError,
+  appSettingsFromRow,
+  parseMarketRules,
+  settingsFromRow,
+  settingsInputToRow,
+  settingsToRow,
+  toSafeInt,
+} from '@stoktok/core';
+import type { AppSettings, LedgerSettings, MarketRules, SettingsFullRow, SettingsInput, SettingsRow } from '@stoktok/core';
 import type { Db } from '../client';
 import { DataError, mapRow, unwrap, unwrapFound } from '../errors';
 
@@ -72,4 +81,39 @@ export async function getConcentrationThreshold(db: Db): Promise<number | null> 
   if (!res.error && res.data === null) return null;
   const row = unwrap<{ concentration_threshold_ppm: number | null }>(res, ctx);
   return row.concentration_threshold_ppm === null ? null : toSafeInt(row.concentration_threshold_ppm, 'concentration_threshold_ppm', ctx.table);
+}
+
+const FULL_COLS = `${COLS},concentration_threshold_ppm,rule_configs`;
+
+/** Settings for the settings screen. Never throws NOT_CONFIGURED: no row gives the core defaults. */
+export async function getAppSettings(db: Db): Promise<{ settings: AppSettings; source: 'default' | 'stored' }> {
+  const ctx = { table: 'settings', op: 'get' };
+  const res = await db.from('settings').select(FULL_COLS).eq('id', 1).maybeSingle();
+  if (!res.error && res.data === null) return { settings: appSettingsFromRow(null), source: 'default' };
+  const row = unwrap<SettingsFullRow>(res, ctx);
+  return { settings: mapRow(appSettingsFromRow, row, ctx), source: 'stored' };
+}
+
+/** Market rules (lot size, price limits) from settings.rule_configs; no row gives the core defaults (R5). */
+export async function getMarketRules(db: Db): Promise<MarketRules> {
+  const ctx = { table: 'settings', op: 'get' };
+  const res = await db.from('settings').select('rule_configs').eq('id', 1).maybeSingle();
+  if (!res.error && res.data === null) return parseMarketRules(null);
+  const row = unwrap<{ rule_configs: unknown }>(res, ctx);
+  return parseMarketRules(row.rule_configs);
+}
+
+/**
+ * Saves the settings form. Read-modify-write so withholding, holidays and other rule_configs keys
+ * are kept; not atomic, acceptable for a single user.
+ */
+export async function saveAppSettings(db: Db, input: SettingsInput): Promise<AppSettings> {
+  const ctx = { table: 'settings', op: 'save' };
+  const current = await db.from('settings').select(FULL_COLS).eq('id', 1).maybeSingle();
+  const existing = !current.error && current.data === null ? null : unwrap<SettingsFullRow>(current, ctx);
+  const row = unwrap<SettingsFullRow>(
+    await db.from('settings').upsert(settingsInputToRow(input, existing), { onConflict: 'id' }).select(FULL_COLS).single(),
+    ctx,
+  );
+  return mapRow(appSettingsFromRow, row, ctx);
 }

@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_MARKET_SETTINGS } from '../ledger/settings';
+import { DEFAULT_MARKET_RULES } from '../settings/market-rules';
+import type { SettingsInput } from '../settings/validate-settings';
+import type { SettingsFullRow } from './rows';
 import {
   RowMappingError,
+  appSettingsFromRow,
   corporateActionFromRow,
   corporateActionToRow,
   settingsFromRow,
+  settingsInputToRow,
   settingsToRow,
   toSafeInt,
   transactionFromRow,
@@ -186,5 +191,82 @@ describe('settingsToRow', () => {
   it('settings round trip', () => {
     const s = settingsFromRow(settingsRow);
     expect(settingsFromRow(settingsToRow(s))).toEqual(s);
+  });
+});
+
+describe('appSettingsFromRow', () => {
+  const full: SettingsFullRow = {
+    id: 1,
+    fee_rate_ppm: null,
+    sell_tax_rate_ppm: 1000,
+    dividend_withholding_rate_ppm: 50000,
+    settlement_days: 2,
+    holidays: [],
+    cash_dividend_treatment: 'income',
+    cost_method: 'WAC',
+    concentration_threshold_ppm: 250000,
+    rule_configs: { market: { lotSize: 10 } },
+  };
+  it('null row gives defaults with a null fee', () => {
+    expect(appSettingsFromRow(null)).toEqual({
+      ...DEFAULT_MARKET_SETTINGS,
+      feeRatePpm: null,
+      concentrationThresholdPpm: null,
+      marketRules: DEFAULT_MARKET_RULES,
+    });
+  });
+  it('maps concentration and rule_configs and keeps a null fee', () => {
+    expect(appSettingsFromRow(full)).toMatchObject({
+      feeRatePpm: null,
+      concentrationThresholdPpm: 250000,
+      cashDividendTreatment: 'income',
+      marketRules: { lotSize: 10, priceLimitPpm: DEFAULT_MARKET_RULES.priceLimitPpm },
+    });
+  });
+  it('throws RowMappingError on an invalid treatment', () => {
+    expect(() => appSettingsFromRow({ ...full, cash_dividend_treatment: 'x' })).toThrow(RowMappingError);
+  });
+});
+
+describe('settingsInputToRow', () => {
+  const input: SettingsInput = {
+    feeRatePpm: null,
+    sellTaxRatePpm: 1000,
+    settlementDays: 3,
+    lotSize: 10,
+    priceLimitPpm: { HOSE: 70000, HNX: 100000, UPCOM: 150000 },
+    concentrationThresholdPpm: null,
+    cashDividendTreatment: 'reduceCost',
+  };
+  it('keeps withholding, holidays, cost method and other rule_configs keys from the existing row', () => {
+    const existing: SettingsFullRow = {
+      id: 1,
+      fee_rate_ppm: 1500,
+      sell_tax_rate_ppm: 1000,
+      dividend_withholding_rate_ppm: 40000,
+      settlement_days: 2,
+      holidays: ['2026-01-01'],
+      cash_dividend_treatment: 'income',
+      cost_method: 'WAC',
+      concentration_threshold_ppm: null,
+      rule_configs: { signals: { a: 1 } },
+    };
+    const row = settingsInputToRow(input, existing);
+    expect(row).toMatchObject({
+      dividend_withholding_rate_ppm: 40000,
+      holidays: ['2026-01-01'],
+      cost_method: 'WAC',
+      settlement_days: 3,
+      fee_rate_ppm: null,
+    });
+    expect(row.rule_configs).toMatchObject({ signals: { a: 1 }, market: { lotSize: 10 } });
+  });
+  it('without an existing row uses the defaults', () => {
+    expect(settingsInputToRow(input, null)).toMatchObject({
+      dividend_withholding_rate_ppm: 50000,
+      holidays: [],
+      cost_method: 'WAC',
+      concentration_threshold_ppm: null,
+    });
   });
 });

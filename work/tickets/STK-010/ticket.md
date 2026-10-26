@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P2 |
 | Areas | ui |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-10-22 |
+| PR | https://github.com/mmlabs-online/stoktok/pull/9 |
 
 ## Goal
 Ming can view and change the market-rule and portfolio settings on `/settings`; the values are stored in `settings` and used by `packages/core`.

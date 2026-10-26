@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | BLOCKED |
 | Priority | P2 |
 | Areas | data, finance, ui |
 | Attempts | 0 |
 | Created | 2026-10-22 |
+| PR | — |
 
 ## Goal
 Ming can import a TCInvest statement CSV, preview which rows are new, duplicate or invalid, import the new ones as transactions, and see per-symbol quantity differences between the app and the statement.
@@ -22,5 +23,6 @@ docs/spec-v1.md §3 F1 (CSV import, reconciliation view), §1.4 success criteria
 - [ ] Unit tests use a masked fixture based on the real statement.
 
 ## Notes / answers from Ming
+- **Blocked (2026-10-25):** waiting for a masked real TCInvest statement export. Ming chose to skip for now; resume with `/run STK-012` after uploading the file.
 - Depends on: STK-006 (data layer), STK-008 (ledger screen).
 - **Input needed (⛔ blocking):** a real TCInvest statement export with the account number masked (spec §9 Q2). Planner: return BLOCKED without it.

@@ -11,10 +11,29 @@ export {
   vnDateOf,
   vnMinutesOf,
 } from './calendar';
-export { DEFAULT_PRICE_SANITY } from './market/config';
-export type { PriceSanity } from './market/config';
+export { DEFAULT_FINANCIALS_SANITY, DEFAULT_PRICE_SANITY, DEFAULT_TICK_BANDS } from './market/config';
+export type { FinancialsSanity, PriceSanity, TickBand } from './market/config';
+export { buildPriceBoardRow, isOnTick, priceLimits, splitWatchlistGroups, tickSize } from './market/price-board';
+export type { PriceBoardRow, StoredClose } from './market/price-board';
 export { normalizeDailyBar, toVnd } from './market/daily-bar';
 export type { DailyBar, NormalizeResult, PriceUnit, RawDailyBar } from './market/daily-bar';
+export { normalizeQuarterlyFinancials, normalizeSectorLabel, toVndAmount } from './market/financials';
+export type {
+  FinancialUnit,
+  NormalizeFinancialsResult,
+  QuarterlyFinancials,
+  RawQuarterlyFinancials,
+} from './market/financials';
+export {
+  addQuarters,
+  comparePeriods,
+  latestExpectedPeriod,
+  parsePeriod,
+  periodOf,
+  planFinancialGaps,
+  quarterBounds,
+} from './market/quarters';
+export type { FinancialGapPlan, OpenGap } from './market/quarters';
 export { ROUNDING_MODE, applyRatePpm, mulDiv, roundDiv } from './money';
 export { buildLedger } from './ledger/build-ledger';
 export { DEFAULT_MARKET_SETTINGS, estimateFees } from './ledger/settings';
@@ -23,9 +42,11 @@ export type { ValuedHolding } from './ledger/valuation';
 export type * from './ledger/types';
 export {
   RowMappingError,
+  appSettingsFromRow,
   corporateActionFromRow,
   corporateActionToRow,
   settingsFromRow,
+  settingsInputToRow,
   settingsToRow,
   toSafeInt,
   transactionFromRow,
@@ -52,8 +73,30 @@ export {
   LOW_PRICE_CONFIRM_BELOW,
 } from './entry/rules';
 export type { TradingRules } from './entry/rules';
-export { parseIntegerInput } from './entry/parse-input';
-export type { ParseIntegerResult } from './entry/parse-input';
+export { formatRatePercentInput, parseIntegerInput, parseRatePercentInput } from './entry/parse-input';
+export type { ParseIntegerResult, ParseRateResult } from './entry/parse-input';
+export {
+  DEFAULT_MARKET_RULES,
+  EXCHANGES,
+  EXCHANGE_LABELS,
+  mergeRuleConfigs,
+  parseMarketRules,
+} from './settings/market-rules';
+export type { Exchange, MarketRules } from './settings/market-rules';
+export {
+  CASH_DIVIDEND_TREATMENTS,
+  SETTINGS_BOUNDS,
+  concentrationDefaultText,
+  settingsToFormValues,
+  validateSettingsInput,
+} from './settings/validate-settings';
+export type {
+  AppSettings,
+  SettingsField,
+  SettingsFormRaw,
+  SettingsInput,
+  ValidateSettingsResult,
+} from './settings/validate-settings';
 export { entryMessage } from './entry/messages-vi';
 export type { EntryError, EntryErrorCode, EntryParams } from './entry/messages-vi';
 export { transactionToFormValues, validateTransactionInput } from './entry/validate-transaction';
@@ -66,6 +109,13 @@ export type {
 } from './entry/validate-transaction';
 export { assetToFormValues, validateAssetInput } from './entry/validate-asset';
 export type { AssetField, AssetFormRaw, AssetInput, ValidateAssetResult } from './entry/validate-asset';
+export { parseExchangeInput, validateWatchlistInput } from './entry/validate-watchlist';
+export type {
+  ValidateWatchlistResult,
+  WatchlistField,
+  WatchlistFormRaw,
+  WatchlistInput,
+} from './entry/validate-watchlist';
 export { checkLedgerChange } from './entry/check-ledger-change';
 export type { LedgerChange, LedgerChangeResult } from './entry/check-ledger-change';
 export { validateCorporateActionInput } from './entry/validate-corporate-action';

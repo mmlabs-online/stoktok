@@ -1,0 +1,16 @@
+[
+  {
+    "ticker": "TSTA",
+    "year": 2026,
+    "quarter": 1,
+    "earningPerShare": 1.4,
+    "bookValuePerShare": 22.0
+  },
+  {
+    "ticker": "TSTA",
+    "year": 2025,
+    "quarter": 4,
+    "earningPerShare": 1.3,
+    "bookValuePerShare": 21.5
+  }
+]

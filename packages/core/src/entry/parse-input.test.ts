@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseIntegerInput } from './parse-input';
+import { formatRatePercentInput, parseIntegerInput, parseRatePercentInput } from './parse-input';
 
 const max = 2_147_483_647;
 const parse = (s: string) => parseIntegerInput(s, { max });
@@ -29,5 +29,47 @@ describe('parseIntegerInput', () => {
       ok: false,
       code: 'TOO_LARGE',
     });
+  });
+});
+
+describe('parseRatePercentInput', () => {
+  const rate = (s: string, maxPpm = 1_000_000) => parseRatePercentInput(s, { maxPpm });
+  it('converts percent text to ppm', () => {
+    expect(rate('0,15')).toEqual({ ok: true, ppm: 1500 });
+    expect(rate('0.15')).toEqual({ ok: true, ppm: 1500 });
+    expect(rate('0,1')).toEqual({ ok: true, ppm: 1000 });
+    expect(rate('7')).toEqual({ ok: true, ppm: 70000 });
+    expect(rate('100')).toEqual({ ok: true, ppm: 1_000_000 });
+    expect(rate(' 0,0001 ')).toEqual({ ok: true, ppm: 1 });
+  });
+  it('rejects blank, negative, too precise and malformed text', () => {
+    expect(rate('')).toEqual({ ok: false, code: 'REQUIRED' });
+    expect(rate('-1')).toEqual({ ok: false, code: 'NEGATIVE' });
+    expect(rate('0,12345')).toEqual({ ok: false, code: 'TOO_PRECISE' });
+    for (const s of ['1,2,3', '1.000,5', 'abc', '1e3', ',']) expect(rate(s)).toEqual({ ok: false, code: 'INVALID' });
+  });
+  it('rejects huge values without precision loss and honours the max edge', () => {
+    expect(rate('99999999999999999999')).toEqual({ ok: false, code: 'TOO_LARGE' });
+    expect(rate('5', 50000)).toEqual({ ok: true, ppm: 50000 });
+    expect(rate('5,0001', 50000)).toEqual({ ok: false, code: 'TOO_LARGE' });
+  });
+});
+
+describe('formatRatePercentInput', () => {
+  it('formats ppm as percent text with a comma', () => {
+    expect(formatRatePercentInput(1500)).toBe('0,15');
+    expect(formatRatePercentInput(1000)).toBe('0,1');
+    expect(formatRatePercentInput(70000)).toBe('7');
+    expect(formatRatePercentInput(0)).toBe('0');
+    expect(formatRatePercentInput(1)).toBe('0,0001');
+  });
+  it('round-trips through parseRatePercentInput', () => {
+    for (const ppm of [0, 1, 9, 10, 999, 1000, 1500, 70000, 150000, 999999, 1000000]) {
+      expect(parseRatePercentInput(formatRatePercentInput(ppm), { maxPpm: 1_000_000 })).toEqual({ ok: true, ppm });
+    }
+  });
+  it('rejects negative or non-integer ppm', () => {
+    expect(() => formatRatePercentInput(-1)).toThrow(RangeError);
+    expect(() => formatRatePercentInput(1.5)).toThrow(RangeError);
   });
 });

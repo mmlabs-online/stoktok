@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | BLOCKED |
 | Priority | P2 |
 | Areas | finance |
 | Attempts | 0 |
 | Created | 2026-10-22 |
+| PR | — |
 
 ## Goal
 Confirm with a real TCBS statement that the STK-002 ledger defaults match how TCBS calculates cost and P&L, and fix the defaults where they differ.
@@ -21,5 +22,6 @@ docs/spec-v1.md §1.4 success criteria (P&L matches TCBS statement), §2.1 marke
 - [ ] Any TCBS rule that core cannot model is listed as a follow-up, not patched ad hoc.
 
 ## Notes / answers from Ming
+- **Blocked (2026-10-25):** needs the masked TCInvest statement (same as STK-012) and depends on STK-012. Skipped with STK-012 per Ming.
 - Depends on: STK-012 (statement import).
 - **Input needed (⛔ blocking):** the same masked sample statement as STK-012, plus the TCBS fee rate if tiered (spec §9 Q3).

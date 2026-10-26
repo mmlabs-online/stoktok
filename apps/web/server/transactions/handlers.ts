@@ -1,5 +1,4 @@
 import {
-  DEFAULT_TRADING_RULES,
   checkLedgerChange,
   entryMessage,
   validateCorporateActionInput,
@@ -19,6 +18,7 @@ import {
   createTransaction,
   deleteTransaction,
   getEntrySettings,
+  getMarketRules,
   listCorporateActions,
   listTransactions,
   updateTransaction,
@@ -107,8 +107,8 @@ async function submitTransaction(
   const values = readTransactionForm(formData);
   if (target.id !== undefined && !isUuid(target.id)) return failForm(values, 'NOT_FOUND');
   try {
-    const { settings, feeRateConfigured } = await getEntrySettings(db);
-    const v = validateTransactionInput(values, { rules: DEFAULT_TRADING_RULES, today, feeRateConfigured });
+    const [{ settings, feeRateConfigured }, rules] = await Promise.all([getEntrySettings(db), getMarketRules(db)]);
+    const v = validateTransactionInput(values, { rules, today, feeRateConfigured });
     if (!v.ok) return { ok: false, fieldErrors: fieldErrors(v.errors), values };
     const change: LedgerChange =
       target.id === undefined ? { kind: 'add', input: v.value } : { kind: 'edit', id: target.id, input: v.value };

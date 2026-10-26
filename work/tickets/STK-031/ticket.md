@@ -24,4 +24,5 @@ docs/spec-v1.md §2.2 Data constraints, §4.4 Job schedule (gap detection), §5 
 
 ## Notes / answers from Ming
 - Depends on: STK-005 (EOD sync job).
+- STK-014 (2026-10-25) creates a minimal shared `packages/db/src/repos/data-gaps.ts` (`listOpenGaps`, `insertGaps`, `resolveGaps`, app-side dedupe) for missing financials quarters. Reuse and extend it here for `prices_daily` gaps.
 - No migration planned; a partial unique index on open gaps and a single-run lock are follow-ups.

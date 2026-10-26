@@ -1,0 +1,30 @@
+[
+  {
+    "ticker": "TSTA",
+    "year": 2026,
+    "quarter": 1,
+    "revenue": 1400,
+    "shareHolderIncome": 140
+  },
+  {
+    "ticker": "TSTA",
+    "year": 2025,
+    "quarter": 4,
+    "revenue": 1300,
+    "shareHolderIncome": 130
+  },
+  {
+    "ticker": "TSTA",
+    "year": 2025,
+    "quarter": 3,
+    "revenue": 1200,
+    "shareHolderIncome": 120
+  },
+  {
+    "ticker": "TSTA",
+    "year": 2025,
+    "quarter": 2,
+    "revenue": "abc",
+    "shareHolderIncome": 110
+  }
+]

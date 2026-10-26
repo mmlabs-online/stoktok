@@ -63,7 +63,7 @@ export function checkLedgerChange(args: {
     ok: false,
     error: {
       code: err.transactionId === changedId ? 'OVERSELL_SELF' : 'OVERSELL_OTHER',
-      params: { symbol: err.symbol, date: err.date, requested: err.requested, sellable: err.sellable },
+      params: { symbol: err.symbol, date: err.date, requested: err.requested, sellable: err.sellable, settlementDays: settings.settlementDays },
     },
   };
 }

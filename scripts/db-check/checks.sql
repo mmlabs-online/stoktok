@@ -31,7 +31,7 @@ do $$ -- tables_exist
 declare got text[];
 begin
   select array_agg(tablename order by tablename) into got from pg_tables where schemaname = 'public';
-  if got is distinct from array['assets','corporate_actions','data_gaps','prices_daily','settings','transactions','watchlist'] then
+  if got is distinct from array['assets','corporate_actions','data_gaps','financials','prices_daily','settings','symbols','transactions','watchlist'] then
     raise exception 'CHECK FAILED: tables_exist (got %)', got;
   end if;
 end $$;
@@ -93,6 +93,8 @@ do $$ -- source_fetched_at_not_null
 begin
   perform pg_temp.assert_col('prices_daily', 'source', 'text', true);
   perform pg_temp.assert_col('prices_daily', 'fetched_at', 'timestamp with time zone', true);
+  perform pg_temp.assert_col('financials', 'source', 'text', true);
+  perform pg_temp.assert_col('financials', 'fetched_at', 'timestamp with time zone', true);
   perform pg_temp.assert_col('data_gaps', 'source', 'text', true);
   perform pg_temp.assert_col('data_gaps', 'fetched_at', 'timestamp with time zone', true);
 end $$;
@@ -104,6 +106,25 @@ begin
   select count(*) into n from pg_constraint
     where conrelid = 'public.settings'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%cash_dividend_treatment%';
   if n < 1 then raise exception 'CHECK FAILED: settings_columns (no check on cash_dividend_treatment)'; end if;
+end $$;
+
+do $$ -- symbols_columns
+begin
+  perform pg_temp.assert_col('symbols', 'symbol', 'text', true);
+  perform pg_temp.assert_col('symbols', 'exchange', 'text', false);
+  perform pg_temp.assert_col('symbols', 'sector', 'text', false);
+  perform pg_temp.assert_col('symbols', 'sector_source', 'text', false);
+  perform pg_temp.assert_col('symbols', 'sector_fetched_at', 'timestamp with time zone', false);
+end $$;
+
+do $$ -- financials_columns
+begin
+  perform pg_temp.assert_col('financials', 'symbol', 'text', true);
+  perform pg_temp.assert_col('financials', 'period', 'text', true);
+  perform pg_temp.assert_col('financials', 'eps', 'bigint', true);
+  perform pg_temp.assert_col('financials', 'bvps', 'bigint', true);
+  perform pg_temp.assert_col('financials', 'revenue', 'bigint', true);
+  perform pg_temp.assert_col('financials', 'net_income', 'bigint', true);
 end $$;
 
 do $$ -- rls_enabled_all_tables
@@ -173,10 +194,34 @@ begin
   if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write'; end if;
 end $$;
 
+do $$ -- service_role_can_read_write_symbols
+declare n int;
+begin
+  set local role service_role;
+  insert into public.symbols (symbol, exchange) values ('FPT', 'HOSE');
+  select count(*) into n from public.symbols where symbol = 'FPT';
+  delete from public.symbols where symbol = 'FPT';
+  reset role;
+  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_symbols'; end if;
+end $$;
+
+do $$ -- service_role_can_read_write_financials
+declare n int;
+begin
+  set local role service_role;
+  insert into public.financials (symbol, period, eps, bvps, revenue, net_income, source, fetched_at)
+    values ('FPT', '2026Q1', 1000, 20000, 1000000000, 100000000, 'x', now());
+  select count(*) into n from public.financials where symbol = 'FPT';
+  delete from public.financials where symbol = 'FPT';
+  reset role;
+  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_financials'; end if;
+end $$;
+
 do $$ -- rejects_bad_rows
 declare tx text := 'insert into public.transactions (trade_date, symbol, side, quantity, price, fee) values ';
         ca text := 'insert into public.corporate_actions (symbol, type, ex_date, amount_per_share, ratio_num, ratio_den) values ';
         pd text := 'insert into public.prices_daily (symbol, trade_date, open, high, low, close, volume, source, fetched_at) values ';
+        fi text := 'insert into public.financials (symbol, period, eps, bvps, revenue, net_income, source, fetched_at) values ';
         st text := 'insert into public.settings (id, sell_tax_rate_ppm, dividend_withholding_rate_ppm, settlement_days, cash_dividend_treatment, cost_method) values ';
 begin
   perform pg_temp.expect_fail('qty<=0', tx || '(''2026-01-05'',''VNM'',''buy'',0,100,null)', array['23514']);
@@ -192,6 +237,28 @@ begin
   perform pg_temp.expect_fail('gap to<from',
     'insert into public.data_gaps (data_type, from_ts, to_ts, source, fetched_at) values (''prices'', ''2026-01-02'', ''2026-01-01'', ''x'', now())',
     array['23514']);
+  perform pg_temp.expect_fail('symbols lowercase symbol', 'insert into public.symbols (symbol) values (''vnm'')', array['23514']);
+  perform pg_temp.expect_fail('symbols exchange HSX', 'insert into public.symbols (symbol, exchange) values (''VNM'', ''HSX'')', array['23514']);
+  perform pg_temp.expect_fail('symbols exchange hose', 'insert into public.symbols (symbol, exchange) values (''VNM'', ''hose'')', array['23514']);
+  perform pg_temp.expect_fail('fin period 2026Q5', fi || '(''VNM'',''2026Q5'',1,1,1,1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('fin period 2026-Q1', fi || '(''VNM'',''2026-Q1'',1,1,1,1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('fin period 26Q1', fi || '(''VNM'',''26Q1'',1,1,1,1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('fin lowercase symbol', fi || '(''vnm'',''2026Q1'',1,1,1,1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('fin negative revenue', fi || '(''VNM'',''2026Q1'',1,1,-1,1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('fin null eps', fi || '(''VNM'',''2026Q1'',null,1,1,1,''x'',now())', array['23502']);
+  perform pg_temp.expect_fail('fin null source', fi || '(''VNM'',''2026Q1'',1,1,1,1,null,now())', array['23502']);
+  perform pg_temp.expect_fail('symbols sector empty',
+    'insert into public.symbols (symbol, sector, sector_source, sector_fetched_at) values (''VNM'', '''', ''x'', now())', array['23514']);
+  perform pg_temp.expect_fail('symbols sector untrimmed',
+    'insert into public.symbols (symbol, sector, sector_source, sector_fetched_at) values (''VNM'', '' x'', ''x'', now())', array['23514']);
+  perform pg_temp.expect_fail('symbols sector without provenance',
+    'insert into public.symbols (symbol, sector) values (''VNM'', ''x'')', array['23514']);
+  perform pg_temp.expect_fail('symbols provenance without sector',
+    'insert into public.symbols (symbol, sector_source, sector_fetched_at) values (''VNM'', ''x'', now())', array['23514']);
+  insert into public.financials (symbol, period, eps, bvps, revenue, net_income, source, fetched_at)
+    values ('VNM', '2026Q1', -5, -7, 0, -9, 'x', now());
+  perform pg_temp.expect_fail('fin duplicate period', fi || '(''VNM'',''2026Q1'',1,1,1,1,''x'',now())', array['23505']);
+  insert into public.symbols (symbol, exchange) values ('VNM', null);
   insert into public.corporate_actions (symbol, type, ex_date, amount_per_share) values ('VNM', 'cash_dividend', '2026-01-05', 1000);
   perform pg_temp.expect_fail('duplicate corporate action', ca || '(''VNM'',''cash_dividend'',''2026-01-05'',2000,null,null)', array['23505']);
 end $$;

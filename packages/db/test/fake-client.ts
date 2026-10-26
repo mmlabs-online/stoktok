@@ -11,7 +11,7 @@ export interface Res {
   count?: number | null;
 }
 
-const METHODS = ['select', 'eq', 'gte', 'lte', 'order', 'limit', 'range', 'insert', 'update', 'upsert', 'delete', 'single', 'maybeSingle'];
+const METHODS = ['select', 'eq', 'in', 'gte', 'lte', 'is', 'order', 'limit', 'range', 'insert', 'update', 'upsert', 'delete', 'single', 'maybeSingle'];
 
 /** Chainable fake of the supabase-js query builder. Each awaited query consumes the next queued response. */
 export function createFake() {

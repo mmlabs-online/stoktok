@@ -1,8 +1,8 @@
-import type { PriceQuote } from '@stoktok/core';
+import type { PriceQuote, StoredClose } from '@stoktok/core';
 import type { Db } from '../client';
 import { DataError, mapRow, unwrap, unwrapFound } from '../errors';
-import { priceQuoteFromRow } from '../mappers';
-import type { PriceDailyInsert, PriceDailyRow } from '../rows';
+import { priceQuoteFromRow, storedCloseFromRow } from '../mappers';
+import type { PriceCloseRow, PriceDailyInsert, PriceDailyRow } from '../rows';
 
 const COLS = 'symbol,trade_date,close,source,fetched_at';
 
@@ -26,6 +26,26 @@ export async function getLatestCloses(db: Db, symbols: readonly string[]): Promi
   for (const row of rows) {
     if (row) out[row.symbol] = mapRow(priceQuoteFromRow, row, ctx);
   }
+  return out;
+}
+
+/** Last `n` stored closes per symbol, newest first, with volume. One query per symbol; no row gives []. */
+export async function getRecentCloses(
+  db: Db,
+  symbols: readonly string[],
+  n = 2,
+): Promise<Record<string, StoredClose[]>> {
+  const ctx = { table: 'prices_daily', op: 'recent' };
+  const out: Record<string, StoredClose[]> = {};
+  await Promise.all(
+    symbols.map(async (symbol) => {
+      const rows = unwrap<PriceCloseRow[]>(
+        await db.from('prices_daily').select(`${COLS},volume`).eq('symbol', symbol).order('trade_date', { ascending: false }).limit(n),
+        ctx,
+      );
+      out[symbol] = rows.map((r) => mapRow(storedCloseFromRow, r, ctx));
+    }),
+  );
   return out;
 }
 

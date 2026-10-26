@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P2 |
 | Areas | data, db |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-10-22 |
+| PR | https://github.com/mmlabs-online/stoktok/pull/9 |
 
 ## Goal
 The worker stores quarterly EPS, BVPS, revenue and net income plus a sector for each watchlist symbol from a swappable data source, so medium-term valuation signals have inputs.
@@ -22,5 +23,6 @@ docs/spec-v1.md §3 F4 (medium-term data), §4.3 Data source adapters, §4.4 Fin
 - [ ] Job runnable once via a documented `pnpm` script.
 
 ## Notes / answers from Ming
+- **Answer to §9 Q4 for financials (Ming, 2026-10-25):** use the **TCBS public API** (unofficial, no registration), same posture as STK-005: risk accepted, low request volume, honest User-Agent, keep the `FinancialsSource` interface swappable, record it in an ADR. The sandbox cannot reach Vietnamese hosts, so fixtures will be synthetic and labelled; units must be guarded.
 - Depends on: STK-003 (schema), STK-005 (adapter pattern).
 - **Input needed (⛔ blocking):** data source after a license/terms check for personal use (spec §9 Q4). Planner: propose a source with the license finding, or return BLOCKED.
