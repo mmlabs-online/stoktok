@@ -1,0 +1,127 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Repo variable + secrets to set in GitHub settings (see README, "CI and Docker images").
+  DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test
+      - run: pnpm check:service-key
+      - run: pnpm db:check
+        env:
+          DB_CHECK_URL: postgresql://postgres:postgres@localhost:5432/postgres
+
+  images:
+    needs: ci
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [web, worker]
+    env:
+      PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail fast if Docker Hub config is missing
+        if: env.PUSH == 'true'
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -z "$DOCKERHUB_NAMESPACE" ] || [ -z "$DH_USER" ] || [ -z "$DH_TOKEN" ]; then
+            echo "::error::Set repo variable DOCKERHUB_NAMESPACE and secrets DOCKERHUB_USERNAME, DOCKERHUB_TOKEN"
+            exit 1
+          fi
+      - name: Compute image name
+        run: echo "IMAGE=${DOCKERHUB_NAMESPACE:-local}/stoktok-${{ matrix.app }}" >> "$GITHUB_ENV"
+      - uses: docker/setup-buildx-action@v3
+      - name: Docker Hub login
+        if: env.PUSH == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.app }}/Dockerfile
+          load: true
+          push: false
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+      - name: No secrets in image
+        run: |
+          if docker image inspect "$IMAGE:latest" --format '{{range .Config.Env}}{{println .}}{{end}}' \
+            | cut -d= -f1 | grep -Ei 'KEY|SECRET|TOKEN|PASSWORD'; then
+            echo "::error::secret-like env name in image"; exit 1
+          fi
+          found=$(docker run --rm --entrypoint sh "$IMAGE:latest" -c "find / -xdev -name '.env*' -not -path '/proc/*' 2>/dev/null")
+          if [ -n "$found" ]; then echo "::error::.env files in image: $found"; exit 1; fi
+      - name: "smoke: worker"
+        if: matrix.app == 'worker'
+        run: |
+          set +e
+          docker run --rm "$IMAGE:latest" 2> err.txt
+          code=$?
+          cat err.txt
+          [ "$code" -eq 2 ] && [ -s err.txt ] || { echo "::error::expected exit 2 with usage, got $code"; exit 1; }
+      - name: "smoke: web"
+        if: matrix.app == 'web'
+        run: |
+          docker run -d --name web -p 3000:3000 \
+            -e SUPABASE_URL=http://127.0.0.1:9 -e SUPABASE_SERVICE_ROLE_KEY=dummy \
+            "$IMAGE:latest"
+          code=000
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' localhost:3000/ || true)
+            [ "$code" != "000" ] && break
+            sleep 1
+          done
+          docker logs web
+          if [ "$code" = "000" ] || docker logs web 2>&1 | grep -E 'Cannot find module|MODULE_NOT_FOUND'; then
+            echo "::error::web smoke failed (http $code)"; exit 1
+          fi
+      - name: Push images
+        if: env.PUSH == 'true'
+        run: |
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
