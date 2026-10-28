@@ -41,3 +41,26 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No.
 - Diff size: about +230 / -3 lines.
+
+## Attempt 2 — 2026-10-28 (REWORK, review attempt 1)
+
+### Files touched
+| File | Required because |
+|---|---|
+| `.github/workflows/ci.yml` | Issue 1: scan runs `--user 0` and find ends with `; true`. Issue 2: "Docker Hub login" moved to directly before "Push images". Issue 3: `cancel-in-progress: ${{ github.event_name == 'pull_request' }}` |
+
+### Evidence (dockerd started locally; images from attempt 1 still present)
+- Extracted the committed "No secrets in image" `run:` block verbatim and ran it with `bash -e` against the built images (`IMAGE=stoktok-web`, `IMAGE=stoktok-worker`): both exit 0, no output.
+- Old command run as the image user (`USER node`): exit=1 (reproduces the review's finding, find fails on permission errors).
+- Positive control: planted `/root/.env.x` in a throwaway container with the new command (`--user 0 ... ; true`): find printed `/root/.env.x`, so the scan would flag it.
+- Not verifiable here: the GitHub Actions run itself.
+
+### Checks
+- typecheck: green. lint: green.
+- test: green. core 347 passed, db 100 passed + 1 todo, worker 65 passed, web 176 passed.
+
+### Out-of-plan files
+None. Not committed (as instructed).
+
+### Scope self-check
+Only the three listed issues fixed. Diff: +8 / -8 lines.
