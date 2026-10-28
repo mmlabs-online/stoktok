@@ -1,0 +1,15 @@
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/*.tsbuildinfo
+**/*.log
+.git
+.github
+.claude
+work
+docs
+supabase
+.env*
+**/.env*
+!.env.example

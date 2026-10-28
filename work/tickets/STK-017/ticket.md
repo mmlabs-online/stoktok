@@ -2,11 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P2 |
 | Areas | architecture, security |
-| Attempts | 0 |
+| Attempts | 2 |
 | Created | 2026-10-22 |
+| PR | https://github.com/mmlabs-online/stoktok/pull/13 |
 
 ## Goal
 Every push to `main` is checked and produces Docker images for web and worker on Docker Hub, following the existing mmlabs pattern.
