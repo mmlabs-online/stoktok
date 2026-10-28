@@ -13,8 +13,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  # Repo variable + secrets to set in GitHub settings (see README, "CI and Docker images").
-  DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+  # Same Docker Hub account as the other mmlabs apps (calechip: mingming21400/calechip).
+  # Secrets to set in GitHub settings: see README, "CI and Docker images".
+  DOCKERHUB_NAMESPACE: mingming21400
 
 jobs:
   ci:
@@ -64,8 +65,8 @@ jobs:
           DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
           DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
-          if [ -z "$DOCKERHUB_NAMESPACE" ] || [ -z "$DH_USER" ] || [ -z "$DH_TOKEN" ]; then
-            echo "::error::Set repo variable DOCKERHUB_NAMESPACE and secrets DOCKERHUB_USERNAME, DOCKERHUB_TOKEN"
+          if [ -z "$DH_USER" ] || [ -z "$DH_TOKEN" ]; then
+            echo "::error::Set repo secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN"
             exit 1
           fi
       - name: Compute image name
