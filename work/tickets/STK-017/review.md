@@ -56,3 +56,41 @@ No violations found. R3 holds: no secret ARG/ENV, `.dockerignore` excludes env f
 - Pin the third-party actions (`docker/*`, `pnpm/action-setup`) to commit SHAs and add Dependabot for actions and base images (security-review finding 2; plan follow-up).
 - Ming: confirm whether the `stoktok-*` Docker Hub repos will be private, and whether the token can be scoped to them.
 - STK-018: worker scheduling and Compose; do not use `restart: always`.
+
+## Attempt 2 — 2026-10-28
+Verdict: PASS
+
+R6 waived (suspended). Still no PR or GitHub Actions run, because the loop only opens the PR on DONE. This time I started dockerd and ran the committed workflow steps myself against the local images. The Dockerfiles, app code and `.dockerignore` have not changed since attempt 1 (`git diff 92e0a25 HEAD -- apps .dockerignore` is empty), so the images built in attempt 1 are still valid.
+
+### Checks (run by reviewer)
+- typecheck: green
+- lint: green
+- test: green. core 347 passed / 31 files; db 100 passed + 1 todo / 14 files; worker 65 passed / 8 files; web 176 passed / 20 files
+- check:service-key: OK (0 hits)
+- `ci.yml` parses as YAML (python `yaml.safe_load`)
+- Committed "No secrets in image" step (ci.yml:87-92), copied verbatim and run with `bash -e`: exit 0 for both `stoktok-web` and `stoktok-worker`. Positive control: with the same command, a planted `/root/.env.x` is found.
+- Committed "smoke: worker" step (ci.yml:96-100) run verbatim: printed usage and exit 2 was asserted, so the step exits 0.
+- Committed "smoke: web" step (ci.yml:104-116) run verbatim: it got an HTTP response, and the log shows only the expected DB-unreachable fetch error with no `Cannot find module`. Step exits 0.
+- `id` in both images: `uid=1000(node)`.
+
+### Acceptance criteria
+- [x] Dockerfiles multi-stage, workspace-aware, non-root. Evidence: unchanged from attempt 1 (`apps/*/Dockerfile`, `USER node`); confirmed at runtime with `id`.
+- [x] CI runs typecheck/lint/test on PRs and main. Evidence: `ci.yml:3-6,41-46`. The attempt-1 blocker is fixed (`ci.yml:91`, `--user 0 … ; true`) and the image job steps now exit 0 locally.
+- [x] Images pushed on main with SHA + `latest`. Evidence: `ci.yml:58,80-82,117-127`. Login now sits directly before push (Issue 2 fixed). `cancel-in-progress` is limited to PRs (`ci.yml:13`, Issue 3 fixed). **Flag for Ming:** the real push can only be observed after `DOCKERHUB_NAMESPACE` / `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` are set and the PR is merged.
+- [x] No secrets in images, Dockerfiles or repo. Evidence: unchanged from attempt 1, plus the scan step now works (run above).
+- [x] Both images build and start locally with a documented command. Evidence: README section; docker run of both smoke steps above. **Flag for Ming:** there is no PR CI run yet, so the hosted-runner image build is unverified until the PR opens.
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found. R7: the attempt-2 diff touches only `ci.yml` (plus ticket bookkeeping), and covers exactly the three review issues.
+
+### Nits (do not block)
+- The worker usage string says `cli.ts` (pre-existing).
+- Optional `.dockerignore` additions: `**/*.pem`, `**/*.key`, `**/.npmrc`.
+
+### Follow-ups (out of scope)
+- Move the Docker Hub secrets into a GitHub Environment limited to `main` (security-review finding 1).
+- Pin third-party actions to commit SHAs and add Dependabot (security-review finding 2).
+- STK-018: worker scheduling and Compose; do not use `restart: always` for the one-shot worker.

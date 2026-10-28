@@ -77,3 +77,66 @@ None.
 1. Will the `stoktok-web` and `stoktok-worker` Docker Hub repos be private? I recommend private.
 2. Is it OK to use a GitHub Environment (`dockerhub`, `main` only) for the secrets? This needs repo-settings access, which only Ming has.
 3. Can the Docker Hub token be repo-scoped to the stoktok repos (a Docker Hub org access token or a repo-limited PAT), rather than a broad account token shared with the other mmlabs apps?
+
+---
+
+# Security review: STK-017, attempt 2
+
+**Verdict: no 🔴 blocking findings.** The edit is limited to `/home/user/stoktok/.github/workflows/ci.yml` and adds no new vulnerability. Of the attempt-1 items, one is resolved (🟡3), one note is resolved (concurrency), and two are still open (🟡1 and 🟡2). The plan treated both open items as optional or follow-ups. I did not flag R6.
+
+I read the attempt-1 `security-review.md` and the whole current `ci.yml`. I had no shell, so I reviewed the file contents rather than a git diff.
+
+## Findings
+
+### 🔴 Blocking
+None.
+
+### 🟡 Should-fix (carried over from attempt 1, still open)
+1. **Docker Hub secrets are repo-level, so a same-repo PR branch can still read them by editing the workflow.** `ci.yml:58,62-65,118-122,124`
+   - The `PUSH` condition is still correct, but GitHub does not enforce it. A `ticket/STK-xxx` branch can rewrite the `if:` and read the token on its `pull_request` run.
+   - Fix: create a GitHub Environment `dockerhub` that allows only `main`, and add a separate `push` job with `environment: dockerhub`.
+   - This needs Ming's repo settings, so a follow-up is acceptable.
+2. **Actions that handle the token are still pinned to moving tags.** `ci.yml:36` (`pnpm/action-setup@v4`), `:73` (`setup-buildx-action@v3`), `:74` (`build-push-action@v6`), `:119` (`login-action@v3`)
+   - Exposure is lower now: build and buildx run before login, so only `login-action` and its post-step see the token.
+   - `login-action@v3` itself is still a tag.
+   - Fix: pin it, and ideally the other three, to commit SHAs, and add Dependabot for `github-actions`.
+
+### ✅ Resolved since attempt 1
+- **🟡3, login before build/smoke:** resolved. Login is now at `ci.yml:117-122`, directly before Push at `:123-127`, and is gated by `PUSH`.
+  - No third-party action or `docker run` happens while `~/.docker/config.json` holds the token.
+  - `login-action` logs out in its post-step by default.
+- **Concurrency note:** resolved. `ci.yml:13` sets `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`.
+  - On `main`, a run already in progress is no longer cancelled between the SHA push and the `latest` push.
+  - A newer pending run replaces an older pending one, which is correct because the newest SHA ends up as `latest`.
+
+### 💭 Notes on the new secret-scan line (`ci.yml:91`)
+- **Running as root (`--user 0 --entrypoint sh`) is fine.** It is a throwaway `--rm` container from an image this job just built. The entrypoint is overridden, so no app code runs and no secrets are passed in. Root does make the scan more complete: `find` can now read directories the `node` user couldn't.
+- **`; true` fails closed in the realistic cases.**
+  - The Actions shell runs with `bash -e`, so if `docker run` itself fails (missing image, no `sh`, exit 125/126/127), the `found=$(...)` assignment fails and the step fails.
+  - `; true` only masks a non-zero exit from `find`, such as permission errors on special files. Any paths found are still printed and still caught.
+- **One theoretical fail-open case (low risk).** If `find` were missing from the image, the "not found" message would go to `/dev/null`, `true` would return 0, and `found` would be empty, so the check would pass silently.
+  - `findutils` is Essential in `node:22-bookworm-slim`, so this can't happen with today's base image.
+  - Optional fix: put `command -v find >/dev/null || exit 3;` before `find` so it fails loudly if a base change drops it.
+- **Scope is unchanged.** The scan still matches `.env*` file names only, not file contents or `*.pem`/`*.key`. That is acceptable given the multi-stage, no-`ARG` design.
+  - One possible false positive: an npm package in the worker's prod `node_modules` that ships its own `.env*` file would fail CI. That would be a loud reliability problem, not a security one.
+- **No other new issues.**
+  - No new `${{ }}` interpolation of PR-controlled data inside `run:` (`matrix.app` and `github.sha` only).
+  - Permissions are still `contents: read`, and there is still no `pull_request_target`.
+  - The fail-fast step (`:61-70`) still passes secrets via step `env` and never echoes them.
+
+## Recommendations
+- **AC4 / R3:** move the Docker Hub secrets into an Environment scoped to `main`, with a separate push job (🟡1). Under R7 this can be a follow-up ticket, since it needs Ming's repo-settings access.
+- **AC4:** SHA-pin `docker/login-action` at minimum, and add Dependabot for `github-actions` (🟡2). This can go in this diff or a follow-up.
+- **Optional:** add the `command -v find` guard at `ci.yml:91`.
+- **Optional:** add `**/*.pem`, `**/*.key` and `**/.npmrc` to `/home/user/stoktok/.dockerignore`. This is carried over from attempt 1.
+- **Verification:** no further change is needed for the attempt-2 scope. It is safe to pass from a security standpoint.
+
+## Risks
+- Until 🟡1 is done, any same-repo branch run, including the agent loop's own PR runs, can read the Docker Hub token by editing `ci.yml`.
+- Until 🟡2 is done, the token's safety depends on upstream tag hygiene for `docker/login-action`.
+- If the Docker Hub repos are public, the compiled server code and dependency versions are public too, even though the images contain no secrets.
+
+## Open questions (for Ming, unchanged)
+1. Will the `stoktok-web` and `stoktok-worker` Docker Hub repos be private? I recommend private.
+2. Is a GitHub Environment `dockerhub` that allows only `main` acceptable?
+3. Can the Docker Hub token be scoped to the stoktok repos only?
