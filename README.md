@@ -18,11 +18,12 @@ Each ticket runs on branch `ticket/STK-xxx`. Review the result and merge into `m
 ## CI and Docker images
 GitHub Actions (`.github/workflows/ci.yml`, hosted runners) runs typecheck, lint, test, `check:service-key` and `db:check` on PRs and on `main`. Both images are then built and smoke-tested; on `main` only, they are pushed to Docker Hub.
 
-Set in the repo settings (names are declared once at the top of `ci.yml`):
-- variable `DOCKERHUB_NAMESPACE`
-- secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (an access token, not the password)
+Set in the repo settings (same secret names as the other mmlabs apps):
+- secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (an access token with read/write, not the password)
 
-Images: `<namespace>/stoktok-web` and `<namespace>/stoktok-worker`, tagged with the full commit SHA and `latest`. Roll back by deploying an older SHA tag.
+The Docker Hub namespace `mingming21400` is declared once at the top of `ci.yml`.
+
+Images: `mingming21400/stoktok-web` and `mingming21400/stoktok-worker`, tagged with the full commit SHA and `latest`. Roll back by deploying an older SHA tag.
 
 Build and run locally (env is runtime-only, never baked into images):
 ```
