@@ -21,7 +21,7 @@ GitHub Actions (`.github/workflows/ci.yml`, hosted runners) runs typecheck, lint
 Set in the repo settings (same secret names as the other mmlabs apps):
 - secrets `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (an access token with read/write, not the password)
 
-The Docker Hub namespace `mingming21400` is declared once at the top of `ci.yml`.
+The Docker Hub namespace `mingming21400` is declared once at the top of `ci.yml`. Until both secrets are set, `main` still builds and smoke-tests the images but skips the push with a warning.
 
 Images: `mingming21400/stoktok-web` and `mingming21400/stoktok-worker`, tagged with the full commit SHA and `latest`. Roll back by deploying an older SHA tag.
 

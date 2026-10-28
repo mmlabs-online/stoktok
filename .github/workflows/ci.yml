@@ -59,15 +59,17 @@ jobs:
       PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
       - uses: actions/checkout@v4
-      - name: Fail fast if Docker Hub config is missing
+      # Until the Docker Hub secrets are set, main still builds and smoke-tests
+      # the images but skips the push with a warning instead of turning red.
+      - name: Check Docker Hub secrets
         if: env.PUSH == 'true'
         env:
           DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
           DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           if [ -z "$DH_USER" ] || [ -z "$DH_TOKEN" ]; then
-            echo "::error::Set repo secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN"
-            exit 1
+            echo "::warning::DOCKERHUB_USERNAME / DOCKERHUB_TOKEN not set; images are built and tested but not pushed"
+            echo "SKIP_PUSH=true" >> "$GITHUB_ENV"
           fi
       - name: Compute image name
         run: echo "IMAGE=${DOCKERHUB_NAMESPACE:-local}/stoktok-${{ matrix.app }}" >> "$GITHUB_ENV"
@@ -116,13 +118,13 @@ jobs:
             echo "::error::web smoke failed (http $code)"; exit 1
           fi
       - name: Docker Hub login
-        if: env.PUSH == 'true'
+        if: env.PUSH == 'true' && env.SKIP_PUSH != 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Push images
-        if: env.PUSH == 'true'
+        if: env.PUSH == 'true' && env.SKIP_PUSH != 'true'
         run: |
           docker push "$IMAGE:${{ github.sha }}"
           docker push "$IMAGE:latest"
