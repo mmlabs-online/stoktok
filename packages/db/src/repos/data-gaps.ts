@@ -37,8 +37,9 @@ export async function insertGaps(db: Db, rows: readonly DataGapInsert[]): Promis
   if (res.error) unwrap(res, { table: 'data_gaps', op: 'insert' });
 }
 
+/** Only unresolved rows: a rerun never overwrites an earlier resolved_at. */
 export async function resolveGaps(db: Db, ids: readonly number[], resolvedAt: string): Promise<void> {
   if (ids.length === 0) return;
-  const res = await db.from('data_gaps').update({ resolved_at: resolvedAt }).in('id', [...ids]);
+  const res = await db.from('data_gaps').update({ resolved_at: resolvedAt }).in('id', [...ids]).is('resolved_at', null);
   if (res.error) unwrap(res, { table: 'data_gaps', op: 'resolve' });
 }

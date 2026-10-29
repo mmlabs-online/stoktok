@@ -1,5 +1,5 @@
 /** Freshness and gap checks shared by all medium-term rules, defined once (R4). Pure: no clock, no I/O. */
-import { isTradingDay, subtractTradingDays, vnDateOf } from '../calendar';
+import { isTradingDay, subtractTradingDays, vnDateOf, vnDayBoundsUtc } from '../calendar';
 import { addQuarters, comparePeriods, latestExpectedPeriod, quarterBounds } from '../market/quarters';
 import type { StoredClose } from '../market/price-board';
 import { PPM, mulDiv, roundDiv } from '../money';
@@ -19,7 +19,7 @@ export function resolveSignalDate(expectedDate: string, latestTradeDates: readon
 
 /** First and last instant of the VN calendar days fromDate..toDate, as epoch ms. */
 export function vnDayBounds(fromDate: string, toDate: string): { from: number; to: number } {
-  return { from: Date.parse(`${fromDate}T00:00:00+07:00`), to: Date.parse(`${toDate}T23:59:59+07:00`) };
+  return { from: Date.parse(vnDayBoundsUtc(fromDate).fromTs), to: Date.parse(vnDayBoundsUtc(toDate).toTs) };
 }
 
 export function gapOverlaps(gap: { fromTs: string; toTs: string }, bounds: { from: number; to: number }): boolean {

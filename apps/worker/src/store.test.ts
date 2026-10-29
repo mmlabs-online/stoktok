@@ -3,7 +3,9 @@ import type { Db } from '@stoktok/db';
 
 vi.mock('@stoktok/db', () => ({
   getEntrySettings: vi.fn(),
+  getFirstPriceDates: vi.fn(async () => ({})),
   getLatestCloses: vi.fn(),
+  listPriceDates: vi.fn(async () => []),
   getRecentCloses: vi.fn(async () => ({})),
   getSignalRules: vi.fn(),
   listOpenMarketGaps: vi.fn(async () => []),
@@ -30,6 +32,20 @@ describe('createDbEodStore', () => {
   test('listWatchlistSymbols reads listWatchlist', async () => {
     const store = createDbEodStore({} as Db, { upsertChunkSize: 500 });
     expect(await store.listWatchlistSymbols()).toEqual(['VNM', 'FPT']);
+  });
+  test('wires the gap reads and writes with prices_daily', async () => {
+    const db = {} as Db;
+    const store = createDbEodStore(db, { upsertChunkSize: 500 });
+    await store.listOpenGaps(['VNM']);
+    expect(dbMock.listOpenGaps).toHaveBeenCalledWith(db, 'prices_daily', ['VNM']);
+    await store.insertGaps([]);
+    expect(dbMock.insertGaps).toHaveBeenCalledWith(db, []);
+    await store.resolveGaps([1], 'T');
+    expect(dbMock.resolveGaps).toHaveBeenCalledWith(db, [1], 'T');
+    await store.listPriceDates('VNM', 'a', 'b');
+    expect(dbMock.listPriceDates).toHaveBeenCalledWith(db, 'VNM', 'a', 'b');
+    await store.getFirstPriceDates(['VNM']);
+    expect(dbMock.getFirstPriceDates).toHaveBeenCalledWith(db, ['VNM']);
   });
 });
 

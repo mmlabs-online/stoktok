@@ -43,6 +43,7 @@ describe('data-gaps repo', () => {
     await resolveGaps(f.db, [1, 2], '2026-10-26T00:00:00.000Z');
     expect(f.methods('update')[0]?.args[0]).toEqual({ resolved_at: '2026-10-26T00:00:00.000Z' });
     expect(f.methods('in')[0]?.args).toEqual(['id', [1, 2]]);
+    expect(f.methods('is')[0]?.args).toEqual(['resolved_at', null]);
     const g = createFake();
     await resolveGaps(g.db, [], 'x');
     expect(g.calls).toHaveLength(0);

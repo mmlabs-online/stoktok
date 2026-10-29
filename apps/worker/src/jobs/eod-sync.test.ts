@@ -1,6 +1,6 @@
-import { DEFAULT_PRICE_CUTOFF_MINUTES_VN, expectedPriceDate, subtractTradingDays } from '@stoktok/core';
+import { DEFAULT_PRICE_CUTOFF_MINUTES_VN, expectedPriceDate, subtractTradingDays, vnDayBoundsUtc } from '@stoktok/core';
 import type { DailyBar, Result } from '@stoktok/core';
-import type { PriceDailyInsert } from '@stoktok/db';
+import type { DataGapInsert, OpenGapRecord, PriceDailyInsert } from '@stoktok/db';
 import { describe, expect, test } from 'vitest';
 import { EOD_SYNC_CONFIG } from '../config';
 import { SourceError } from '../sources/price-source';
@@ -11,10 +11,20 @@ import type { EodStore } from './eod-sync';
 const AFTER_CUTOFF = new Date('2026-10-23T12:00:00Z'); // Fri 19:00 VN
 const BEFORE_CUTOFF = new Date('2026-10-23T08:00:00Z'); // Fri 15:00 VN
 
-function memoryStore(opts: { watchlist?: string[]; held?: Result<string[]>; holidays?: string[]; closes?: Record<string, number> } = {}) {
+type GapState = OpenGapRecord & { row?: DataGapInsert; resolvedAt?: string };
+
+function memoryStore(
+  opts: { watchlist?: string[]; held?: Result<string[]>; holidays?: string[]; closes?: Record<string, number>; prior?: Record<string, string[]>; gaps?: GapState[] } = {},
+) {
   const table = new Map<string, PriceDailyInsert>();
+  for (const [symbol, dates] of Object.entries(opts.prior ?? {})) {
+    for (const d of dates) table.set(`${symbol}|${d}`, { symbol, trade_date: d } as PriceDailyInsert);
+  }
+  const gaps: GapState[] = [...(opts.gaps ?? [])];
+  const order: string[] = [];
   let upsertCalls = 0;
   const closesAsked: string[][] = [];
+  const datesOf = (symbol: string) => [...table.values()].filter((r) => r.symbol === symbol).map((r) => r.trade_date).sort();
   const store: EodStore = {
     getHolidays: async () => opts.holidays ?? [],
     listWatchlistSymbols: async () => [...(opts.watchlist ?? [])],
@@ -24,12 +34,24 @@ function memoryStore(opts: { watchlist?: string[]; held?: Result<string[]>; holi
       return opts.closes ?? {};
     },
     upsertPricesDaily: async (rows) => {
+      order.push('upsert');
       upsertCalls += 1;
       for (const r of rows) table.set(`${r.symbol}|${r.trade_date}`, r);
       return rows.length;
     },
+    listPriceDates: async (symbol, from, to) => datesOf(symbol).filter((d) => d >= from && d <= to),
+    getFirstPriceDates: async (symbols) => Object.fromEntries(symbols.flatMap((s) => (datesOf(s)[0] ? [[s, datesOf(s)[0] as string]] : []))),
+    listOpenGaps: async (symbols) => gaps.filter((g) => g.resolvedAt === undefined && g.symbol !== null && symbols.includes(g.symbol)),
+    insertGaps: async (rows) => {
+      order.push('insertGaps');
+      for (const row of rows) gaps.push({ id: gaps.length + 1, symbol: row.symbol, fromTs: row.from_ts, toTs: row.to_ts, row });
+    },
+    resolveGaps: async (ids, resolvedAt) => {
+      order.push('resolveGaps');
+      for (const g of gaps) if (ids.includes(g.id) && g.resolvedAt === undefined) g.resolvedAt = resolvedAt;
+    },
   };
-  return { store, table, closesAsked, upserts: () => upsertCalls };
+  return { store, table, gaps, order, closesAsked, upserts: () => upsertCalls };
 }
 
 const bar = (symbol: string, tradeDate: string, close = 10000): DailyBar => ({
@@ -169,5 +191,83 @@ describe('runEodSync', () => {
     const { d, sleeps } = deps({ store: m.store, source });
     await runEodSync(d);
     expect(sleeps).toEqual([EOD_SYNC_CONFIG.requestDelayMs, EOD_SYNC_CONFIG.requestDelayMs]);
+  });
+
+  describe('gap detection', () => {
+    // Window with lookback 20 is long; use a short one so tests stay readable. Fri 2026-10-23 is the target.
+    const config = { ...EOD_SYNC_CONFIG, lookbackTradingDays: 5 }; // window 2026-10-19 (Mon) .. 2026-10-23
+    const only = (symbol: string, dates: string[]) => (s: string) => ({ bars: dates.filter(() => s === symbol).map((d) => bar(s, d)), rejected: [] });
+
+    test('records a prices_daily gap per missing trading day after the upsert', async () => {
+      const m = memoryStore({ watchlist: ['VNM'], prior: { VNM: ['2026-10-19'] } });
+      const { source } = fakeSource('fake-src', only('VNM', ['2026-10-23']));
+      const out = await runEodSync(deps({ store: m.store, source, config }).d);
+      expect(out.missingDates).toEqual({ VNM: ['2026-10-20', '2026-10-21', '2026-10-22'] });
+      expect(out).toMatchObject({ gapsRecorded: 3, gapsResolved: 0, ok: true });
+      expect(m.gaps[0]?.row).toEqual({ symbol: 'VNM', data_type: 'prices_daily', from_ts: vnDayBoundsUtc('2026-10-20').fromTs, to_ts: vnDayBoundsUtc('2026-10-20').toTs, source: 'fake-src', fetched_at: AFTER_CUTOFF.toISOString() });
+      expect(m.order).toEqual(['upsert', 'insertGaps', 'resolveGaps']);
+    });
+
+    test('configured holiday inside the window is not a gap', async () => {
+      const m = memoryStore({ watchlist: ['VNM'], prior: { VNM: ['2026-10-19'] }, holidays: ['2026-10-21'] });
+      const { source } = fakeSource('s', only('VNM', ['2026-10-23']));
+      const out = await runEodSync(deps({ store: m.store, source, config }).d);
+      expect(out.missingDates.VNM).toEqual(['2026-10-20', '2026-10-22']);
+    });
+
+    test('re-run inserts no new gaps', async () => {
+      const m = memoryStore({ watchlist: ['VNM'], prior: { VNM: ['2026-10-19'] } });
+      const { source } = fakeSource('s', only('VNM', ['2026-10-23']));
+      await runEodSync(deps({ store: m.store, source, config }).d);
+      const out = await runEodSync(deps({ store: m.store, source, config }).d);
+      expect(m.gaps).toHaveLength(3);
+      expect(out).toMatchObject({ gapsRecorded: 0, gapsResolved: 0, missingDates: {} });
+    });
+
+    test('existing open gap with +00:00 timestamps is not duplicated', async () => {
+      const b = vnDayBoundsUtc('2026-10-20');
+      const gaps = [{ id: 50, symbol: 'VNM', fromTs: b.fromTs.replace('Z', '+00:00'), toTs: b.toTs.replace('Z', '+00:00') }];
+      const m = memoryStore({ watchlist: ['VNM'], prior: { VNM: ['2026-10-19', '2026-10-21', '2026-10-22'] }, gaps });
+      const { source } = fakeSource('s', only('VNM', ['2026-10-23']));
+      const out = await runEodSync(deps({ store: m.store, source, config }).d);
+      expect(out.gapsRecorded).toBe(0);
+      expect(m.gaps).toHaveLength(1);
+    });
+
+    test('resolves a gap when the bar arrives; the gap row is kept with resolved_at = fetchedAt', async () => {
+      const b = vnDayBoundsUtc('2026-10-22');
+      const m = memoryStore({ watchlist: ['VNM'], prior: { VNM: ['2026-10-19', '2026-10-20', '2026-10-21', '2026-10-23'] }, gaps: [{ id: 7, symbol: 'VNM', ...b }] });
+      const { source } = fakeSource('s', only('VNM', ['2026-10-22', '2026-10-23']));
+      const out = await runEodSync(deps({ store: m.store, source, config }).d);
+      expect(out.gapsResolved).toBe(1);
+      expect(m.gaps).toHaveLength(1);
+      expect(m.gaps[0]?.resolvedAt).toBe(AFTER_CUTOFF.toISOString());
+    });
+
+    test('symbol first stored mid-window gets no earlier gaps; symbol with no stored rows gets none', async () => {
+      const m = memoryStore({ watchlist: ['NEW', 'NONE'] });
+      const { source } = fakeSource('s', (sym) => ({ bars: sym === 'NEW' ? [bar('NEW', '2026-10-22'), bar('NEW', '2026-10-23')] : [], rejected: [] }));
+      const out = await runEodSync(deps({ store: m.store, source, config }).d);
+      expect(out.missingDates).toEqual({});
+      expect(m.gaps).toHaveLength(0);
+    });
+
+    test('failed symbol with history still gets a gap for the target date; ok driven by existing conditions', async () => {
+      const m = memoryStore({ watchlist: ['VNM'], prior: { VNM: ['2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22'] } });
+      const { source } = fakeSource('s', () => new SourceError('down', true));
+      const out = await runEodSync(deps({ store: m.store, source, config }).d);
+      expect(out.missingDates).toEqual({ VNM: ['2026-10-23'] });
+      expect(out.failedSymbols).toEqual(['VNM']);
+      expect(out.ok).toBe(false);
+    });
+
+    test('dryRun: no insertGaps or resolveGaps call; missingDates still reported', async () => {
+      const m = memoryStore({ watchlist: ['VNM'], prior: { VNM: ['2026-10-19'] } });
+      const { source } = fakeSource('s', only('VNM', ['2026-10-23']));
+      const out = await runEodSync(deps({ store: m.store, source, config, dryRun: true }).d);
+      expect(m.order).toEqual([]);
+      expect(out.missingDates.VNM).toEqual(['2026-10-20', '2026-10-21', '2026-10-22']);
+      expect(out).toMatchObject({ gapsRecorded: 0, gapsResolved: 0 });
+    });
   });
 });
