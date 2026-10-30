@@ -30,4 +30,10 @@ docs/spec-v1.md §7 Deployment, §4.1 Services. CLAUDE.md Stack (CI/CD, Runtime)
 - 2026-10-30: first version is **v0.1.0**.
 - Context found in the deployment repo: cloudflared is remotely managed by a tunnel token, so hostnames and Access are set in the Cloudflare dashboard; `deploy/cloudflared-ingress.example.yml` does not apply.
 - Out of scope, flagged to Ming: the deployment repo commits the tunnel token in `proxy/compose.yml` and commits `apps/calechip/.env`.
+- **Answers to the architect consult's open questions (Ming, 2026-10-30):**
+  1. Access to v0.1.0: **public behind Cloudflare Access** (Ming's email). No auth code in the app (R6 still suspended); Ming sets up the Access application before the hostname is added. A hard-coded admin/admin login was proposed by Ming and declined as insecure; Ming chose Access instead.
+  2. Docker engine on the Mac: **OrbStack**.
+  3. Mac CPU: **Intel** (amd64, no emulation). Time zone: **UTC+7** (Asia/Ho_Chi_Minh).
+  4. Secrets file: a file on the Mac with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, outside git, mode 600, created by Ming (path per plan default).
+  5. CI image push: **keep it**. Ming: images must be built and pushed so the deployment repo can deploy them. Do not drop CI's push.
 - Depends on: STK-017, STK-018.
