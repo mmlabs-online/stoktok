@@ -2,6 +2,7 @@
 import { subtractTradingDays } from '../calendar';
 import type { StoredClose } from '../market/price-board';
 import { addQuarters } from '../market/quarters';
+import { DEFAULT_MARKET_RULES } from '../settings/market-rules';
 import { DEFAULT_SIGNAL_RULES } from './config';
 import type { EpsBasis, RuleContext, StoredFinancials, SymbolData } from './types';
 
@@ -46,6 +47,7 @@ export function ctx(over: Partial<RuleContext> = {}): RuleContext {
     priceGaps: [],
     financialsGaps: [],
     epsBasisBySource: { 'fake-fin': 'quarterly' as EpsBasis },
+    priceLimitPpm: DEFAULT_MARKET_RULES.priceLimitPpm,
     ...over,
   };
 }
@@ -56,5 +58,7 @@ export function symbolData(symbol: string, o: { close?: number; eps?: number; bv
     closes: closes(symbol, SIGNAL_DATE, 3, () => o.close ?? 15_000),
     financials: quarters(symbol, LATEST_PERIOD, o.nq ?? 4, () => ({ eps: o.eps ?? 1000, bvps: o.bvps ?? 10_000 })),
     sector: o.sector === null ? { sector: null, source: null, fetchedAt: null } : { sector: o.sector ?? 'Banks', source: 'fake-fin', fetchedAt: FETCHED },
+    exchange: 'HOSE',
+    corporateActions: [],
   };
 }

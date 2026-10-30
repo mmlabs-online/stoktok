@@ -10,6 +10,8 @@ function data(ni: number[], revenue = 1_000_000_000): SymbolData {
     closes: closes('A', SIGNAL_DATE, 1),
     financials: quarters('A', LATEST_PERIOD, ni.length, (i) => ({ netIncome: ni[i] as number, revenue })),
     sector: { sector: null, source: null, fetchedAt: null },
+    exchange: 'HOSE',
+    corporateActions: [],
   };
 }
 const M = 100_000_000;

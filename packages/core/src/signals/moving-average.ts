@@ -1,6 +1,7 @@
 /** Distance of the latest close from its N-day simple moving average. Pure. */
 import { PPM, mulDiv, roundDiv } from '../money';
 import { checkLatestPrice, checkPriceWindow, finalizeResult, gapSnapshotRef, priceRef } from './inputs';
+import { checkRawPriceWindow } from './raw-price-guard';
 import { maRuleId } from './types';
 import type { ReasonCode, RuleContext, SignalLabel, SignalResult, SymbolData } from './types';
 
@@ -16,10 +17,22 @@ export function priceVsMa(symbol: string, data: SymbolData, days: number, ctx: R
     gaps: ctx.priceGaps,
   });
   const reasons: ReasonCode[] = [...latest.reasons, ...win.reasons];
+  const bars = win.window;
+  let guard: ReturnType<typeof checkRawPriceWindow> | null = null;
+  if (bars.length > 0) {
+    guard = checkRawPriceWindow({
+      symbol,
+      window: bars,
+      exchange: data.exchange,
+      priceLimitPpm: ctx.priceLimitPpm,
+      actions: data.corporateActions,
+      holidays: ctx.holidays,
+    });
+    reasons.push(...guard.reasons);
+  }
   let label: SignalLabel | null = null;
   let value: number | null = null;
   let ma: number | null = null;
-  const bars = win.window;
 
   if (reasons.length === 0) {
     const close = (bars[bars.length - 1] as { close: number }).close;
@@ -38,7 +51,7 @@ export function priceVsMa(symbol: string, data: SymbolData, days: number, ctx: R
     label,
     value,
     inputs: {
-      refs: [...(latest.latest ? [priceRef(latest.latest)] : []), ...win.gaps.map(gapSnapshotRef)],
+      refs: [...(latest.latest ? [priceRef(latest.latest)] : []), ...win.gaps.map(gapSnapshotRef), ...(guard?.actionRefs ?? [])],
       params: { days, neutralBandPpm: params.neutralBandPpm },
       window: {
         table: 'prices_daily',
@@ -51,6 +64,7 @@ export function priceVsMa(symbol: string, data: SymbolData, days: number, ctx: R
         minFetchedAt: fetched[0] ?? null,
         maxFetchedAt: fetched[fetched.length - 1] ?? null,
       },
+      guard: guard === null ? null : { exchange: guard.exchange, exchangeUnknown: guard.exchangeUnknown, limitPpmUsed: guard.limitPpmUsed, jumps: guard.jumps },
       ma,
       missingDates: win.missingDates,
     },

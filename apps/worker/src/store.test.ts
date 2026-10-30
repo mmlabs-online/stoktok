@@ -5,6 +5,9 @@ vi.mock('@stoktok/db', () => ({
   getEntrySettings: vi.fn(),
   getFirstPriceDates: vi.fn(async () => ({})),
   getLatestCloses: vi.fn(),
+  getMarketRules: vi.fn(async () => ({})),
+  getSymbolExchanges: vi.fn(async () => ({})),
+  listCorporateActions: vi.fn(async () => []),
   listPriceDates: vi.fn(async () => []),
   getRecentCloses: vi.fn(async () => ({})),
   getSignalRules: vi.fn(),
@@ -79,6 +82,18 @@ describe('createDbSignalsStore', () => {
     const out = await store.listFinancials(['A', 'B', 'C', 'D', 'E'], '2025Q1');
     expect(vi.mocked(dbMock.listFinancials).mock.calls.map((c) => c[1])).toEqual([['A', 'B'], ['C', 'D'], ['E']]);
     expect(out.map((r) => r.symbol)).toEqual(['A', 'B', 'C', 'D', 'E']);
+  });
+  test('listCorporateActions is chunked; market rules and exchanges are wired', async () => {
+    const db = {} as Db;
+    vi.mocked(dbMock.listCorporateActions).mockImplementation(async (_db, o) => (o?.symbols ?? []).map((symbol) => ({ symbol })) as never);
+    const store = createDbSignalsStore(db, { upsertChunkSize: 3, financialsSymbolChunk: 2 });
+    const out = await store.listCorporateActions(['A', 'B', 'C']);
+    expect(vi.mocked(dbMock.listCorporateActions).mock.calls.map((c) => c[1])).toEqual([{ symbols: ['A', 'B'] }, { symbols: ['C'] }]);
+    expect(out).toHaveLength(3);
+    await store.getMarketRules();
+    expect(dbMock.getMarketRules).toHaveBeenCalledWith(db);
+    await store.getSymbolExchanges(['A']);
+    expect(dbMock.getSymbolExchanges).toHaveBeenCalledWith(db, ['A']);
   });
   test('wires the other reads and the upsert chunk size', async () => {
     const db = {} as Db;

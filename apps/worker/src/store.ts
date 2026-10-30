@@ -2,9 +2,12 @@ import {
   getEntrySettings,
   getFirstPriceDates,
   getLatestCloses,
+  getMarketRules,
   getRecentCloses,
   getSignalRules,
+  getSymbolExchanges,
   insertGaps,
+  listCorporateActions,
   listFinancials,
   listHeldSymbols,
   listOpenGaps,
@@ -74,6 +77,15 @@ export function createDbSignalsStore(db: Db, opts: { upsertChunkSize: number; fi
       return out;
     },
     listSymbolSectors: (symbols) => listSymbolSectors(db, symbols),
+    getMarketRules: () => getMarketRules(db),
+    getSymbolExchanges: (symbols) => getSymbolExchanges(db, symbols),
+    listCorporateActions: async (symbols) => {
+      const out = [];
+      for (let i = 0; i < symbols.length; i += opts.financialsSymbolChunk) {
+        out.push(...(await listCorporateActions(db, { symbols: symbols.slice(i, i + opts.financialsSymbolChunk) })));
+      }
+      return out;
+    },
     listOpenGaps: (dataType, symbols) => listOpenGaps(db, dataType, symbols),
     listOpenMarketGaps: (dataType) => listOpenMarketGaps(db, dataType),
     upsertSignals: (rows) => upsertSignals(db, rows, { chunkSize: opts.upsertChunkSize }),

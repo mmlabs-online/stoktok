@@ -59,7 +59,7 @@ Tuning (lookback, publish lag, delay, caps) is in `src/config.ts`.
 
 ## Medium-term signals (`signals`)
 
-Computes the medium-term rules (P/E and P/B vs sector, earnings growth trend, price vs 50/200-day MA) for watchlist and held symbols from stored data only, and upserts `signals`. All rules, freshness checks and gap checks are in `packages/core`; parameters come from `settings.rule_configs.signals.medium` (defaults apply when unset). Nothing is fetched.
+Computes the medium-term rules (P/E and P/B vs sector, earnings growth trend, price vs 50/200-day MA) for watchlist and held symbols from stored data only, and upserts `signals`. All rules, freshness checks and gap checks are in `packages/core`; parameters come from `settings.rule_configs.signals.medium` (defaults apply when unset). The MA rules are suppressed (`corporate_action_in_window`, `price_jump_beyond_limit`) when a stock dividend falls inside the window or a close moves beyond the exchange's daily limit, because the stored closes are not adjusted. Nothing is fetched.
 
 ```
 pnpm worker:signals              # compute and write

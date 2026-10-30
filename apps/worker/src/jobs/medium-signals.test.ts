@@ -1,5 +1,5 @@
-import { DEFAULT_SIGNAL_RULES, addQuarters, subtractTradingDays } from '@stoktok/core';
-import type { Result, SectorInfo, SignalRules, StoredClose } from '@stoktok/core';
+import { DEFAULT_MARKET_RULES, DEFAULT_SIGNAL_RULES, addQuarters, subtractTradingDays } from '@stoktok/core';
+import type { CorporateAction, Exchange, Result, SectorInfo, SignalRules, StoredClose } from '@stoktok/core';
 import type { FinancialRecord, OpenGapRecord, SignalInsert } from '@stoktok/db';
 import { describe, expect, test } from 'vitest';
 import { runMediumSignals } from './medium-signals';
@@ -26,7 +26,7 @@ function financialsFor(symbol: string): FinancialRecord[] {
   return out;
 }
 
-function memoryStore(opts: { watchlist?: string[]; held?: Result<string[]>; rules?: SignalRules; closeDays?: number; closesEnd?: string; gaps?: OpenGapRecord[] } = {}) {
+function memoryStore(opts: { watchlist?: string[]; held?: Result<string[]>; rules?: SignalRules; closeDays?: number; closesEnd?: string; gaps?: OpenGapRecord[]; actions?: CorporateAction[]; exchanges?: Record<string, Exchange | null>; actionsError?: Error } = {}) {
   const symbols = opts.watchlist ?? SYMBOLS;
   const table = new Map<string, SignalInsert>();
   const calls = { upsert: 0, gapQueries: [] as string[], marketGapQueries: [] as string[] };
@@ -47,6 +47,12 @@ function memoryStore(opts: { watchlist?: string[]; held?: Result<string[]>; rule
     listOpenMarketGaps: async (type) => {
       calls.marketGapQueries.push(type);
       return (opts.gaps ?? []).filter((g) => g.symbol === null);
+    },
+    getMarketRules: async () => DEFAULT_MARKET_RULES,
+    getSymbolExchanges: async () => opts.exchanges ?? {},
+    listCorporateActions: async () => {
+      if (opts.actionsError) throw opts.actionsError;
+      return opts.actions ?? [];
     },
     upsertSignals: async (rows) => {
       calls.upsert += 1;
@@ -135,5 +141,27 @@ describe('runMediumSignals', () => {
     expect(m.calls.upsert).toBe(0);
     expect(s).toMatchObject({ dryRun: true, rowsUpserted: 0, results: 30 });
     expect(s.suppressedByReason).toEqual({ insufficient_history: 12 });
+  });
+
+  describe('raw-price guard', () => {
+    const stock: CorporateAction = { type: 'stock_dividend', id: 'sd1', symbol: 'AAA', exDate: subtractTradingDays(FRIDAY, 5, []), ratio: { held: 100, received: 20 } };
+    test('stock dividend within the MA50 window -> row suppressed with reason, data_fresh true', async () => {
+      const m = memoryStore({ watchlist: ['AAA'], closeDays: 60, actions: [stock] });
+      const s = await run(m.store);
+      const row = m.table.get(`AAA|price_vs_ma_50|medium|${FRIDAY}`);
+      expect(row).toMatchObject({ status: 'suppressed', reason_codes: ['corporate_action_in_window'], data_fresh: true });
+      expect(s.suppressedByReason.corporate_action_in_window).toBe(1);
+    });
+    test('listCorporateActions rejects -> run rejects, nothing upserted', async () => {
+      const m = memoryStore({ watchlist: ['AAA'], actionsError: new Error('db down') });
+      await expect(run(m.store)).rejects.toThrow('db down');
+      expect(m.calls.upsert).toBe(0);
+    });
+    test('symbol absent from getSymbolExchanges -> guard.exchangeUnknown true', async () => {
+      const m = memoryStore({ watchlist: ['AAA'], closeDays: 60 });
+      await run(m.store);
+      const row = m.table.get(`AAA|price_vs_ma_50|medium|${FRIDAY}`);
+      expect((row?.inputs_snapshot as { guard: { exchangeUnknown: boolean } }).guard.exchangeUnknown).toBe(true);
+    });
   });
 });

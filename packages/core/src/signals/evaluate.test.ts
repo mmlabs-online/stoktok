@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest';
+import { DEFAULT_MARKET_RULES } from '../settings/market-rules';
 import { DEFAULT_SIGNAL_RULES } from './config';
 import { evaluateMediumSignals } from './evaluate';
 import type { EvaluateInput } from './evaluate';
-import { LATEST_PERIOD, SIGNAL_DATE, closes, quarters, symbolData } from './fixtures';
+import { LATEST_PERIOD, SIGNAL_DATE, closes, quarters, symbolData, tradingDates } from './fixtures';
 import { DATA_REASONS } from './types';
 
 function input(over: Partial<EvaluateInput> = {}): EvaluateInput {
@@ -20,6 +21,9 @@ function input(over: Partial<EvaluateInput> = {}): EvaluateInput {
     priceGaps: [],
     financialsGaps: [],
     epsBasisBySource: { 'fake-fin': 'quarterly' },
+    exchanges: {},
+    corporateActions: [],
+    marketRules: { priceLimitPpm: DEFAULT_MARKET_RULES.priceLimitPpm },
     ...over,
   };
 }
@@ -89,5 +93,16 @@ describe('evaluateMediumSignals', () => {
     expect(r).toHaveLength(5);
     expect(r.every((x) => x.status === 'suppressed')).toBe(true);
     expect(r.find((x) => x.ruleId === 'pe_vs_sector')?.reasons).toEqual(['price_missing', 'financials_missing', 'sector_missing']);
+  });
+  test('corporateActions and exchanges are routed per symbol: only the symbol with a stock dividend is suppressed', () => {
+    const full = (s: string) => closes(s, SIGNAL_DATE, 60);
+    const stock = { type: 'stock_dividend' as const, id: 'sd1', symbol: 'A', exDate: tradingDates(SIGNAL_DATE, 10)[0] as string, ratio: { held: 100, received: 20 } };
+    const r = evaluateMediumSignals(
+      input({ closes: { A: full('A'), B: full('B') }, symbols: ['A', 'B'], corporateActions: [stock], exchanges: { A: 'HOSE', B: 'HNX' } }),
+    );
+    const ma = (s: string) => r.find((x) => x.symbol === s && x.ruleId === 'price_vs_ma_50');
+    expect(ma('A')).toMatchObject({ status: 'suppressed', reasons: ['corporate_action_in_window'] });
+    expect(ma('B')).toMatchObject({ status: 'ok' });
+    expect(ma('B')?.inputs.guard).toMatchObject({ exchange: 'HNX', exchangeUnknown: false });
   });
 });
