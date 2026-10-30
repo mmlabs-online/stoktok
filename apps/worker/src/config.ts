@@ -12,6 +12,14 @@ export const EOD_SYNC_CONFIG = {
   /** Stop the run after this many symbols fail in a row (source is down or blocking). */
   maxConsecutiveFailures: 5,
   upsertChunkSize: 500,
+  /** Backfill window when `--backfill` has no value (about 200 bars plus slack). */
+  backfillDefaultTradingDays: 260,
+  /** Upper bound accepted by the CLI for `--backfill <n>`. */
+  backfillMaxTradingDays: 520,
+  /** Trading days per source request in backfill mode (the TCBS range cap is unverified, ADR 0001). */
+  backfillChunkTradingDays: 60,
+  /** A backfill planning more requests than this aborts before any fetch. */
+  maxBackfillRequests: 500,
 };
 export type EodSyncConfig = typeof EOD_SYNC_CONFIG;
 

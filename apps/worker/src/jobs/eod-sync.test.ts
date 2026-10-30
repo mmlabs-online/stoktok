@@ -1,4 +1,4 @@
-import { DEFAULT_PRICE_CUTOFF_MINUTES_VN, expectedPriceDate, subtractTradingDays, vnDayBoundsUtc } from '@stoktok/core';
+import { DEFAULT_PRICE_CUTOFF_MINUTES_VN, expectedPriceDate, planBackfillChunks, subtractTradingDays, vnDayBoundsUtc } from '@stoktok/core';
 import type { DailyBar, Result } from '@stoktok/core';
 import type { DataGapInsert, OpenGapRecord, PriceDailyInsert } from '@stoktok/db';
 import { describe, expect, test } from 'vitest';
@@ -191,6 +191,138 @@ describe('runEodSync', () => {
     const { d, sleeps } = deps({ store: m.store, source });
     await runEodSync(d);
     expect(sleeps).toEqual([EOD_SYNC_CONFIG.requestDelayMs, EOD_SYNC_CONFIG.requestDelayMs]);
+  });
+
+  describe('backfill', () => {
+    const N = 12;
+    const config = { ...EOD_SYNC_CONFIG, backfillChunkTradingDays: 5 }; // 12 days -> chunks of 5, 5, 2
+    const run = (over: Partial<Parameters<typeof runEodSync>[0]> & Pick<Parameters<typeof runEodSync>[0], 'store' | 'source'>) =>
+      deps({ config, backfillTradingDays: N, ...over });
+    const fromOf = subtractTradingDays('2026-10-23', N - 1, []);
+    const chunks = planBackfillChunks(fromOf, '2026-10-23', 5, []);
+
+    test('fromDate = subtractTradingDays(target, n-1) and fetch calls cover exactly the chunk ranges per symbol', async () => {
+      const m = memoryStore({ watchlist: ['AAA', 'BBB'] });
+      const { source, calls } = fakeSource();
+      const out = await runEodSync(run({ store: m.store, source }).d);
+      expect(out.fromDate).toBe(fromOf);
+      expect(chunks).toHaveLength(3);
+      expect(calls.map((c) => [c.symbol, c.from, c.to])).toEqual(
+        ['AAA', 'BBB'].flatMap((s) => chunks.map((c) => [s, c.from, c.to])),
+      );
+    });
+
+    test('rows upserted with source.name and fetchedAt', async () => {
+      const m = memoryStore({ watchlist: ['AAA'] });
+      const { source } = fakeSource('bf-src');
+      await runEodSync(run({ store: m.store, source }).d);
+      expect(m.table.size).toBe(3);
+      for (const r of m.table.values()) {
+        expect(r.source).toBe('bf-src');
+        expect(r.fetched_at).toBe(AFTER_CUTOFF.toISOString());
+      }
+    });
+
+    test('dry-run: no upsert, no insertGaps/resolveGaps, missingDates still reported', async () => {
+      const m = memoryStore({ watchlist: ['AAA'] });
+      const { source } = fakeSource();
+      const out = await runEodSync(run({ store: m.store, source, dryRun: true }).d);
+      expect(m.upserts()).toBe(0);
+      expect(m.order).toEqual([]);
+      expect(out.rowsUpserted).toBe(0);
+      expect(out.gapsRecorded).toBe(0);
+      expect(Object.keys(out.missingDates)).toEqual(['AAA']);
+    });
+
+    test('re-run adds no rows (memory store row count unchanged)', async () => {
+      const m = memoryStore({ watchlist: ['AAA'] });
+      const { source } = fakeSource();
+      await runEodSync(run({ store: m.store, source }).d);
+      const size = m.table.size;
+      await runEodSync(run({ store: m.store, source }).d);
+      expect(m.table.size).toBe(size);
+    });
+
+    test('rejected bar in a middle chunk is not written, the prior stored row is kept, ok=false, rejectedBySymbol lists it', async () => {
+      const mid = chunks[1] as { from: string; to: string };
+      const m = memoryStore({ watchlist: ['AAA'], prior: { AAA: [mid.to] } });
+      let n = 0;
+      const { source } = fakeSource('s', (symbol) => {
+        n += 1;
+        return n === 2
+          ? { bars: [], rejected: [{ tradeDate: mid.to, reason: 'close_jump' }] }
+          : { bars: [bar(symbol, n === 1 ? '2026-10-23' : fromOf)], rejected: [] };
+      });
+      const out = await runEodSync(run({ store: m.store, source }).d);
+      expect(out.ok).toBe(false);
+      expect(out.rejectedBySymbol.AAA).toEqual([{ tradeDate: mid.to, reason: 'close_jump' }]);
+      expect(m.table.get(`AAA|${mid.to}`)?.source).toBeUndefined();
+    });
+
+    test('lastClose: newest chunk gets the stored latest close; older chunks get the oldest accepted close of the chunk after; none accepted -> carried', async () => {
+      const m = memoryStore({ watchlist: ['AAA'], closes: { AAA: 50000 } });
+      let n = 0;
+      const { source, calls } = fakeSource('s', (symbol) => {
+        n += 1;
+        if (n === 1) return { bars: [bar(symbol, '2026-10-23', 40000), bar(symbol, '2026-10-22', 39000)], rejected: [] };
+        return { bars: [], rejected: [] };
+      });
+      await runEodSync(run({ store: m.store, source }).d);
+      expect(calls.map((c) => c.ctx)).toEqual([{ lastClose: 50000 }, { lastClose: 39000 }, { lastClose: 39000 }]);
+    });
+
+    test('requestsPlanned = symbols x chunks, logged before the first fetch', async () => {
+      const m = memoryStore({ watchlist: ['AAA', 'BBB'] });
+      const logs: string[] = [];
+      let logsAtFirstFetch = -1;
+      const { source } = fakeSource('s', (symbol) => {
+        if (logsAtFirstFetch < 0) logsAtFirstFetch = logs.filter((l) => l.startsWith('backfill:')).length;
+        return { bars: [bar(symbol, '2026-10-23')], rejected: [] };
+      });
+      const out = await runEodSync({ ...run({ store: m.store, source }).d, log: (l) => void logs.push(l) });
+      expect(out).toMatchObject({ requestsPlanned: 6, requestsMade: 6 });
+      expect(logsAtFirstFetch).toBe(1);
+    });
+
+    test('planned > maxBackfillRequests: zero fetches, zero writes, ok=false, abortReason', async () => {
+      const m = memoryStore({ watchlist: ['AAA', 'BBB'] });
+      const { source, calls } = fakeSource();
+      const out = await runEodSync(run({ store: m.store, source, config: { ...config, maxBackfillRequests: 5 } }).d);
+      expect(calls).toHaveLength(0);
+      expect(m.order).toEqual([]);
+      expect(out).toMatchObject({ ok: false, abortReason: 'request_cap_exceeded', requestsPlanned: 6, requestsMade: 0 });
+    });
+
+    test('sleep(requestDelayMs) before every request except the first', async () => {
+      const m = memoryStore({ watchlist: ['AAA', 'BBB'] });
+      const { source } = fakeSource();
+      const { d, sleeps } = run({ store: m.store, source });
+      await runEodSync(d);
+      expect(sleeps).toEqual(Array(5).fill(EOD_SYNC_CONFIG.requestDelayMs));
+    });
+
+    test('circuit breaker: failed requests stop the rest; partial symbol failed, untouched skipped; fetched bars still upserted', async () => {
+      const m = memoryStore({ watchlist: ['AAA', 'BBB'] });
+      let n = 0;
+      const { source, calls } = fakeSource('s', (symbol) => {
+        n += 1;
+        return n === 1 ? { bars: [bar(symbol, '2026-10-23')], rejected: [] } : new SourceError('down', true);
+      });
+      const out = await runEodSync(run({ store: m.store, source, config: { ...config, maxConsecutiveFailures: 2 } }).d);
+      expect(calls).toHaveLength(3);
+      expect(out.requestsMade).toBe(3);
+      expect(out.failedSymbols).toEqual(['AAA']);
+      expect(out.skippedSymbols).toEqual(['BBB']);
+      expect([...m.table.keys()]).toEqual(['AAA|2026-10-23']);
+    });
+
+    test('daily mode unchanged: one request per symbol, requestsPlanned = symbols', async () => {
+      const m = memoryStore({ watchlist: ['AAA', 'BBB'] });
+      const { source, calls } = fakeSource();
+      const out = await runEodSync(deps({ store: m.store, source }).d);
+      expect(calls).toHaveLength(2);
+      expect(out).toMatchObject({ requestsPlanned: 2, requestsMade: 2 });
+    });
   });
 
   describe('gap detection', () => {

@@ -35,6 +35,19 @@ A run on a non-trading day or before the cutoff re-syncs up to the previous trad
 
 Holidays come from `settings.holidays`. They only shift the target date and the fetch window; an incomplete list cannot corrupt prices. Keep it current.
 
+### Backfill (one-off, manual, not scheduled)
+
+Fills about one year of history so the 50/200-day MA rules have enough data.
+
+```
+pnpm worker:eod --backfill --dry-run    # default window (260 trading days), write nothing
+pnpm worker:eod --backfill 260          # real run
+```
+
+Run `--dry-run` first and check in the summary: `requestsPlanned` (symbols x chunks; the run aborts with `abortReason: request_cap_exceeded` above `maxBackfillRequests`), the closes in VND, and `missingDates`. If the same date is missing for every symbol, the holiday list is incomplete: fix `settings.holidays` before the real run. Requests go newest chunk first, with the usual delay, retries and circuit breaker. Re-running is idempotent (upsert on `symbol,trade_date`; nothing is deleted; rejected bars are not written and the stored row is kept). Window, chunk size and caps are in `src/config.ts`.
+
+After a backfill, MA rows whose window crosses a stored stock dividend or a beyond-limit move are suppressed by the STK-036 guards (`corporate_action_in_window`, `price_jump_beyond_limit`). That is expected, not a bug.
+
 ## Financials sync (`financials`)
 
 Fetches quarterly EPS, BVPS, revenue and net income plus a sector label for watchlist and held symbols from the TCBS public API. It upserts `financials` (idempotent; `source` and `fetched_at` on every row), records missing quarters in `data_gaps` (never filled) and writes `symbols.sector`. See `docs/adr/0002-financials-source.md`.

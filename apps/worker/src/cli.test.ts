@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { EOD_SYNC_CONFIG } from './config';
 import { parseArgs } from './cli';
 
 describe('parseArgs', () => {
@@ -20,5 +21,30 @@ describe('parseArgs', () => {
     for (const argv of [['nope'], [], ['eod-prices', '--wat'], ['financials', '--wat'], ['signals', '--wat']]) {
       expect(parseArgs(argv)).toMatchObject({ ok: false });
     }
+  });
+
+  describe('--backfill', () => {
+    test('eod-prices --backfill 260 -> backfillTradingDays 260', () => {
+      expect(parseArgs(['eod-prices', '--backfill', '260'])).toEqual({ ok: true, job: 'eod-prices', dryRun: false, backfillTradingDays: 260 });
+    });
+    test('--backfill without n -> config default; with --dry-run before or after', () => {
+      const n = EOD_SYNC_CONFIG.backfillDefaultTradingDays;
+      expect(parseArgs(['eod-prices', '--backfill'])).toEqual({ ok: true, job: 'eod-prices', dryRun: false, backfillTradingDays: n });
+      expect(parseArgs(['eod-prices', '--backfill', '--dry-run'])).toEqual({ ok: true, job: 'eod-prices', dryRun: true, backfillTradingDays: n });
+      expect(parseArgs(['eod-prices', '--dry-run', '--backfill', '100'])).toEqual({ ok: true, job: 'eod-prices', dryRun: true, backfillTradingDays: 100 });
+      expect(parseArgs(['eod-prices', '--backfill', '100', '--dry-run'])).toEqual({ ok: true, job: 'eod-prices', dryRun: true, backfillTradingDays: 100 });
+    });
+    test('--backfill 0 / -5 / 2.5 / abc / > max -> usage', () => {
+      const over = String(EOD_SYNC_CONFIG.backfillMaxTradingDays + 1);
+      for (const v of ['0', '-5', '2.5', 'abc', over]) {
+        expect(parseArgs(['eod-prices', '--backfill', v])).toMatchObject({ ok: false });
+      }
+      expect(parseArgs(['eod-prices', '--backfill', String(EOD_SYNC_CONFIG.backfillMaxTradingDays)])).toMatchObject({ ok: true });
+    });
+    test('signals --backfill / financials --backfill / repeated flag -> usage', () => {
+      for (const argv of [['signals', '--backfill'], ['financials', '--backfill', '5'], ['eod-prices', '--backfill', '5', '--backfill', '5']]) {
+        expect(parseArgs(argv)).toMatchObject({ ok: false });
+      }
+    });
   });
 });

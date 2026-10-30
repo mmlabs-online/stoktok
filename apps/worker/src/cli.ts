@@ -12,15 +12,40 @@ import {
 import { TcbsPriceSource } from './sources/tcbs';
 import { createDbEodStore, createDbFinancialsStore, createDbSignalsStore } from './store';
 
-export type ParsedArgs = { ok: true; job: 'eod-prices' | 'financials' | 'signals'; dryRun: boolean } | { ok: false; usage: string };
+export type ParsedArgs =
+  | { ok: true; job: 'eod-prices' | 'financials' | 'signals'; dryRun: boolean; backfillTradingDays?: number }
+  | { ok: false; usage: string };
 
-const USAGE = 'usage: cli.ts <eod-prices|financials|signals> [--dry-run]';
+const USAGE = 'usage: cli.ts <eod-prices|financials|signals> [--dry-run] [--backfill [<tradingDays>]  (eod-prices only)]';
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const [job, ...flags] = argv;
   if (job !== 'eod-prices' && job !== 'financials' && job !== 'signals') return { ok: false, usage: USAGE };
-  if (flags.some((f) => f !== '--dry-run')) return { ok: false, usage: USAGE };
-  return { ok: true, job, dryRun: flags.includes('--dry-run') };
+  let dryRun = false;
+  let backfillTradingDays: number | undefined;
+  for (let i = 0; i < flags.length; i++) {
+    const f = flags[i];
+    if (f === '--dry-run') {
+      if (dryRun) return { ok: false, usage: USAGE };
+      dryRun = true;
+    } else if (f === '--backfill') {
+      if (job !== 'eod-prices' || backfillTradingDays !== undefined) return { ok: false, usage: USAGE };
+      const next = flags[i + 1];
+      if (next !== undefined && !next.startsWith('--')) {
+        if (!/^\d+$/.test(next)) return { ok: false, usage: USAGE };
+        backfillTradingDays = Number(next);
+        i += 1;
+      } else {
+        backfillTradingDays = EOD_SYNC_CONFIG.backfillDefaultTradingDays;
+      }
+      if (backfillTradingDays < 1 || backfillTradingDays > EOD_SYNC_CONFIG.backfillMaxTradingDays) {
+        return { ok: false, usage: USAGE };
+      }
+    } else {
+      return { ok: false, usage: USAGE };
+    }
+  }
+  return { ok: true, job, dryRun, ...(backfillTradingDays !== undefined ? { backfillTradingDays } : {}) };
 }
 
 async function main(): Promise<void> {
@@ -74,6 +99,7 @@ async function main(): Promise<void> {
       sleep,
       log,
       dryRun: args.dryRun,
+      ...(args.backfillTradingDays !== undefined ? { backfillTradingDays: args.backfillTradingDays } : {}),
     });
   }
   console.log(JSON.stringify(summary));

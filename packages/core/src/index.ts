@@ -13,6 +13,7 @@ export {
   vnDayBoundsUtc,
   vnMinutesOf,
 } from './calendar';
+export { planBackfillChunks } from './market/backfill';
 export { planPriceGaps, priceGapReadRange } from './market/price-gaps';
 export type { PriceGapPlan } from './market/price-gaps';
 export {
