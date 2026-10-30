@@ -1,5 +1,6 @@
 import {
   DEFAULT_PRICE_CUTOFF_MINUTES_VN,
+  PRICES_GAP_TYPE,
   expectedPriceDate,
   normalizeSymbol,
   planBackfillChunks,
@@ -14,7 +15,7 @@ import type { DataGapInsert, OpenGapRecord, PriceDailyInsert } from '@stoktok/db
 import type { EodSyncConfig } from '../config';
 import type { PriceSource } from '../sources/price-source';
 
-export const PRICES_GAP_TYPE = 'prices_daily';
+export { PRICES_GAP_TYPE };
 
 export interface EodStore {
   getHolidays(): Promise<readonly string[]>;

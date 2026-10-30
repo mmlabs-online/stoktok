@@ -2,8 +2,10 @@ import { formatQuantity, normalizeSymbol } from '@stoktok/core';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { EmptyState } from '../../../../components/empty-state';
+import { parseChartRange } from '../../../../lib/chart-range-query';
 import { LotsTable } from '../../../../components/symbol/lots-table';
 import { PositionCard } from '../../../../components/symbol/position-card';
+import { PriceChart } from '../../../../components/symbol/price-chart';
 import { SymbolHeader } from '../../../../components/symbol/symbol-header';
 import { TransactionList } from '../../../../components/transactions/transaction-list';
 import { nowInstant } from '../../../../server/clock';
@@ -13,8 +15,15 @@ import { loadSymbol } from '../../../../server/symbols/load-symbol';
 // Reads the database per request; never prerendered at build time.
 export const dynamic = 'force-dynamic';
 
-export default async function Page({ params }: { params: Promise<{ symbol: string }> }) {
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ symbol: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const { symbol } = await params;
+  const range = parseChartRange(await searchParams);
   let normalized: string | null;
   try {
     normalized = normalizeSymbol(decodeURIComponent(symbol));
@@ -22,12 +31,13 @@ export default async function Page({ params }: { params: Promise<{ symbol: strin
     normalized = null;
   }
   if (!normalized) notFound();
-  const view = await loadSymbol(getDb(), normalized, nowInstant());
+  const view = await loadSymbol(getDb(), normalized, nowInstant(), range);
   if (!view) notFound();
 
   return (
     <div className="space-y-6">
       <SymbolHeader row={view.header} refEstimated={view.refEstimated} />
+      <PriceChart series={view.chart} range={view.chartRange} symbol={view.symbol} />
       <div className="grid gap-6 md:grid-cols-2">
         <div className="space-y-6">
           <PositionCard position={view.position} />

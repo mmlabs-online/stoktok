@@ -1,21 +1,29 @@
 import {
   resolveConcentrationThreshold,
+  DEFAULT_CHART_RANGE,
   DEFAULT_PRICE_CUTOFF_MINUTES_VN,
   DEFAULT_TICK_BANDS,
+  PRICES_GAP_TYPE,
+  buildChartSeries,
   buildLedger,
   buildPortfolio,
   buildPriceBoardRow,
+  chartWindow,
   expectedPriceDate,
   vnDateOf,
 } from '@stoktok/core';
-import type { Holding, LedgerError, Lot, PortfolioRow, Transaction } from '@stoktok/core';
+import type { ChartRange, ChartSeries, Holding, LedgerError, Lot, PortfolioRow, Transaction } from '@stoktok/core';
 import { listHref } from '../../lib/transaction-list-query';
 import {
   getEntrySettings,
   getMarketRules,
+  getFirstPriceDates,
   getRecentCloses,
   getSymbolExchanges,
+  listCloseHistory,
   listCorporateActions,
+  listOpenGaps,
+  listOpenMarketGaps,
   listTransactions,
   listWatchlist,
 } from '../db';
@@ -40,6 +48,8 @@ export interface SymbolView {
   transactions: Transaction[];
   transactionCount: number;
   ledgerHref: string;
+  chart: ChartSeries;
+  chartRange: ChartRange;
 }
 
 /**
@@ -47,8 +57,13 @@ export interface SymbolView {
  * R6 is suspended: when it is restored, call requireUser() at the top of this entry point.
  * Returns null when the symbol is unknown everywhere (symbols, watchlist, ledger, corporate actions, prices).
  */
-export async function loadSymbol(db: Db, symbol: string, now: Date): Promise<SymbolView | null> {
-  const [txs, cas, entry, watchlist, rules, exchanges, closes] = await Promise.all([
+export async function loadSymbol(
+  db: Db,
+  symbol: string,
+  now: Date,
+  range: ChartRange = DEFAULT_CHART_RANGE,
+): Promise<SymbolView | null> {
+  const [txs, cas, entry, watchlist, rules, exchanges, closes, firstDates] = await Promise.all([
     listTransactions(db),
     listCorporateActions(db),
     getEntrySettings(db),
@@ -56,6 +71,7 @@ export async function loadSymbol(db: Db, symbol: string, now: Date): Promise<Sym
     getMarketRules(db),
     getSymbolExchanges(db, [symbol]),
     getRecentCloses(db, [symbol], 2),
+    getFirstPriceDates(db, [symbol]),
   ]);
 
   const symbolTxs = txs.filter((t) => t.symbol === symbol);
@@ -82,6 +98,22 @@ export async function loadSymbol(db: Db, symbol: string, now: Date): Promise<Sym
     exDates: symbolCas.map((c) => c.exDate),
   });
   const header: WatchRow = { ...board, priceDateDiffers: board.tradeDate !== null && board.tradeDate !== expected };
+
+  const win = chartWindow({ endDate: expected, range, firstStoredDate: firstDates[symbol] ?? null });
+  const [history, symbolGaps, marketGaps] =
+    win.from > win.to
+      ? [[], [], []]
+      : await Promise.all([
+          listCloseHistory(db, symbol, win.from, win.to),
+          listOpenGaps(db, PRICES_GAP_TYPE, [symbol]),
+          listOpenMarketGaps(db, PRICES_GAP_TYPE),
+        ]);
+  const chart = buildChartSeries({
+    bars: history,
+    openGaps: [...symbolGaps, ...marketGaps],
+    window: win,
+    holidays: entry.settings.holidays,
+  });
 
   const ledger = buildLedger(txs, cas, entry.settings, vnDateOf(now));
   let position: SymbolPosition;
@@ -118,5 +150,7 @@ export async function loadSymbol(db: Db, symbol: string, now: Date): Promise<Sym
     transactions: [...symbolTxs].reverse().slice(0, RECENT_TX_LIMIT),
     transactionCount: symbolTxs.length,
     ledgerHref: listHref({ page: 1, symbol }),
+    chart,
+    chartRange: range,
   };
 }

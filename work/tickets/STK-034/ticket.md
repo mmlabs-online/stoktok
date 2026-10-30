@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P2 |
 | Areas | ui, finance |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-10-26 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/22 |
 
 ## Goal
 `/symbols/[symbol]` shows a close-price line and volume bars with range tabs; missing days are shown as gaps, never interpolated. Split out of STK-016 (slice 2), 2026-10-26.

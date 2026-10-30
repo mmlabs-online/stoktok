@@ -12,14 +12,22 @@ vi.mock('../db', async (importActual) => ({
   getMarketRules: vi.fn(),
   getSymbolExchanges: vi.fn(),
   getRecentCloses: vi.fn(),
+  getFirstPriceDates: vi.fn(),
+  listCloseHistory: vi.fn(),
+  listOpenGaps: vi.fn(),
+  listOpenMarketGaps: vi.fn(),
 }));
 
 import {
   getEntrySettings,
+  getFirstPriceDates,
   getMarketRules,
   getRecentCloses,
   getSymbolExchanges,
+  listCloseHistory,
   listCorporateActions,
+  listOpenGaps,
+  listOpenMarketGaps,
   listTransactions,
   listWatchlist,
 } from '../db';
@@ -65,6 +73,10 @@ beforeEach(() => {
   vi.mocked(getMarketRules).mockResolvedValue(DEFAULT_MARKET_RULES);
   vi.mocked(getSymbolExchanges).mockResolvedValue({ FPT: 'HOSE' });
   vi.mocked(getRecentCloses).mockResolvedValue(fptBars);
+  vi.mocked(getFirstPriceDates).mockResolvedValue({ FPT: '2026-10-22' });
+  vi.mocked(listCloseHistory).mockResolvedValue([...fptBars.FPT].reverse());
+  vi.mocked(listOpenGaps).mockResolvedValue([]);
+  vi.mocked(listOpenMarketGaps).mockResolvedValue([]);
 });
 
 describe('loadSymbol', () => {
@@ -214,5 +226,39 @@ describe('loadSymbol', () => {
     expect(v?.transactions.every((t) => t.symbol === 'FPT')).toBe(true);
     expect(v?.transactionCount).toBe(12);
     expect(v?.ledgerHref).toBe('/transactions?symbol=FPT');
+  });
+});
+
+describe('loadSymbol chart', () => {
+  it('reads history for the range window and both gap lists', async () => {
+    vi.mocked(getFirstPriceDates).mockResolvedValue({ FPT: '2025-01-02' });
+    const view = await loadSymbol(db, 'FPT', now, '1T');
+    expect(listCloseHistory).toHaveBeenCalledWith(db, 'FPT', '2026-09-23', '2026-10-23');
+    expect(listOpenGaps).toHaveBeenCalledWith(db, 'prices_daily', ['FPT']);
+    expect(listOpenMarketGaps).toHaveBeenCalledWith(db, 'prices_daily');
+    expect(view?.chart.hasData).toBe(true);
+    expect(view?.chart.window).toEqual({ from: '2026-09-23', to: '2026-10-23', trimmed: false });
+  });
+
+  it('defaults to 3T and echoes the passed range', async () => {
+    expect((await loadSymbol(db, 'FPT', now))?.chartRange).toBe('3T');
+    expect((await loadSymbol(db, 'FPT', now, '6T'))?.chartRange).toBe('6T');
+  });
+
+  it('does not read history without stored prices', async () => {
+    vi.mocked(getFirstPriceDates).mockResolvedValue({});
+    vi.mocked(getRecentCloses).mockResolvedValue({});
+    const view = await loadSymbol(db, 'FPT', now);
+    expect(listCloseHistory).not.toHaveBeenCalled();
+    expect(view?.chart.hasData).toBe(false);
+  });
+
+  it('a market-wide gap reaches the chart as gap_recorded', async () => {
+    vi.mocked(listCloseHistory).mockResolvedValue([bar('FPT', '2026-10-23', 125_000)]);
+    vi.mocked(listOpenMarketGaps).mockResolvedValue([
+      { id: 9, symbol: null, fromTs: '2026-10-21T17:00:00.000Z', toTs: '2026-10-22T16:59:59.000Z' },
+    ]);
+    const view = await loadSymbol(db, 'FPT', now);
+    expect(view?.chart.slots.find((s) => s.date === '2026-10-22')).toMatchObject({ kind: 'gap_recorded', gapId: 9 });
   });
 });
