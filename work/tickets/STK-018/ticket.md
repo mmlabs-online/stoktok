@@ -6,6 +6,7 @@
 | Priority | P2 |
 | Areas | architecture, security |
 | Attempts | 2 |
+| PR | https://github.com/mmlabs-online/stoktok/pull/18 |
 | Created | 2026-10-22 |
 
 ## Goal
