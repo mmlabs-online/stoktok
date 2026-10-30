@@ -87,3 +87,66 @@
 2. Is `main` there protected so admins can't bypass it, and is `pr-scope` a required check?
 3. Who owns `DEPLOY_REPO_TOKEN`, and does that account have admin bypass?
 4. Is `macbook-runner` in a runner group limited to the deployment repo?
+
+## Attempt 2
+
+**Verdict:** the attempt-1 🔴 is addressed within this ticket's scope. The token rotation is still Ming's manual step in the deployment repo, now written into the runbook as a hard gate. Attempt-1 🟡1 is fixed. Attempt 2 adds nothing new that blocks the ticket. I read files only and read no `.env` file.
+
+### Findings
+
+**Attempt-1 🔴 (tunnel token committed in git): addressed in scope 🟢**
+- `docs/deploy.md:43`: step 9 is now a HARD GATE. Ming rotates the token in Cloudflare and moves it out of git into a host env file before any hostname is added, with "do not continue until confirmed".
+- `docs/deploy.md:45`: step 11 turns on "Protect with Access". If a hostname is ever added without an Access check, cloudflared now rejects the requests instead of letting them through.
+- `docs/deploy.md:46`: "Do not reorder steps 9, 10 and 11" now covers all three steps.
+- Rotating the token makes the copy still in git history useless, so the history does not need rewriting.
+- Teardown (`docs/deploy.md:48`) is still hostname first, then the Access application.
+
+**Attempt-1 🟡1 (fetch without credentials breaks the release): fixed 🟢**
+- `.github/workflows/release.yml:33-36,48`: the extra fetch is gone.
+- `fetch-depth: 0` makes checkout fetch every branch into `refs/remotes/origin/*`, so `origin/main` exists for the `merge-base --is-ancestor` check.
+- `persist-credentials: false` is kept, and the guard still fails safe.
+
+**New 🟡 A: step 9 gives no way to confirm the rotation** (`docs/deploy.md:43`)
+- As I understand Cloudflare's behaviour, a connector that already holds the old token may stay connected after a token refresh until it restarts (medium confidence, please verify). That includes a rogue connector.
+- "Confirmed" is not defined, so the gate can be passed with an attacker's connector still on the tunnel.
+- Fix: add two checks to step 9.
+  - After rotating, the tunnel's connector list in the dashboard shows only the expected connector(s) from the Mac. Disconnect or clean up any others.
+  - `git grep` in the deployment repo finds no token in `proxy/compose.yml`.
+
+**New 🟢 B: formatting bug in the runbook** (`docs/deploy.md:30`)
+- One-time setup step 3 (`sudo install -d -o gh-runner -m 755 .../logs`) is glued onto the end of step 2 (`...SUPABASE_SERVICE_ROLE_KEY=`.3. ...`), so it is easy to miss.
+- No security impact. Fix: put step 3 on its own line.
+
+**New 🟢 C: running commands as `gh-runner` is correct** (`docs/deploy.md:41,42,57,82,83`)
+- `sudo -u gh-runner -H` points docker at `gh-runner`'s own OrbStack engine.
+- It runs the job script as the owner of the 600 secrets file, so the file's mode does not need loosening.
+- It also avoids the lock-ownership loop in `run-job.sh` I flagged in attempt 1.
+
+**Still open from attempt 1 (not blocking, not changed in this attempt)**
+- 🟡4 `deploy/deployment-repo/.github/workflows/deploy-stoktok.yml:18`:
+  - `workflow_dispatch` still has no `if: github.ref == 'refs/heads/main'` guard.
+  - The runbook line "`workflow_dispatch` redeploys what main pins" (`docs/deploy.md:52`, also the workflow comment at line 9) is not enforced.
+  - Supports AC4 and R3. This is a one-line fix in the draft PR.
+- 🟡2 and 🟡3: the "Repository secrets" section (`docs/deploy.md:23-26`) still leaves out:
+  - the `v*` tag ruleset;
+  - a `release` environment for the three secrets;
+  - protection on deployment `main` that admins can't bypass, so `DEPLOY_REPO_TOKEN` can't push compose changes straight to the Mac runner.
+  These are settings for Ming, not code. They belong in AC5's runbook or in follow-ups.
+- 🟡5: actions in `release.yml:57,59,66,78` are still pinned by tag, not by SHA.
+
+### Recommendations
+1. AC5: add the connector-list and `git grep` checks to step 9 (A).
+2. AC5: put one-time setup step 3 back on its own line (B).
+3. AC4/R3: add the `if:` guard to the `deploy` job in the draft `deploy-stoktok.yml`, or move it to follow-ups under R7.
+4. AC5: add three lines to "Repository secrets" covering the tag ruleset, the `release` environment and deployment `main` protection, or move them to follow-ups.
+
+### Risks
+- Unchanged: until R6 is restored, any container on the shared `web` network can reach `stoktok-web:3000` without going through Access.
+- The gate depends on Ming actually doing step 9. Nothing in code enforces it.
+
+### Open questions for Ming
+These are carried over from attempt 1 and still unanswered:
+1. Is the deployment repo public or private?
+2. Is `main` there protected so admins can't bypass it?
+3. Who owns `DEPLOY_REPO_TOKEN`?
+4. Which runner group is `macbook-runner` in?
