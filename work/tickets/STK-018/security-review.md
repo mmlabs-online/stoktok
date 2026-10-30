@@ -81,3 +81,54 @@
 - /home/user/stoktok/.env.example
 
 This is a static review only. I ran nothing and modified nothing.
+
+## Attempt 2 (read-only)
+
+**Verdict:** I found no 🔴 issues. The attempt-2 change handles secrets correctly and resolves attempt-1 finding 3 (no guidance on where cron gets its secrets). It adds one 🟡 doc gap and two 🟢 notes. Attempt-1 findings 1 and 2 (both 🟡) are still open, because they need code or compose changes and attempt 2 only touched docs.
+
+### Findings
+
+1. 🟡 **The runbook doesn't say how to lock down the new `.env`.** `docs/deploy.md:41`, `docs/deploy.md:44`
+   - The new section correctly puts `SUPABASE_SERVICE_ROLE_KEY` in a `.env` beside the compose file and keeps it out of the crontab.
+   - It only says "keep the file out of git". It doesn't say how, or who can read the file.
+   - That `.env` lives inside the shared mmlabs deploy checkout. If that repo's `.gitignore` doesn't cover it, one `git add -A` commits the key. Without `chmod 600` it is also readable by other local users and by other containers that mount the checkout.
+   - This repo is fine: `.gitignore:8` (`.env*`) and `.dockerignore:13-14` cover `deploy/.env`. The deploy repo is the gap.
+   - **Fix (doc only):** in step 1, say to create it with `install -m 600 /dev/null .env`, confirm `git check-ignore .env` in the deploy repo, and keep one `.env` per app directory, not shared with other apps' compose files.
+   - **If it is ever committed:** rotate the service-role key in the Supabase dashboard. Removing it from git isn't enough.
+   - Ties to: R3, AC3.
+
+2. 🟢 **The log line now always shows `tag=unset`.** `deploy/run-job.sh:27`
+   - It reads `${STOKTOK_TAG:-unset}` from the cron shell. `STOKTOK_TAG` now lives only in `.env`, which Compose reads but the shell never sources.
+   - Every run logs `tag=unset`, so the log no longer shows which image ran. That hurts incident and rollback forensics.
+   - **Fix:**
+     - Drop the field, or log it from inside the container. Don't `source .env` in the script, because that puts the service-role key into the script's environment and every child process.
+     - Alternatively, read only that one line, e.g. `grep '^STOKTOK_TAG=' "$(dirname "$COMPOSE_FILE")/.env"`.
+
+3. 🟢 **Values exported in the shell override `.env`.** `docs/deploy.md:41`, `docs/deploy.md:59`
+   - "Web and worker always read the same values" only holds if nothing is exported. Compose gives an exported shell variable priority over `.env`.
+   - Cron runs with a clean environment. So if Ming's interactive shell exports `SUPABASE_URL` or `SUPABASE_SERVICE_ROLE_KEY` (say from dev work), `up -d` would point web at a different project than the cron worker uses.
+   - The key is not exposed by this, but the docs promise something that may not hold.
+   - **Fix:** add one sentence: "don't export these in your shell; check with `docker compose -f compose.stoktok.yml config`". Note that this prints the secret, so run it locally only and never paste the output.
+   - `deploy/crontab.example:4-6` is fine. It names only the variables, not their values, and the cron lines carry no env assignments.
+
+4. 🟢 **Confirmed safe.**
+   - Compose v2 resolves `.env` from the compose file's folder, which is what `run-job.sh:13` uses by default. Cron therefore gets the values without them appearing in `crontab -l` or `ps`.
+   - The `.env` is used only to fill in `${…}` placeholders, not as an `env_file:`. Only the variables listed in `compose.stoktok.yml:14-17, 32-35` reach the containers.
+   - No `NEXT_PUBLIC_*` was added, and no literal values appear in the docs.
+
+### Carried over from attempt 1 (unchanged)
+- 🟡 #1: `stoktok-web` and `stoktok-worker` share the `mmlabs` network, so sibling containers can reach the web app without going through Access. See `deploy/compose.stoktok.yml:23-24, 36-37`.
+- 🟡 #2: `run-job.sh` uses the predictable lock path `/tmp/stoktok-jobs.lock` and does not validate the job name before using it in a log path. See `deploy/run-job.sh:12-16, 21`.
+- 🟢 #4–#6: the check script misses list-form secrets, `README.md` leaves out the `check:deploy-env` step, and the Access test wording is vague. All still open.
+
+### Recommendations
+- **AC3 / R3:** add the `chmod 600` and `git check-ignore` lines from finding 1. Then AC3 is fully met on the doc side.
+- **AC1 / AC4:** attempt-1 findings 1 and 2 still need a decision. Either fix them in this ticket or log them as follow-ups (R7).
+
+### Risks
+- The deploy repo's ignore rules are outside this repo, so I couldn't verify them.
+
+### Open questions
+- Does the shared deploy repo already have its own secrets mechanism, such as an encrypted env file or a per-app `.env`? If so, `docs/deploy.md:41` should name it, so stoktok doesn't create a second, unprotected copy of the key.
+
+This was a static review: I ran nothing and modified nothing.
