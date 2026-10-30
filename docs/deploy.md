@@ -37,9 +37,12 @@ Names only. Values live in the deploy repo's env handling, never in this repo (R
 | `LLM_API_KEY` | none | reserved | y |
 <!-- env-list:end -->
 
+## Compose variables live in one env file
+All compose variables (`STOKTOK_TAG`, `STOKTOK_TUNNEL_NETWORK`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) live in one env file named `.env` next to `compose.stoktok.yml` in the deploy checkout (Compose v2 loads `.env` from the compose file's directory). This applies to both `docker compose up -d` and the cron-run `run-job.sh`, so web and worker always read the same values. Keep the file out of git and never put values in the crontab.
+
 ## First deploy / go-live
-1. Copy the files above into the deploy repo; set env there.
-2. `STOKTOK_TAG=<sha> docker compose -f compose.stoktok.yml up -d stoktok-web` (still private, no host ports).
+1. Copy the files above into the deploy repo; create the `.env` file there (see above).
+2. Set `STOKTOK_TAG=<sha>` in that `.env`, then `docker compose -f compose.stoktok.yml up -d stoktok-web` (still private, no host ports).
 3. Verify from the host: `docker compose -f compose.stoktok.yml exec stoktok-web node -e "fetch('http://localhost:3000/').then(r=>console.log(r.status))"`.
 4. Gate G1, then G2.
 5. Add the ingress rule and run `cloudflared tunnel route dns <tunnel> <APP_HOSTNAME>`.
@@ -49,14 +52,14 @@ Names only. Values live in the deploy repo's env handling, never in this repo (R
 ## Deploy
 ```
 # apply migrations first if the release has any
-export STOKTOK_TAG=<sha>
+# edit STOKTOK_TAG=<sha> in the .env file beside compose.stoktok.yml, then:
 docker compose -f compose.stoktok.yml pull
 docker compose -f compose.stoktok.yml up -d stoktok-web
 ```
-The worker picks up the tag on its next run.
+The worker uses the new tag on its next run, because cron reads the same `.env`.
 
 ## Roll back
-Set `STOKTOK_TAG` to the previous SHA (`docker image ls mingming21400/stoktok-web` or the git log), then run the same `pull` and `up -d`. **Rollback does not undo migrations** (they are forward-only); roll back across a migration only when the old code works with the new schema.
+Edit `STOKTOK_TAG=<previous sha>` in the `.env` file (`docker image ls mingming21400/stoktok-web` or the git log), then run the same `pull` and `up -d`. **Rollback does not undo migrations** (they are forward-only); roll back across a migration only when the old code works with the new schema.
 
 ## Logs
 ```

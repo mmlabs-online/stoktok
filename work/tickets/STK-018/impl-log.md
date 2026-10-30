@@ -34,3 +34,27 @@ None.
 ### Scope self-check
 - Could the diff be smaller? no
 - Diff size: about +330 / -2 lines
+
+## Attempt 2 — 2026-10-30 (REWORK: review Attempt 1, Issue 1)
+
+### Files touched
+| File | Required because |
+|---|---|
+| docs/deploy.md | Issue 1: new "Compose variables live in one env file" section; First deploy, Deploy and Roll back now edit `STOKTOK_TAG` in the `.env` beside the compose file instead of `export` |
+| deploy/crontab.example | Issue 1: comment says compose variables and secrets come from the `.env` beside the compose file, never the crontab |
+| work/tickets/STK-018/impl-log.md | this section |
+
+### Tests added / changed
+None (docs/comments only).
+
+### Checks
+- typecheck: pass; lint: pass
+- test: pass (core 365, db 105, worker 74, web 176)
+- check:deploy-env: OK
+
+### Out-of-plan files
+None. Nits from the review were not touched.
+
+### Scope self-check
+- Could the diff be smaller? no
+- Diff size: about +8 / -6 lines

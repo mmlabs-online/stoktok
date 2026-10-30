@@ -22,7 +22,7 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-015 | Medium-term signal rules and job | DONE | P2 | finance, db | 1 | 2026-10-26 |
 | STK-016 | Symbol detail screen | DONE | P2 | ui, finance | 1 | 2026-10-26 |
 | STK-017 | Docker images and CI build | DONE | P2 | architecture, security | 2 | 2026-10-28 |
-| STK-018 | Deployment to the WSL server | REWORK | P2 | architecture, security | 2 | 2026-10-30 |
+| STK-018 | Deployment to the WSL server | REVIEW | P2 | architecture, security | 2 | 2026-10-30 |
 | STK-030 | Cash and other assets management | DONE | P1 | ui, finance | 1 | 2026-10-24 |
 | STK-031 | Daily price gap detection | DONE | P2 | data, db | 1 | 2026-10-29 |
 | STK-032 | Historical daily price backfill | BACKLOG | P2 | data | 0 | 2026-10-26 |
