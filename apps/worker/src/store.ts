@@ -1,5 +1,6 @@
 import {
   getEntrySettings,
+  getFirstPriceDates,
   getLatestCloses,
   getRecentCloses,
   getSignalRules,
@@ -8,6 +9,7 @@ import {
   listHeldSymbols,
   listOpenGaps,
   listOpenMarketGaps,
+  listPriceDates,
   listSymbolSectors,
   listWatchlist,
   resolveGaps,
@@ -17,6 +19,7 @@ import {
   upsertSignals,
 } from '@stoktok/db';
 import type { Db } from '@stoktok/db';
+import { PRICES_GAP_TYPE } from './jobs/eod-sync';
 import type { EodStore } from './jobs/eod-sync';
 import { FINANCIALS_GAP_TYPE } from './jobs/financials-sync';
 import type { FinancialsStore } from './jobs/financials-sync';
@@ -33,6 +36,11 @@ export function createDbEodStore(db: Db, opts: { upsertChunkSize: number }): Eod
       return Object.fromEntries(Object.entries(quotes).map(([s, q]) => [s, q.close]));
     },
     upsertPricesDaily: (rows) => upsertPricesDaily(db, rows, { chunkSize: opts.upsertChunkSize }),
+    listPriceDates: (symbol, from, to) => listPriceDates(db, symbol, from, to),
+    getFirstPriceDates: (symbols) => getFirstPriceDates(db, symbols),
+    listOpenGaps: (symbols) => listOpenGaps(db, PRICES_GAP_TYPE, symbols),
+    insertGaps: (rows) => insertGaps(db, rows),
+    resolveGaps: (ids, resolvedAt) => resolveGaps(db, ids, resolvedAt),
   };
 }
 

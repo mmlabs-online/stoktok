@@ -30,7 +30,7 @@ export {
   saveAppSettings,
   saveSettings,
 } from './repos/settings';
-export { getLatestCloses, getRecentCloses, upsertPricesDaily } from './repos/prices-daily';
+export { getFirstPriceDates, getLatestCloses, getRecentCloses, listPriceDates, upsertPricesDaily } from './repos/prices-daily';
 export type { DataGapInsert, FinancialInsert, PriceDailyInsert, SignalInsert, SymbolSectorRow } from './rows';
 export { listFinancials, upsertFinancials } from './repos/financials';
 export { insertGaps, listOpenGaps, listOpenMarketGaps, resolveGaps } from './repos/data-gaps';

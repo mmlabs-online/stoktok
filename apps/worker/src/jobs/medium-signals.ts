@@ -11,10 +11,8 @@ import {
 } from '@stoktok/core';
 import type { EpsBasis, Result, SectorInfo, SignalRules, StoredClose } from '@stoktok/core';
 import type { FinancialRecord, OpenGapRecord, SignalInsert } from '@stoktok/db';
+import { PRICES_GAP_TYPE } from './eod-sync';
 import { FINANCIALS_GAP_TYPE } from './financials-sync';
-
-/** data_gaps.data_type for daily prices; the price backfill (STK-031) should reuse it. */
-export const PRICES_GAP_TYPE = 'prices_daily';
 
 export interface SignalsStore {
   getHolidays(): Promise<readonly string[]>;

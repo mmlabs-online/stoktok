@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
-import { getLatestCloses, getRecentCloses, upsertPricesDaily } from './prices-daily';
+import { getFirstPriceDates, getLatestCloses, getRecentCloses, listPriceDates, upsertPricesDaily } from './prices-daily';
 
 const row = (symbol: string, over: Record<string, unknown> = {}) => ({
   symbol,
@@ -128,5 +128,53 @@ describe('upsertPricesDaily', () => {
     const c = createFake();
     c.respond({ data: null });
     await expect(upsertPricesDaily(c.db, [ins('FPT')])).resolves.toBe(1);
+  });
+});
+
+describe('listPriceDates', () => {
+  test('select trade_date, eq symbol, gte/lte, order asc, range(0, size-1)', async () => {
+    const f = createFake();
+    f.respond({ data: [{ trade_date: '2026-10-22' }, { trade_date: '2026-10-23' }] });
+    expect(await listPriceDates(f.db, 'FPT', '2026-10-01', '2026-10-31')).toEqual(['2026-10-22', '2026-10-23']);
+    expect(f.methods('select')[0]?.args).toEqual(['trade_date']);
+    expect(f.methods('eq')[0]?.args).toEqual(['symbol', 'FPT']);
+    expect(f.methods('gte')[0]?.args).toEqual(['trade_date', '2026-10-01']);
+    expect(f.methods('lte')[0]?.args).toEqual(['trade_date', '2026-10-31']);
+    expect(f.methods('order')[0]?.args).toEqual(['trade_date', { ascending: true }]);
+    expect(f.methods('range')[0]?.args).toEqual([0, 999]);
+  });
+  test('pages until a short page', async () => {
+    const f = createFake();
+    f.respond({ data: [{ trade_date: '2026-10-20' }, { trade_date: '2026-10-21' }] });
+    f.respond({ data: [{ trade_date: '2026-10-22' }] });
+    const out = await listPriceDates(f.db, 'FPT', 'a', 'b', { pageSize: 2 });
+    expect(out).toEqual(['2026-10-20', '2026-10-21', '2026-10-22']);
+    expect(f.methods('range').map((c) => c.args)).toEqual([[0, 1], [2, 3]]);
+  });
+  test('bad date -> MAPPING; DB error -> DataError', async () => {
+    const a = createFake();
+    a.respond({ data: [{ trade_date: 'nope' }] });
+    await expect(listPriceDates(a.db, 'FPT', 'a', 'b')).rejects.toMatchObject({ code: 'MAPPING' });
+    const b = createFake();
+    b.respond({ error: { code: '42501' } });
+    await expect(listPriceDates(b.db, 'FPT', 'a', 'b')).rejects.toMatchObject({ code: 'DB_ERROR' });
+  });
+});
+
+describe('getFirstPriceDates', () => {
+  test('per symbol: order asc, limit 1, maybeSingle; no row is omitted', async () => {
+    const f = createFake();
+    f.respond({ data: { trade_date: '2026-09-01' } });
+    f.respond({ data: null });
+    const out = await getFirstPriceDates(f.db, ['FPT', 'VNM']);
+    expect(out).toEqual({ FPT: '2026-09-01' });
+    expect(f.methods('order')[0]?.args).toEqual(['trade_date', { ascending: true }]);
+    expect(f.methods('limit')[0]?.args).toEqual([1]);
+    expect(f.methods('maybeSingle')).toHaveLength(2);
+  });
+  test('empty symbols -> no call', async () => {
+    const f = createFake();
+    expect(await getFirstPriceDates(f.db, [])).toEqual({});
+    expect(f.calls).toHaveLength(0);
   });
 });

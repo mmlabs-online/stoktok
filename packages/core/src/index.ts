@@ -8,9 +8,13 @@ export {
   isValidDate,
   previousTradingDay,
   subtractTradingDays,
+  tradingDaysBetween,
   vnDateOf,
+  vnDayBoundsUtc,
   vnMinutesOf,
 } from './calendar';
+export { planPriceGaps, priceGapReadRange } from './market/price-gaps';
+export type { PriceGapPlan } from './market/price-gaps';
 export {
   DEFAULT_FINANCIALS_PUBLISH_LAG_DAYS,
   DEFAULT_FINANCIALS_SANITY,

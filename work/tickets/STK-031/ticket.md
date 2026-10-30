@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P2 |
 | Areas | data, db |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-10-24 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/16 |
 
 ## Goal
 After the EOD price sync, missing trading days per symbol are recorded in `data_gaps` and resolved when the data later arrives, so stale or gapped data is visible and never feeds a signal (R4). Split out of STK-005 (slice 2), 2026-10-24.

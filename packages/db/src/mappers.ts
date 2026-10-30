@@ -1,7 +1,7 @@
 /** Row <-> domain conversions for assets and watchlist. No financial calculation (R1); integers only (R2). */
 import { EXCHANGES, RowMappingError, toSafeInt } from '@stoktok/core';
 import type { Exchange, PriceQuote, SectorInfo, StoredClose } from '@stoktok/core';
-import type { AssetRow, FinancialRow, OpenGapRow, PriceCloseRow, PriceDailyRow, SymbolSectorRow, WatchlistRow } from './rows';
+import type { AssetRow, FinancialRow, OpenGapRow, PriceCloseRow, PriceDailyRow, SymbolSectorRow, TradeDateRow, WatchlistRow } from './rows';
 
 export interface Asset {
   id: string;
@@ -115,6 +115,13 @@ export interface OpenGapRecord {
 
 export function openGapFromRow(row: OpenGapRow): OpenGapRecord {
   return { id: toSafeInt(row.id, 'id', 'data_gaps'), symbol: row.symbol, fromTs: row.from_ts, toTs: row.to_ts };
+}
+
+export function tradeDateFromRow(row: TradeDateRow): string {
+  if (typeof row.trade_date !== 'string' || !DATE_RE.test(row.trade_date)) {
+    throw new RowMappingError('prices_daily', 'trade_date', `invalid date: ${String(row.trade_date)}`);
+  }
+  return row.trade_date;
 }
 
 /** R4: a sector without source or fetched_at is rejected; no sector means unknown. */

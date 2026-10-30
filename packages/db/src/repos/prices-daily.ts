@@ -1,8 +1,8 @@
 import type { PriceQuote, StoredClose } from '@stoktok/core';
 import type { Db } from '../client';
-import { DataError, mapRow, unwrap, unwrapFound } from '../errors';
-import { priceQuoteFromRow, storedCloseFromRow } from '../mappers';
-import type { PriceCloseRow, PriceDailyInsert, PriceDailyRow } from '../rows';
+import { DataError, fetchAll, mapRow, unwrap, unwrapFound } from '../errors';
+import { priceQuoteFromRow, storedCloseFromRow, tradeDateFromRow } from '../mappers';
+import type { PriceCloseRow, PriceDailyInsert, PriceDailyRow, TradeDateRow } from '../rows';
 
 const COLS = 'symbol,trade_date,close,source,fetched_at';
 
@@ -26,6 +26,52 @@ export async function getLatestCloses(db: Db, symbols: readonly string[]): Promi
   for (const row of rows) {
     if (row) out[row.symbol] = mapRow(priceQuoteFromRow, row, ctx);
   }
+  return out;
+}
+
+/** Stored trade dates of one symbol in [from, to], ascending. Paged with `.range()` to stay under the PostgREST row cap. */
+export async function listPriceDates(
+  db: Db,
+  symbol: string,
+  from: string,
+  to: string,
+  { pageSize = 1000 }: { pageSize?: number } = {},
+): Promise<string[]> {
+  const ctx = { table: 'prices_daily', op: 'list_dates' };
+  const rows = await fetchAll<TradeDateRow>(
+    (lo, hi) =>
+      db
+        .from('prices_daily')
+        .select('trade_date')
+        .eq('symbol', symbol)
+        .gte('trade_date', from)
+        .lte('trade_date', to)
+        .order('trade_date', { ascending: true })
+        .range(lo, hi),
+    ctx,
+    pageSize,
+  );
+  return rows.map((r) => mapRow(tradeDateFromRow, r, ctx));
+}
+
+/** Earliest stored trade date per symbol; symbols without a row are omitted. One query per symbol. */
+export async function getFirstPriceDates(db: Db, symbols: readonly string[]): Promise<Record<string, string>> {
+  const ctx = { table: 'prices_daily', op: 'first_date' };
+  const out: Record<string, string> = {};
+  await Promise.all(
+    symbols.map(async (symbol) => {
+      try {
+        const row = unwrapFound<TradeDateRow>(
+          await db.from('prices_daily').select('trade_date').eq('symbol', symbol).order('trade_date', { ascending: true }).limit(1).maybeSingle(),
+          ctx,
+        );
+        out[symbol] = mapRow(tradeDateFromRow, row, ctx);
+      } catch (e) {
+        if (e instanceof DataError && e.code === 'NOT_FOUND') return;
+        throw e;
+      }
+    }),
+  );
   return out;
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addTradingDays, subtractTradingDays, previousTradingDay, vnDateOf, vnMinutesOf } from './calendar';
+import { addTradingDays, subtractTradingDays, previousTradingDay, tradingDaysBetween, vnDateOf, vnDayBoundsUtc, vnMinutesOf } from './calendar';
 
 describe('addTradingDays', () => {
   it('Mon+2 = Wed; Thu+2 = Mon; Fri+2 = Tue', () => {
@@ -62,5 +62,31 @@ describe('subtractTradingDays', () => {
   it('rejects negative or non-integer n', () => {
     expect(() => subtractTradingDays('2026-03-04', -1, [])).toThrow(RangeError);
     expect(() => subtractTradingDays('2026-03-04', 1.5, [])).toThrow(RangeError);
+  });
+});
+
+describe('tradingDaysBetween', () => {
+  it('Fri to Tue skips the weekend', () => {
+    expect(tradingDaysBetween('2026-10-23', '2026-10-27', [])).toEqual(['2026-10-23', '2026-10-26', '2026-10-27']);
+  });
+  it('skips holidays; a range starting on Saturday', () => {
+    expect(tradingDaysBetween('2026-10-23', '2026-10-27', ['2026-10-26'])).toEqual(['2026-10-23', '2026-10-27']);
+    expect(tradingDaysBetween('2026-10-24', '2026-10-27', [])).toEqual(['2026-10-26', '2026-10-27']);
+  });
+  it('from === to, reversed range, invalid date', () => {
+    expect(tradingDaysBetween('2026-10-23', '2026-10-23', [])).toEqual(['2026-10-23']);
+    expect(tradingDaysBetween('2026-10-24', '2026-10-24', [])).toEqual([]);
+    expect(tradingDaysBetween('2026-10-27', '2026-10-23', [])).toEqual([]);
+    expect(() => tradingDaysBetween('2026-13-01', '2026-10-23', [])).toThrow(RangeError);
+    expect(() => tradingDaysBetween('2026-10-23', 'x', [])).toThrow(RangeError);
+  });
+});
+
+describe('vnDayBoundsUtc', () => {
+  it('is the VN day as UTC instants', () => {
+    expect(vnDayBoundsUtc('2026-10-20')).toEqual({ fromTs: '2026-10-19T17:00:00.000Z', toTs: '2026-10-20T16:59:59.000Z' });
+  });
+  it('rejects an invalid date', () => {
+    expect(() => vnDayBoundsUtc('2026-02-30')).toThrow(RangeError);
   });
 });
