@@ -41,3 +41,6 @@ No violations found. R3: secrets only in the host env_file, the compose interpol
 - Make a publish-step failure show in notify. Optionally add a post-deploy worker dry-run in deploy-stoktok.
 - Spec §4.1 and the CLAUDE.md Runtime row still say WSL. The ticket Notes line "first release is private" is superseded by answer 1.
 - The deployment repo commits the tunnel token and `apps/calechip/.env` (already flagged).
+
+### Security blockers (added by orchestrator from security-review.md, attempt 1)
+- 🔴 **Tunnel token gate missing from the runbook.** `mmlabs-online/deployment/proxy/compose.yml:11` commits the cloudflared tunnel token, and this release makes stoktok public. In-ticket fix (docs only, R7): add a hard gate in `docs/deploy.md` before the public-hostname step (step 10) — rotate the tunnel token and move it out of git into a host env file — and in step 10 turn on the hostname's Access JWT check ("Protect with Access"). The deployment-repo change itself is not part of this diff.
