@@ -7,7 +7,7 @@
 | Areas | architecture, security |
 | Attempts | 2 |
 | Created | 2026-10-30 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/23 (deployment: https://github.com/mmlabs-online/deployment/pull/16) |
 
 ## Goal
 Pushing a tag `vX.Y.Z` releases stoktok through the shared mmlabs deploy pattern (`mmlabs-online/deployment`, `docs/app-release.yml`): images are built and pushed, a release PR is opened on the deployment repo, and merging it deploys on the self-hosted runner. The first release is v0.1.0, public behind Cloudflare Access (Ming's answer 1, 2026-10-30).
