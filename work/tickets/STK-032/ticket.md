@@ -7,7 +7,7 @@
 | Areas | data |
 | Attempts | 1 |
 | Created | 2026-10-26 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/20 |
 
 ## Goal
 A one-off backfill fills `prices_daily` with about one year of history for watchlist ∪ held symbols, so the 50/200-day MA signals (STK-015) have enough data. Split out of STK-015 (Ming, 2026-10-26).
