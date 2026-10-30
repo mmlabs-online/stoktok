@@ -1,4 +1,4 @@
-import { RowMappingError } from '@stoktok/core';
+import { DEFAULT_SIGNAL_RULES, RowMappingError } from '@stoktok/core';
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
 import { DataError } from '../errors';
@@ -124,6 +124,7 @@ const input = {
   priceLimitPpm: { HOSE: 70000, HNX: 100000, UPCOM: 150000 },
   concentrationThresholdPpm: 250000,
   cashDividendTreatment: 'reduceCost' as const,
+  signalRules: DEFAULT_SIGNAL_RULES,
 };
 
 describe('getAppSettings', () => {
@@ -218,5 +219,16 @@ describe('saveAppSettings', () => {
     const g = createFake();
     g.respond({ data: { rule_configs: saved } });
     expect((await getMarketRules(g.db)).lotSize).toBe(10);
+  });
+  test('saveAppSettings then getSignalRules returns the saved signal rules', async () => {
+    const f = createFake();
+    f.respond({ data: null });
+    f.respond({ data: fullRow });
+    const signalRules = { ...DEFAULT_SIGNAL_RULES, priceVsMa: { ...DEFAULT_SIGNAL_RULES.priceVsMa, shortDays: 20, longDays: 100 } };
+    await saveAppSettings(f.db, { ...input, signalRules });
+    const saved = (f.methods('upsert')[0]?.args[0] as { rule_configs: unknown }).rule_configs;
+    const g = createFake();
+    g.respond({ data: { rule_configs: saved } });
+    expect(await getSignalRules(g.db)).toEqual(signalRules);
   });
 });

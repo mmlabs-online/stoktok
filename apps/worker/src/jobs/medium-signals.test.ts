@@ -1,4 +1,4 @@
-import { DEFAULT_MARKET_RULES, DEFAULT_SIGNAL_RULES, addQuarters, subtractTradingDays } from '@stoktok/core';
+import { DEFAULT_MARKET_RULES, DEFAULT_SIGNAL_RULES, addQuarters, parseSignalRules, settingsInputToRow, signalRulesToFormValues, subtractTradingDays, validateSettingsInput } from '@stoktok/core';
 import type { CorporateAction, Exchange, Result, SectorInfo, SignalRules, StoredClose } from '@stoktok/core';
 import type { FinancialRecord, OpenGapRecord, SignalInsert } from '@stoktok/db';
 import { describe, expect, test } from 'vitest';
@@ -88,6 +88,25 @@ describe('runMediumSignals', () => {
     const b = memoryStore({ rules });
     await run(b.store);
     expect(pe(b, 'AAA')).toMatchObject({ status: 'suppressed', reason_codes: ['peers_insufficient'] });
+  });
+
+  test('rules saved through the settings form drive the job', async () => {
+    const raw = {
+      feeRate: '', sellTaxRate: '0,1', priceLimitHOSE: '7', priceLimitHNX: '10', priceLimitUPCOM: '15',
+      settlementDays: '2', lotSize: '100', concentrationThreshold: '', cashDividendTreatment: 'reduceCost',
+      ...signalRulesToFormValues(DEFAULT_SIGNAL_RULES),
+      peMinPeers: '8', maShortDays: '20', maLongDays: '100', maNeutralBand: '5', growthThreshold: '15',
+    };
+    const v = validateSettingsInput(raw);
+    if (!v.ok) throw new Error('expected valid form');
+    const rules = parseSignalRules(settingsInputToRow(v.value, null).rule_configs);
+    const m = memoryStore({ rules });
+    await run(m.store);
+    expect(m.table.has(`AAA|price_vs_ma_20|medium|${FRIDAY}`)).toBe(true);
+    expect(m.table.has(`AAA|price_vs_ma_100|medium|${FRIDAY}`)).toBe(true);
+    expect(m.table.has(`AAA|price_vs_ma_50|medium|${FRIDAY}`)).toBe(false);
+    expect(m.table.has(`AAA|price_vs_ma_200|medium|${FRIDAY}`)).toBe(false);
+    expect(m.table.get(`AAA|earnings_growth_trend|medium|${FRIDAY}`)?.inputs_snapshot).toMatchObject({ params: rules.earningsGrowth });
   });
 
   test('writes suppressed rows with reason_codes, status, data_fresh; ok rows with label/value; computed_at = now', async () => {

@@ -1,18 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { SIGNAL_RULE_SECTIONS, appSettingsFromRow, settingsToFormValues } from '@stoktok/core';
 import { SettingsForm } from './settings-form';
 
-const values = {
-  feeRate: '',
-  sellTaxRate: '0,1',
-  priceLimitHOSE: '7',
-  priceLimitHNX: '10',
-  priceLimitUPCOM: '15',
-  settlementDays: '2',
-  lotSize: '100',
-  concentrationThreshold: '',
-  cashDividendTreatment: 'reduceCost',
-};
+const values = settingsToFormValues(appSettingsFromRow(null));
 
 const render = (o: Partial<React.ComponentProps<typeof SettingsForm>> = {}) =>
   renderToStaticMarkup(
@@ -28,6 +19,37 @@ const render = (o: Partial<React.ComponentProps<typeof SettingsForm>> = {}) =>
   );
 
 describe('SettingsForm', () => {
+  it('signal rules card renders every field, label and default', () => {
+    const out = render();
+    expect(out).toContain('Quy tắc tín hiệu (trung hạn)');
+    const fields = SIGNAL_RULE_SECTIONS.flatMap((s) => s.rows.flat());
+    expect(fields).toHaveLength(14);
+    for (const f of fields) {
+      expect(out).toContain(`name="${f.name}"`);
+      expect(out).toContain(f.label);
+    }
+    for (const v of ['"5"', '"20"', '"4"', '"2"', '"10"', '"1"', '"50"', '"200"', '"7"']) expect(out).toContain(`value=${v}`);
+    expect(out.match(/type="checkbox"[^>]*checked/g)).toHaveLength(4);
+  });
+
+  it('toggle unchecked when value is empty', () => {
+    const out = render({ initial: { ok: false, fieldErrors: {}, values: { ...values, peEnabled: '' } } });
+    expect(out.match(/type="checkbox"[^>]*checked/g)).toHaveLength(3);
+  });
+
+  it('signal field error has aria-invalid and aria-describedby', () => {
+    const out = render({
+      initial: {
+        ok: false,
+        fieldErrors: { maLongDays: { code: 'MA_LONG_NOT_ABOVE_SHORT', message: 'MA dài phải lớn hơn MA ngắn.' } },
+        values,
+      },
+    });
+    expect(out).toContain('aria-invalid="true"');
+    expect(out).toContain('maLongDays-error');
+    expect(out).toContain('MA dài phải lớn hơn MA ngắn.');
+  });
+
   it('renders every field', () => {
     const out = render();
     for (const name of [

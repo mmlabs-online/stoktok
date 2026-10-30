@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { appSettingsFromRow } from '../db/mappers';
 import { entryMessage } from '../entry/messages-vi';
+import { DEFAULT_SIGNAL_RULES } from '../signals/config';
+import { signalRulesToFormValues } from './signal-rules-form';
 import {
   SETTINGS_BOUNDS,
   concentrationDefaultText,
@@ -19,6 +21,7 @@ const valid: SettingsFormRaw = {
   lotSize: '100',
   concentrationThreshold: '25',
   cashDividendTreatment: 'income',
+  ...signalRulesToFormValues(DEFAULT_SIGNAL_RULES),
 };
 const run = (o: Partial<SettingsFormRaw>) => validateSettingsInput({ ...valid, ...o });
 const errorOf = (o: Partial<SettingsFormRaw>, field: keyof SettingsFormRaw) => {
@@ -38,8 +41,19 @@ describe('validateSettingsInput', () => {
         priceLimitPpm: { HOSE: 70000, HNX: 100000, UPCOM: 150000 },
         concentrationThresholdPpm: 250000,
         cashDividendTreatment: 'income',
+        signalRules: DEFAULT_SIGNAL_RULES,
       },
     });
+  });
+
+  it('reports market and signal errors together', () => {
+    const r = run({ maLongDays: '50', maShortDays: '50' });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.errors.maLongDays?.code).toBe('MA_LONG_NOT_ABOVE_SHORT');
+    const both = run({ feeRate: '-1', peMinPeers: '1' });
+    if (both.ok) throw new Error('expected failure');
+    expect(Object.keys(both.errors).sort()).toEqual(['feeRate', 'peMinPeers']);
   });
 
   const edges: [keyof SettingsFormRaw, string, string, string][] = [
@@ -108,6 +122,24 @@ describe('settingsToFormValues', () => {
       lotSize: '100',
       concentrationThreshold: '',
       cashDividendTreatment: 'reduceCost',
+      peEnabled: 'on',
+      peMinPeers: '5',
+      peDiscount: '20',
+      pePremium: '20',
+      pbEnabled: 'on',
+      pbMinPeers: '5',
+      pbDiscount: '20',
+      pbPremium: '20',
+      growthEnabled: 'on',
+      growthComparisons: '4',
+      growthMinConsecutive: '2',
+      growthThreshold: '10',
+      growthMinBase: '1',
+      maEnabled: 'on',
+      maShortDays: '50',
+      maLongDays: '200',
+      maNeutralBand: '2',
+      financialsMaxFetchAgeDays: '7',
     });
   });
 

@@ -26,7 +26,7 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-030 | Cash and other assets management | DONE | P1 | ui, finance | 1 | 2026-10-24 |
 | STK-031 | Daily price gap detection | DONE | P2 | data, db | 1 | 2026-10-29 |
 | STK-032 | Historical daily price backfill | DONE | P2 | data | 1 | 2026-10-30 |
-| STK-033 | Signal-rules section on the Settings screen | IN_PROGRESS | P2 | ui, finance | 1 | 2026-10-30 |
+| STK-033 | Signal-rules section on the Settings screen | REVIEW | P2 | ui, finance | 1 | 2026-10-30 |
 | STK-034 | Price and volume chart on the symbol screen | BACKLOG | P2 | ui, finance | 0 | 2026-10-26 |
 | STK-035 | Medium-term signals on the symbol screen | BACKLOG | P2 | ui, finance | 0 | 2026-10-26 |
 | STK-036 | Raw-price guards for MA signal rules | DONE | P2 | finance, data | 1 | 2026-10-30 |

@@ -1,12 +1,15 @@
 import type { LedgerSettings } from '../ledger/types';
-import { formatQuantity } from '../format';
 import type { EntryError } from '../entry/messages-vi';
-import { formatRatePercentInput, parseIntegerInput, parseRatePercentInput } from '../entry/parse-input';
+import { formatRatePercentInput } from '../entry/parse-input';
 import { DEFAULT_CONCENTRATION_THRESHOLD_PPM } from '../portfolio/config';
+import type { SignalRules } from '../signals/config';
+import { readInteger, readPercent } from './read-fields';
 import { EXCHANGES } from './market-rules';
 import type { Exchange, MarketRules } from './market-rules';
+import { signalRulesToFormValues, validateSignalRulesInput } from './signal-rules-form';
+import type { SignalRulesFormRaw } from './signal-rules-form';
 
-export interface SettingsFormRaw {
+export interface SettingsFormRaw extends SignalRulesFormRaw {
   feeRate: string;
   sellTaxRate: string;
   priceLimitHOSE: string;
@@ -28,6 +31,7 @@ export interface SettingsInput {
   priceLimitPpm: Record<Exchange, number>;
   concentrationThresholdPpm: number | null;
   cashDividendTreatment: 'reduceCost' | 'income';
+  signalRules: SignalRules;
 }
 
 /** Stored settings as the settings screen sees them (fee and concentration may be unset). */
@@ -35,6 +39,7 @@ export interface AppSettings extends Omit<LedgerSettings, 'feeRatePpm'> {
   feeRatePpm: number | null;
   concentrationThresholdPpm: number | null;
   marketRules: MarketRules;
+  signalRules: SignalRules;
 }
 
 /** Validation bounds for the form (sanity limits, not market rules). Rates in ppm. */
@@ -51,46 +56,6 @@ export const CASH_DIVIDEND_TREATMENTS = [
   { value: 'reduceCost', label: 'Giảm giá vốn', explanation: 'Cổ tức tiền mặt (sau thuế) được trừ vào giá vốn cổ phiếu đang giữ.' },
   { value: 'income', label: 'Ghi nhận thu nhập', explanation: 'Cổ tức tiền mặt (sau thuế) được ghi nhận là thu nhập, giá vốn không đổi.' },
 ] as const;
-
-type Bounds = { min: number; max: number };
-
-const percentRange = (b: Bounds): EntryError => ({
-  code: 'OUT_OF_RANGE',
-  params: { min: `${formatRatePercentInput(b.min)}%`, max: `${formatRatePercentInput(b.max)}%` },
-});
-
-const intRange = (b: Bounds): EntryError => ({
-  code: 'OUT_OF_RANGE',
-  params: { min: formatQuantity(b.min), max: formatQuantity(b.max) },
-});
-
-function readPercent(text: string, b: Bounds, blank: 'null' | 'required'): { value: number | null } | { error: EntryError } {
-  if (blank === 'null' && text.trim() === '') return { value: null };
-  const r = parseRatePercentInput(text, { maxPpm: b.max });
-  if (r.ok) return r.ppm < b.min ? { error: percentRange(b) } : { value: r.ppm };
-  switch (r.code) {
-    case 'NEGATIVE':
-    case 'TOO_LARGE':
-      return { error: percentRange(b) };
-    case 'INVALID':
-      return { error: { code: 'PERCENT_INVALID' } };
-    case 'TOO_PRECISE':
-      return { error: { code: 'PERCENT_TOO_PRECISE' } };
-    case 'REQUIRED':
-      return { error: { code: 'REQUIRED' } };
-  }
-}
-
-function readInteger(text: string, b: Bounds): { value: number } | { error: EntryError } {
-  const r = parseIntegerInput(text, { max: b.max });
-  if (!r.ok) {
-    if (r.code === 'NOT_INTEGER') {
-      return { error: text.trim().startsWith('-') ? intRange(b) : { code: 'WHOLE_NUMBER_INVALID' } };
-    }
-    return { error: r.code === 'TOO_LARGE' ? intRange(b) : { code: r.code } };
-  }
-  return r.value < b.min ? { error: intRange(b) } : { value: r.value };
-}
 
 export type ValidateSettingsResult =
   | { ok: true; value: SettingsInput }
@@ -124,7 +89,10 @@ export function validateSettingsInput(raw: SettingsFormRaw): ValidateSettingsRes
   const treatment = CASH_DIVIDEND_TREATMENTS.find((t) => t.value === raw.cashDividendTreatment);
   if (!treatment) errors.cashDividendTreatment = { code: 'TREATMENT_INVALID' };
 
-  if (Object.keys(errors).length > 0 || 'error' in fee || 'error' in tax || 'error' in concentration || 'error' in days || 'error' in lot || !treatment) {
+  const signals = validateSignalRulesInput(raw);
+  if (!signals.ok) Object.assign(errors, signals.errors);
+
+  if (!signals.ok || Object.keys(errors).length > 0 || 'error' in fee || 'error' in tax || 'error' in concentration || 'error' in days || 'error' in lot || !treatment) {
     return { ok: false, errors };
   }
   return {
@@ -137,6 +105,7 @@ export function validateSettingsInput(raw: SettingsFormRaw): ValidateSettingsRes
       priceLimitPpm: limits,
       concentrationThresholdPpm: concentration.value,
       cashDividendTreatment: treatment.value,
+      signalRules: signals.value,
     },
   };
 }
@@ -153,6 +122,7 @@ export function settingsToFormValues(s: AppSettings): SettingsFormRaw {
     lotSize: String(s.marketRules.lotSize),
     concentrationThreshold: pct(s.concentrationThresholdPpm),
     cashDividendTreatment: s.cashDividendTreatment,
+    ...signalRulesToFormValues(s.signalRules),
   };
 }
 

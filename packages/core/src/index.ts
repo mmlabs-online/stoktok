@@ -107,6 +107,21 @@ export type {
   SettingsInput,
   ValidateSettingsResult,
 } from './settings/validate-settings';
+export {
+  SIGNAL_RULE_CARD_NOTE,
+  SIGNAL_RULE_CARD_TITLE,
+  SIGNAL_RULE_SECTIONS,
+  mergeSignalRules,
+  signalRulesToFormValues,
+  validateSignalRulesInput,
+} from './settings/signal-rules-form';
+export type {
+  SignalRuleFieldSpec,
+  SignalRuleSection,
+  SignalRulesField,
+  SignalRulesFormRaw,
+  ValidateSignalRulesResult,
+} from './settings/signal-rules-form';
 export { entryMessage } from './entry/messages-vi';
 export type { EntryError, EntryErrorCode, EntryParams } from './entry/messages-vi';
 export { transactionToFormValues, validateTransactionInput } from './entry/validate-transaction';

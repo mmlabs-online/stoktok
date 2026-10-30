@@ -1,6 +1,13 @@
 'use client';
 
-import { CASH_DIVIDEND_TREATMENTS, EXCHANGES, EXCHANGE_LABELS } from '@stoktok/core';
+import {
+  CASH_DIVIDEND_TREATMENTS,
+  EXCHANGES,
+  EXCHANGE_LABELS,
+  SIGNAL_RULE_CARD_NOTE,
+  SIGNAL_RULE_CARD_TITLE,
+  SIGNAL_RULE_SECTIONS,
+} from '@stoktok/core';
 import type { SettingsField } from '@stoktok/core';
 import type { ReactNode } from 'react';
 import { startTransition, useActionState } from 'react';
@@ -178,6 +185,41 @@ export function SettingsForm({
             </p>
           )}
         </fieldset>
+      </Card>
+
+      <Card title={SIGNAL_RULE_CARD_TITLE} note={SIGNAL_RULE_CARD_NOTE}>
+        {SIGNAL_RULE_SECTIONS.map((section) => (
+          <fieldset key={section.key} className="border-border space-y-4 border-t pt-4 first:border-t-0 first:pt-0">
+            <legend className="text-sm font-semibold">{section.legend}</legend>
+            {section.enabledField && (
+              <label className="flex min-h-11 items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name={section.enabledField}
+                  defaultChecked={values[section.enabledField] === 'on'}
+                  className="size-5"
+                />
+                Bật
+              </label>
+            )}
+            {section.note && <p className="text-fg-muted text-xs">{section.note}</p>}
+            {section.rows.map((row) => (
+              <div key={row.map((f) => f.name).join()} className={row.length > 1 ? 'grid gap-4 sm:grid-cols-2' : undefined}>
+                {row.map((f) => (
+                  <ValueField
+                    key={f.name}
+                    name={f.name}
+                    label={f.label}
+                    help={f.help}
+                    mode={f.mode}
+                    defaultValue={values[f.name]}
+                    error={errors[f.name]}
+                  />
+                ))}
+              </div>
+            ))}
+          </fieldset>
+        ))}
       </Card>
 
       <div className="bg-bg border-border sticky bottom-0 flex gap-3 border-t p-3 pb-[env(safe-area-inset-bottom)]">
