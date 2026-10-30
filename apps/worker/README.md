@@ -27,7 +27,7 @@ TZ=Asia/Ho_Chi_Minh
 0 21 * * 1-5 cd <repo> && pnpm worker:eod
 ```
 
-Container form (compose belongs to STK-017/018): `docker compose run --rm worker node dist/cli.js eod-prices`.
+Container form: `deploy/run-job.sh eod-prices` runs `docker compose run --rm stoktok-worker eod-prices` (see `docs/deploy.md`).
 
 A run on a non-trading day or before the cutoff re-syncs up to the previous trading day, which is harmless. The window is the last 20 trading days, so a missed day is picked up by the next run.
 

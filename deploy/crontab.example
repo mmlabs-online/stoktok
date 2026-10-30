@@ -1,0 +1,11 @@
+# STK-018: stoktok worker schedule (Mon-Fri), matching apps/worker/README.md.
+# The host timezone must be Asia/Ho_Chi_Minh (check with `date`); Debian/Ubuntu cron
+# ignores CRON_TZ. VN is UTC+7 without DST, so UTC equivalents are given in comments.
+# Replace /path/to with the deploy checkout. STOKTOK_TAG must be visible to cron
+# (set it in the crontab or in the env file the deploy repo uses).
+
+30 18 * * 1-5 /path/to/deploy/run-job.sh eod-prices   # 11:30 UTC
+45 18 * * 1-5 /path/to/deploy/run-job.sh financials   # 11:45 UTC
+55 18 * * 1-5 /path/to/deploy/run-job.sh signals      # 11:55 UTC
+0 21 * * 1-5  /path/to/deploy/run-job.sh eod-prices   # 14:00 UTC, catch-up
+15 21 * * 1-5 /path/to/deploy/run-job.sh signals      # 14:15 UTC, after catch-up
