@@ -7,7 +7,7 @@
 | Areas | ui, finance |
 | Attempts | 1 |
 | Created | 2026-10-26 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/21 |
 
 ## Goal
 Ming can view and edit the medium-term signal rule parameters (`settings.rule_configs.signals.medium`) in a "Quy tắc tín hiệu (trung hạn)" card on `/settings`. Split out of STK-015 (slice B), 2026-10-26.
