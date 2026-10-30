@@ -1,22 +1,24 @@
-Status: BLOCKED
+Status: READY
 
 # Plan — STK-032: Historical daily price backfill
 
-> **Why BLOCKED.** One question for Ming (Q1 below). The guards are a "must" that Ming set, and they have no owner yet. Whether they are split out or added as a slice changes this plan's scope, areas and consults. Everything else is planned. The backfill slice below is complete, so if Ming picks option (a) or (c), the orchestrator can set `Status: READY` with no replanning.
+> **Re-planned 2026-10-30.** The earlier version was BLOCKED on Q1 (raw-price guards). Ming answered **option (a)**: the guards are their own ticket, STK-036, and STK-032 merges after it. STK-036 is now merged on `main` (review PASS, 2026-10-30), so the ordering precondition is met. The backfill scope is the same as before. The changes are listed in "Changes from the BLOCKED version" at the end.
 
 ## Spec summary
 - docs/spec-v1.md §4.3: "One interface per data type (`PriceSource`, …); each implementation is swappable." "Every record stores `source` and `fetched_at`."
 - docs/spec-v1.md §4.4: "EOD OHLCV sync | After market close" and "Gap detection | … and at EOD". The backfill is a one-off manual mode of the EOD sync, not a new scheduled job.
 - CLAUDE.md R2 (integer VND), R4 ("Every market-data record carries `source` and `fetched_at`. Stale or gapped data never produces a signal; gaps are recorded."), R5 (tuning is configuration).
 - Ticket goal: "A one-off backfill fills `prices_daily` with about one year of history for watchlist ∪ held symbols, so the 50/200-day MA signals (STK-015) have enough data."
-- Ticket note (Ming): "raw-price guards (stock-dividend or out-of-limit jumps inside the MA window) **must land with or before this backfill**, because the MA rules start producing real signals once history exists."
+- Ticket note (Ming): "raw-price guards (stock-dividend or out-of-limit jumps inside the MA window) must land with or before this backfill".
+- Ticket note (Ming, 2026-10-30): "**Answer to plan Q1: option (a).** Raw-price guards go in a separate ticket, STK-036. STK-032 is merged after STK-036, and the backfill is not run before STK-036 lands."
+- STK-036 (merged) added `checkRawPriceWindow`, `isBeyondDailyLimit` and `resolveLimitPpm` in `packages/core/src/signals/raw-price-guard.ts`. `priceVsMa` now suppresses rows with `corporate_action_in_window` / `price_jump_beyond_limit` when the MA window crosses a stock dividend or a beyond-limit jump. That protection is in the **signals layer** and works on whatever history is stored, so the backfill does not need to call it.
 
 ## Acceptance criteria → verification
 | # | Criterion (ticket) | How the reviewer verifies it |
 |---|---|---|
 | 1 | `pnpm worker:eod --backfill <tradingDays>` (default from config, e.g. 260) fetches and upserts history through the existing `PriceSource` and validation path; `--dry-run` works with it. | `cli.test.ts › parseArgs backfill cases` (with n, without n → config default, with `--dry-run` in either order, and rejections for 0, negative, non-integer, above the cap, `--backfill` on `financials`/`signals`, and unknown flags). `eod-sync.test.ts › backfill: fromDate = subtractTradingDays(target, n-1)` and `› backfill: bars go through source.fetchDaily and are upserted with source/fetched_at`. `› backfill dry-run writes nothing (no upsert, no gaps)`. The `USAGE` string and the README show the command. |
-| 2 | Idempotent: a re-run adds no rows. Existing rows are overwritten only under the same validation rules as the daily sync. | `eod-sync.test.ts › backfill re-run adds no rows` (memory store, same row count after two runs). `› backfill rejected bar mid-series is not written and the stored row is kept; ok=false`. Code check: backfill calls the same `TcbsPriceSource.fetchDaily` with the same `normalizeDailyBar` and `DEFAULT_PRICE_SANITY`. There is no second validation path, and no delete is ever issued. |
-| 3 | Gentle on the source: requests are chunked by date range with the existing delays, retries and circuit breaker. The request count is bounded and logged. | `market/backfill.test.ts › planBackfillChunks` cases. `eod-sync.test.ts › backfill: requests = symbols × chunks, logged before the first request`. `› backfill: aborts before any request when planned requests > maxBackfillRequests`. `› backfill: sleeps requestDelayMs between every request`. `› backfill: circuit breaker counts consecutive failed requests and skips the rest`. Retries are unchanged (`getJson` via `TcbsPriceSource`). |
+| 2 | Idempotent: re-running adds no rows; existing rows are overwritten only with the same validation rules as the daily sync. | `eod-sync.test.ts › backfill re-run adds no rows` (memory store, same row count after two runs). `› backfill rejected bar mid-series is not written and the stored row is kept; ok=false`. Code check: backfill calls the same `source.fetchDaily` → `normalizeDailyBar` with `DEFAULT_PRICE_SANITY`. There is no second validation path (in particular, `isBeyondDailyLimit` is **not** added to the write path, see Approach 4), and no delete is ever issued. |
+| 3 | Gentle on the source: requests chunked by date range with the existing delays/retries/circuit breaker; the request count is bounded and logged. | `market/backfill.test.ts › planBackfillChunks` cases. `eod-sync.test.ts › backfill: requests = symbols × chunks, logged before the first request`. `› backfill: aborts before any request when planned requests > maxBackfillRequests`. `› backfill: sleeps requestDelayMs between every request`. `› backfill: circuit breaker counts consecutive failed requests and skips the rest`. Retries are unchanged (`getJson` via `TcbsPriceSource`). |
 | 4 | Tests use fixtures and the no-network guard only. | Every new test uses the in-memory store or fake source in `eod-sync.test.ts`, or the existing `test/fixtures/tcbs/*.json` with `test/no-network.ts`. A grep of the diff finds no real `fetch` and no hosts. `pnpm test` is green offline. |
 | — | R8 | `pnpm typecheck`, `pnpm lint` and `pnpm test` are green. The new core function has unit tests. |
 
@@ -31,9 +33,9 @@ Status: BLOCKED
 | `apps/worker/src/jobs/eod-sync.test.ts` | New backfill tests. Existing tests must pass unmodified. | AC1–4 |
 | `apps/worker/src/cli.ts` | `parseArgs` accepts `eod-prices [--dry-run] [--backfill [<n>]]`. `ParsedArgs` gains `backfillTradingDays?: number`. Update the `USAGE` string. `main` passes the value to `runEodSync`. | AC1 |
 | `apps/worker/src/cli.test.ts` | parseArgs backfill cases | AC1 |
-| `apps/worker/README.md` | Add a "Backfill (one-off, manual, not scheduled)" section covering: the command, the dry-run-first rule, the request count, the holiday check on `missingDates`, and that **the backfill must not be run before the raw-price guards are merged** (see Q1). | AC1. Ops safety |
+| `apps/worker/README.md` | Add a "Backfill (one-off, manual, not scheduled)" section covering: the command, the dry-run-first rule, the request count, the holiday check on `missingDates`, and a note that MA rows crossing a stock dividend or a beyond-limit jump are suppressed by the STK-036 guards (`corporate_action_in_window`, `price_jump_beyond_limit`), so suppressed MA rows right after a backfill are expected, not a bug. | AC1. Ops safety |
 
-No migration, no DB package change (`upsertPricesDaily` and `onConflict: 'symbol,trade_date'` are reused), and no change to `tcbs.ts`, `price-source.ts` or `daily-bar.ts`.
+No migration, no DB package change (`upsertPricesDaily` and `onConflict: 'symbol,trade_date'` are reused), and no change to `tcbs.ts`, `price-source.ts`, `daily-bar.ts` or anything under `packages/core/src/signals/` (STK-036 code is used as is, and not called from the backfill).
 
 ## Tests to write
 | Test (file › name) | Covers |
@@ -68,50 +70,51 @@ No migration, no DB package change (`upsertPricesDaily` and `onConflict: 'symbol
    - `requestsPlanned = symbols.length × chunks.length`. Log it as `backfill: <S> symbols × <C> chunks = <R> requests`. If it is above `maxBackfillRequests`, return `ok:false, abortReason:'request_cap_exceeded'` before any fetch or write.
    - Loop over symbols, then over chunks. `sleep(requestDelayMs)` comes before every request except the first. The consecutive-failure counter is per request and resets on success. Once it reaches `maxConsecutiveFailures`, no further requests are made. A symbol with at least one failed or unmade chunk goes in `failedSymbols` if it had a failure, otherwise in `skippedSymbols`. Its successfully fetched bars are kept (R4: missing chunks become recorded gaps, never guesses).
    - **Validation reference (AC2 "same validation rules").** The same `normalizeDailyBar`, sanity config and `close_jump` ratio apply. Only the reference close is chosen per chunk. The newest chunk uses the stored latest close (exactly as the daily sync does). Each older chunk uses the oldest accepted close of the chunk after it. This fixes the consult's finding that a 260-day window compared with today's close wrongly rejects valid history. The rule itself is not loosened or tightened.
+   - **STK-036 `isBeyondDailyLimit` is not reused here (decision, R7).** STK-036's follow-up (f) suggested reusing it in STK-032. I checked it against the ACs. Adding a ±7/10/15% check to the backfill write path would make backfill validation **different from** the daily sync, which breaks AC2 ("the same validation rules as the daily sync"). It would also drop real history (limit-hit days, ex-rights drops) that the signals layer is designed to see and suppress on. None of the ACs need it, because the MA protection Ming asked for is already done at signal time by `checkRawPriceWindow` on the stored series. So the backfill only writes validated raw bars, and STK-036 handles the MA. If Ming later wants beyond-limit bars reported at ingest, that is a follow-up for both sync modes together.
    - The upsert, `ok` semantics and the gap step are unchanged. `windowStart = fromDate`, so real gaps across the year are recorded. Dry-run writes nothing, gaps included.
 5. **Write behaviour (stated per consult §5).** Re-running overwrites `source` and `fetched_at` on existing rows, as the daily sync does. A bar rejected now is simply not written, so the stored row is kept. Nothing is ever deleted.
-6. **README.** Add the backfill section: run `--dry-run` first and check `requestsPlanned`, the closes in VND, and `missingDates`. If the same date is missing for every symbol, the holiday list is incomplete: fix `settings.holidays` before the real run. Also state "Do not run before the raw-price guards are merged."
-7. **Rules.** R2: no conversion added, and integer VND comes from the existing path. R3: worker only. R4: `source`/`fetched_at` on every row, and gaps are recorded. R5: all limits are config. R6: suspended, no auth. R7: no guard logic, no holiday pre-flight code, no source change. R8: core tests listed. R10: read-only market data.
+6. **README.** Add the backfill section: run `--dry-run` first and check `requestsPlanned`, the closes in VND, and `missingDates`. If the same date is missing for every symbol, the holiday list is incomplete: fix `settings.holidays` before the real run. Also note that after the backfill, MA rows whose window crosses a stored stock dividend or a beyond-limit move are suppressed by the STK-036 guards. That is expected. The old "do not run before the guards are merged" warning is no longer needed, because STK-036 is on `main`.
+7. **Rules.** R2: no conversion added, and integer VND comes from the existing path. R3: worker only. R4: `source`/`fetched_at` on every row, and gaps are recorded. R5: all limits are config. R6: suspended, no auth. R7: no guard logic or guard wiring, no holiday pre-flight code, no source change. R8: core tests listed. R10: read-only market data.
 
 ## Specialist input used
 From `consult-data-engineer.md`:
 - **Adopted:**
   - Rec. 2: the CLI and config keys, `fromDate` via `subtractTradingDays`.
   - Rec. 3: the core chunk planner, request count computed up front, the cap, and the delay and circuit breaker applied per request.
-  - Rec. 4: no stale `lastClose` for old chunks. I chose chaining (newest → oldest) over a new series validator, because chaining keeps exactly the daily-sync rule (AC2) and adds no new validation logic.
+  - Rec. 4: no stale `lastClose` for old chunks. I chose chaining (newest → oldest) over a new series validator, because chaining keeps exactly the daily-sync rule (AC2) and adds no new validation logic. The consult's alternative ("skip `lastClose` and rely on the new core jump guard") is not used. The STK-036 guard lives at signal time and is not a write-path validator (see Approach 4).
   - Rec. 5: overwrite stated, rejected bars keep stored rows, dry-run writes nothing.
   - Rec. 7: the test list.
   - Rec. 8: the README.
+- **Resolved outside this ticket:**
+  - Rec. 1 (the guards) and consult Q1: done in STK-036, per Ming's answer (a). Consult Q5 (null exchange → widest configured limit, flagged) was settled in STK-036 (its A7).
 - **Not adopted here, recorded as follow-ups (R7, not in the ACs):**
   - Rec. 6: a holiday pre-flight check that skips dates missing for all symbols. It changes gap semantics. It is replaced by a README dry-run check.
-  - Rec. 1: the guards themselves. This is Q1.
-- **Open questions:** consult Q1 becomes Blocking Q1. Q2–Q6 are handled as assumptions (below).
+- **Open questions:** Q2, Q3, Q4 and Q6 are handled as assumptions (below).
+
+From STK-036 (`work/tickets/STK-036/plan.md`, `review.md`): its follow-up (f) "reuse `isBeyondDailyLimit` in STK-032" was considered and **declined** for the reason in Approach 4.
 
 ## Assumptions
 - **A1.** The TCBS range cap is unknown (consult Q2). `backfillChunkTradingDays = 60` is a conservative default and lives in config. If a chunk is silently truncated, the gap step records the missing days (R4), which is visible on dry-run.
-- **A2.** Raw vs adjusted prices are unverified (consult Q3). The backfill neither assumes nor corrects either. Correctness of the MA across corporate actions is the guards' job (Q1).
+- **A2.** Raw vs adjusted prices are unverified (consult Q3). The backfill neither assumes nor corrects either. If prices are raw, MA correctness across stock dividends and beyond-limit jumps is handled by the STK-036 guards. Cash dividends are a known residual bias of ≤3% (STK-036 A4).
 - **A3.** Holiday coverage (consult Q4) is an operational precondition, checked through the dry-run's `missingDates` (README). No code.
 - **A4.** The default of 260 trading days (consult Q6) follows the ticket's "e.g. 260". 200 bars plus about 60 of slack. The cap is 520.
-- **A5.** Limits for a null exchange (consult Q5) belong to the guards ticket and are not decided here.
+- **A5.** The STK-036 guards only see corporate actions that are stored in `corporate_actions` (today, mostly held symbols). A stock dividend on a watched-only symbol is caught only if the move goes beyond the limit (STK-036 follow-up (d)). This is a known STK-036 residual risk and is out of scope here.
 - **A6.** `maxBackfillRequests = 500`, for example 100 symbols × 5 chunks, which takes about 8 minutes at 1 s delay. Ming's watchlist plus holdings is assumed to be well under that.
 
 ## Blocking questions
-**Q1 (Ming).** Your note says the raw-price guards (`corporate_action_in_window` and `price_jump_beyond_limit` in the MA rules, from the STK-015 plan A6 and its finance consult) "must land with or before this backfill". They do not exist in the code. No ticket owns them, and STK-032's acceptance criteria do not include them. How should they be handled?
-- **(a) Separate ticket, recommended.** Create a new ticket for the guards: areas `finance, data`, with a finance consult. It holds the core function, the reason codes and the wiring into `signals/inputs.ts` / `moving-average.ts`, with limits from market config. STK-032 then proceeds with the backfill-only plan above (this plan becomes READY unchanged) and **its PR is merged after the guards ticket, or the backfill is not run until then**. The README states this.
-  - Why I recommend it: the guards are finance-rule logic in `packages/core/src/signals`, with their own edge cases and tests. They need the finance specialist, who was not consulted for this `data` ticket. Keeping them separate also keeps this diff within R7 and one review cycle.
-- **(b) Slice 1 of STK-032.** Add the guards to STK-032's acceptance criteria and areas (`finance`), and run a finance consult. This plan is then redone as two slices (slice 1 guards, slice 2 this backfill), and the ticket covers more than one spec feature.
-- **(c) Merge the backfill code now, with no ordering constraint.** Accept that MA rules may produce `ok` signals across stock-dividend drops until the guards land. This contradicts your note, so it is listed only for completeness.
-
-Why I did not pick a default:
-- (a) needs a ticket that only the orchestrator or Ming can create, plus a merge order that only Ming controls.
-- (b) adds unrequested finance scope (R7).
-- (c) breaks a "must".
-- Each option changes this plan or its preconditions.
+None. Q1 was answered by Ming (option (a), 2026-10-30), and STK-036 is merged.
 
 ## Split proposal
-None for the backfill itself: about 250–350 changed lines, one feature. If Ming chooses Q1 (b), the split is slice 1 = raw-price guards (core + signals wiring + tests, finance consult) and slice 2 = this plan, and this plan would cover slice 2 only after slice 1 is DONE.
+None. About 250–350 changed lines, one feature.
 
 ### Follow-ups (not in this diff)
-- Raw-price guards (Q1).
 - Holiday pre-flight: warn on, and do not record, a date that is missing for every symbol (consult Rec. 6, STK-015 review).
 - Verify the TCBS `bars-long-term` range cap and raw vs adjusted prices with a recorded fixture from Ming's machine, then update ADR 0001 and `backfillChunkTradingDays`.
+- Optional (Ming to decide): report beyond-limit day-over-day moves at ingest with `isBeyondDailyLimit`, as a log or warning only, in **both** the daily and backfill modes, so that validation stays identical. This replaces STK-036 follow-up (f).
+
+### Changes from the BLOCKED version
+- Status changed from BLOCKED to READY. Q1 is recorded as answered (a), and the Blocking question is removed.
+- The README note changed from "do not run before the guards are merged" to "suppressed MA rows after a backfill are expected (STK-036 reasons)".
+- The plan now states explicitly that STK-036's `isBeyondDailyLimit` is not reused (AC2, R7).
+- A2 and A5 are updated to point at STK-036. The guards follow-up is removed, and the ingest-reporting follow-up is added.
+- Files, tests and the approach for the backfill itself are unchanged.

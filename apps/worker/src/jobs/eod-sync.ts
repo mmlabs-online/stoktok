@@ -2,6 +2,7 @@ import {
   DEFAULT_PRICE_CUTOFF_MINUTES_VN,
   expectedPriceDate,
   normalizeSymbol,
+  planBackfillChunks,
   planPriceGaps,
   priceGapReadRange,
   subtractTradingDays,
@@ -39,6 +40,8 @@ export interface EodDeps {
   sleep: (ms: number) => Promise<void>;
   log: (message: string) => void;
   dryRun: boolean;
+  /** One-off backfill: window in trading days, fetched in chunks. Unset = daily sync. */
+  backfillTradingDays?: number;
 }
 
 export interface EodSummary {
@@ -62,6 +65,9 @@ export interface EodSummary {
   /** 0 on dry-run. */
   gapsRecorded: number;
   gapsResolved: number;
+  requestsPlanned: number;
+  requestsMade: number;
+  abortReason?: 'request_cap_exceeded';
   ledgerError?: string;
 }
 
@@ -70,7 +76,7 @@ export async function runEodSync(deps: EodDeps): Promise<EodSummary> {
   const { store, source, now, config, log } = deps;
   const holidays = await store.getHolidays();
   const targetDate = expectedPriceDate(now, holidays, DEFAULT_PRICE_CUTOFF_MINUTES_VN);
-  const fromDate = subtractTradingDays(targetDate, config.lookbackTradingDays - 1, holidays);
+  const fromDate = subtractTradingDays(targetDate, (deps.backfillTradingDays ?? config.lookbackTradingDays) - 1, holidays);
   const fetchedAt = now.toISOString();
 
   const raw = await store.listWatchlistSymbols();
@@ -86,6 +92,41 @@ export async function runEodSync(deps: EodDeps): Promise<EodSummary> {
   }
   const symbols = [...set].sort();
 
+  const backfill = deps.backfillTradingDays !== undefined;
+  const chunks = backfill
+    ? planBackfillChunks(fromDate, targetDate, config.backfillChunkTradingDays, holidays)
+    : [{ from: fromDate, to: targetDate }];
+  const requestsPlanned = symbols.length * chunks.length;
+  if (backfill) {
+    log(`backfill: ${symbols.length} symbols × ${chunks.length} chunks = ${requestsPlanned} requests`);
+    if (requestsPlanned > config.maxBackfillRequests) {
+      log(`error: backfill aborted, ${requestsPlanned} requests exceed the cap of ${config.maxBackfillRequests}`);
+      return {
+        ok: false,
+        dryRun: deps.dryRun,
+        source: source.name,
+        fetchedAt,
+        targetDate,
+        fromDate,
+        symbols,
+        barsFetched: 0,
+        rowsUpserted: 0,
+        rejected: 0,
+        rejectedBySymbol: {},
+        failedSymbols: [],
+        skippedSymbols: [],
+        symbolsWithoutBars: [],
+        missingDates: {},
+        gapsRecorded: 0,
+        gapsResolved: 0,
+        requestsPlanned,
+        requestsMade: 0,
+        abortReason: 'request_cap_exceeded',
+        ...(ledgerError !== undefined ? { ledgerError } : {}),
+      };
+    }
+  }
+
   const lastCloses = await store.getLatestCloses(symbols);
   const rows: PriceDailyInsert[] = [];
   const rejectedBySymbol: EodSummary['rejectedBySymbol'] = {};
@@ -95,42 +136,56 @@ export async function runEodSync(deps: EodDeps): Promise<EodSummary> {
   let barsFetched = 0;
   let rejected = 0;
   let consecutiveFailures = 0;
+  let requestsMade = 0;
 
-  for (const [i, symbol] of symbols.entries()) {
-    if (consecutiveFailures >= config.maxConsecutiveFailures) {
-      skippedSymbols.push(symbol);
-      continue;
-    }
-    if (i > 0) await deps.sleep(config.requestDelayMs);
-    try {
-      const ctx = lastCloses[symbol] !== undefined ? { lastClose: lastCloses[symbol] } : {};
-      const res = await source.fetchDaily(symbol, fromDate, targetDate, ctx);
-      consecutiveFailures = 0;
-      barsFetched += res.bars.length;
-      if (res.bars.length === 0) symbolsWithoutBars.push(symbol);
-      if (res.rejected.length > 0) {
-        rejected += res.rejected.length;
-        rejectedBySymbol[symbol] = res.rejected;
+  for (const symbol of symbols) {
+    let failed = false;
+    let unmade = false;
+    let symbolBars = 0;
+    // Newest chunk is checked against the stored latest close; each older chunk against the
+    // oldest accepted close of the chunk after it (same close_jump rule, correct reference).
+    let lastClose = lastCloses[symbol];
+    for (const chunk of chunks) {
+      if (consecutiveFailures >= config.maxConsecutiveFailures) {
+        unmade = true;
+        continue;
       }
-      for (const b of res.bars) {
-        rows.push({
-          symbol: b.symbol,
-          trade_date: b.tradeDate,
-          open: b.open,
-          high: b.high,
-          low: b.low,
-          close: b.close,
-          volume: b.volume,
-          foreign_net: b.foreignNet,
-          source: source.name,
-          fetched_at: fetchedAt,
-        });
+      if (requestsMade > 0) await deps.sleep(config.requestDelayMs);
+      requestsMade += 1;
+      try {
+        const res = await source.fetchDaily(symbol, chunk.from, chunk.to, lastClose !== undefined ? { lastClose } : {});
+        consecutiveFailures = 0;
+        barsFetched += res.bars.length;
+        symbolBars += res.bars.length;
+        if (res.rejected.length > 0) {
+          rejected += res.rejected.length;
+          rejectedBySymbol[symbol] = [...(rejectedBySymbol[symbol] ?? []), ...res.rejected];
+        }
+        const oldest = [...res.bars].sort((x, y) => x.tradeDate.localeCompare(y.tradeDate))[0];
+        if (oldest) lastClose = oldest.close;
+        for (const b of res.bars) {
+          rows.push({
+            symbol: b.symbol,
+            trade_date: b.tradeDate,
+            open: b.open,
+            high: b.high,
+            low: b.low,
+            close: b.close,
+            volume: b.volume,
+            foreign_net: b.foreignNet,
+            source: source.name,
+            fetched_at: fetchedAt,
+          });
+        }
+      } catch (e) {
+        consecutiveFailures += 1;
+        failed = true;
+        log(`error: ${symbol}: ${e instanceof Error ? e.message : 'unknown error'}`);
       }
-    } catch (e) {
-      consecutiveFailures += 1;
-      failedSymbols.push(symbol);
-      log(`error: ${symbol}: ${e instanceof Error ? e.message : 'unknown error'}`);
     }
+    if (failed) failedSymbols.push(symbol);
+    else if (unmade) skippedSymbols.push(symbol);
+    else if (symbolBars === 0) symbolsWithoutBars.push(symbol);
   }
 
   const rowsUpserted = deps.dryRun ? 0 : await store.upsertPricesDaily(rows);
@@ -182,6 +237,8 @@ export async function runEodSync(deps: EodDeps): Promise<EodSummary> {
     missingDates,
     gapsRecorded: deps.dryRun ? 0 : gapRows.length,
     gapsResolved: deps.dryRun ? 0 : resolveIds.length,
+    requestsPlanned,
+    requestsMade,
     ...(ledgerError !== undefined ? { ledgerError } : {}),
   };
 }
