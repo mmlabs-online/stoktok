@@ -1,4 +1,6 @@
+import type { CorporateAction } from '../ledger/types';
 import type { StoredClose } from '../market/price-board';
+import type { Exchange } from '../settings/market-rules';
 import type { SignalRules } from './config';
 
 /** Shared shapes for the medium-term signal rules (STK-015). Pure types and constants, no I/O. */
@@ -31,13 +33,15 @@ export const DATA_REASONS = [
   'sector_missing',
 ] as const;
 
-/** Rule reasons: the data is fresh but the rule cannot give a meaningful value. */
+/** Rule reasons: the data is fresh but the rule cannot give a meaningful value (incl. raw-price guards for the MA rules). */
 export const RULE_REASONS = [
   'eps_basis_unverified',
   'eps_non_positive',
   'bvps_non_positive',
   'peers_insufficient',
   'value_out_of_range',
+  'corporate_action_in_window',
+  'price_jump_beyond_limit',
 ] as const;
 
 export type DataReason = (typeof DATA_REASONS)[number];
@@ -86,6 +90,9 @@ export interface SymbolData {
   closes: StoredClose[];
   financials: StoredFinancials[];
   sector: SectorInfo;
+  /** Null when unknown; the guard then uses the widest configured limit. */
+  exchange: Exchange | null;
+  corporateActions: readonly CorporateAction[];
 }
 
 /** Inputs every rule shares. The caller supplies the date and the holidays; core never reads the clock. */
@@ -98,6 +105,8 @@ export interface RuleContext {
   financialsGaps: readonly GapRef[];
   /** EPS basis declared per data source name. A missing source is 'unverified'. */
   epsBasisBySource: Readonly<Record<string, EpsBasis>>;
+  /** Daily price limit per exchange, from market configuration (R5). */
+  priceLimitPpm: Readonly<Record<Exchange, number>>;
 }
 
 /** One cited stored input (R9): `ref` is an ID, source and fetchedAt are its provenance (R4). */

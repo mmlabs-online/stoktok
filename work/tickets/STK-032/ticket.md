@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | BLOCKED |
 | Priority | P2 |
 | Areas | data |
 | Attempts | 0 |
@@ -23,4 +23,5 @@ docs/spec-v1.md §4.3, §4.4. CLAUDE.md R2, R4, R5. STK-005 ADR 0001 (TCBS publi
 
 ## Notes / answers from Ming
 - From STK-015 planning: raw-price guards (stock-dividend or out-of-limit jumps inside the MA window) must land with or before this backfill, because the MA rules start producing real signals once history exists.
-- Depends on: STK-005. Unblocks the MA rules in STK-015, which stay suppressed with `insufficient_history` until this runs.
+- **Answer to plan Q1 (Ming, 2026-10-30): option (a).** Raw-price guards go in a separate ticket, STK-036. STK-032 is merged after STK-036, and the backfill is not run before STK-036 lands.
+- Depends on: STK-005, STK-036. Unblocks the MA rules in STK-015, which stay suppressed with `insufficient_history` until this runs.

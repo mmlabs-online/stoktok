@@ -16,6 +16,16 @@ describe('corporate actions repo', () => {
     expect(out[1]).toMatchObject({ type: 'stock_dividend', ratio: { held: 100, received: 20 } });
   });
 
+  test('symbols filter uses .in; an empty list returns [] without a request', async () => {
+    const f = createFake();
+    f.respond({ data: [stock] });
+    await listCorporateActions(f.db, { symbols: ['FPT', 'VNM'] });
+    expect(f.methods('in')[0]?.args).toEqual(['symbol', ['FPT', 'VNM']]);
+    const g = createFake();
+    expect(await listCorporateActions(g.db, { symbols: [] })).toEqual([]);
+    expect(g.methods('select')).toHaveLength(0);
+  });
+
   test('create generates a uuid id and passes recordDate through', async () => {
     const f = createFake();
     f.respond({ data: cash });

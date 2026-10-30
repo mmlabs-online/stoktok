@@ -6,11 +6,13 @@ import { DataError, fetchAll, mapRow, unwrap, unwrapFound } from '../errors';
 
 const COLS = 'id,symbol,type,ex_date,record_date,pay_date,listing_date,amount_per_share,ratio_num,ratio_den';
 
-export async function listCorporateActions(db: Db, opts: { symbol?: string } = {}): Promise<CorporateAction[]> {
+export async function listCorporateActions(db: Db, opts: { symbol?: string; symbols?: readonly string[] } = {}): Promise<CorporateAction[]> {
+  if (opts.symbols?.length === 0) return [];
   const ctx = { table: 'corporate_actions', op: 'list' };
   const rows = await fetchAll<CorporateActionRow>((from, to) => {
     let q = db.from('corporate_actions').select(COLS);
     if (opts.symbol !== undefined) q = q.eq('symbol', opts.symbol);
+    if (opts.symbols !== undefined) q = q.in('symbol', [...opts.symbols]);
     return q
       .order('ex_date', { ascending: true })
       .order('symbol', { ascending: true })

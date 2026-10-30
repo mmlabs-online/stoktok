@@ -155,6 +155,8 @@ export type { SignalRules, ValuationRuleParams } from './signals/config';
 export { evaluateMediumSignals } from './signals/evaluate';
 export type { EvaluateInput } from './signals/evaluate';
 export { resolveSignalDate } from './signals/inputs';
+export { checkRawPriceWindow, isBeyondDailyLimit, resolveLimitPpm } from './signals/raw-price-guard';
+export type { PriceLimitPpm, RawPriceGuardResult, RawPriceJump } from './signals/raw-price-guard';
 export { DATA_REASONS, REASON_ORDER, RULE_IDS, RULE_REASONS, RULE_VERSION, SIGNAL_HORIZON, maRuleId } from './signals/types';
 export type {
   EpsBasis,

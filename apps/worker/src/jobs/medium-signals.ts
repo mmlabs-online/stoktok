@@ -9,7 +9,7 @@ import {
   resolveSignalDate,
   vnDateOf,
 } from '@stoktok/core';
-import type { EpsBasis, Result, SectorInfo, SignalRules, StoredClose } from '@stoktok/core';
+import type { CorporateAction, EpsBasis, Exchange, MarketRules, Result, SectorInfo, SignalRules, StoredClose } from '@stoktok/core';
 import type { FinancialRecord, OpenGapRecord, SignalInsert } from '@stoktok/db';
 import { PRICES_GAP_TYPE } from './eod-sync';
 import { FINANCIALS_GAP_TYPE } from './financials-sync';
@@ -28,6 +28,10 @@ export interface SignalsStore {
   listOpenGaps(dataType: string, symbols: readonly string[]): Promise<OpenGapRecord[]>;
   /** Open market-wide gaps (symbol null). */
   listOpenMarketGaps(dataType: string): Promise<OpenGapRecord[]>;
+  getMarketRules(): Promise<MarketRules>;
+  /** Symbols without a row are omitted; null means unknown. */
+  getSymbolExchanges(symbols: readonly string[]): Promise<Record<string, Exchange | null>>;
+  listCorporateActions(symbols: readonly string[]): Promise<CorporateAction[]>;
   upsertSignals(rows: SignalInsert[]): Promise<number>;
 }
 
@@ -92,6 +96,10 @@ export async function runMediumSignals(deps: SignalsDeps): Promise<SignalsSummar
     ...(await store.listOpenMarketGaps(FINANCIALS_GAP_TYPE)),
   ];
 
+  const marketRules = await store.getMarketRules();
+  const exchanges = await store.getSymbolExchanges(symbols);
+  const corporateActions = await store.listCorporateActions(symbols);
+
   const results = evaluateMediumSignals({
     signalDate,
     holidays,
@@ -104,6 +112,9 @@ export async function runMediumSignals(deps: SignalsDeps): Promise<SignalsSummar
     priceGaps,
     financialsGaps,
     epsBasisBySource: deps.epsBasisBySource,
+    marketRules,
+    exchanges,
+    corporateActions,
   });
 
   const computedAt = now.toISOString();
