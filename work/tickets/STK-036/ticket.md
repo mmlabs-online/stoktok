@@ -7,7 +7,7 @@
 | Areas | finance, data |
 | Attempts | 1 |
 | Created | 2026-10-30 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/19 |
 
 ## Goal
 Moving-average signal rules (STK-015) must not produce `ok` signals from raw prices distorted by a corporate action or an out-of-limit price jump inside the MA window. A pure `packages/core` guard flags these windows so the MA rules suppress with a reason.
