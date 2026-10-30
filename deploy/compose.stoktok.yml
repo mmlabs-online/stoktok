@@ -1,0 +1,43 @@
+# STK-018: stoktok services, ready to copy into the shared mmlabs deploy repo.
+# Adapt the network name and env mechanism to the deploy repo's conventions
+# (names stay the same). Never use :latest; one tag variable for both images.
+# Secrets come from the deploy repo's env handling, never from this repo (R3).
+
+services:
+  stoktok-web:
+    image: mingming21400/stoktok-web:${STOKTOK_TAG:?set STOKTOK_TAG to a commit SHA}
+    container_name: stoktok-web
+    restart: unless-stopped
+    # Nothing is published on the host: the origin is reachable only through cloudflared on the shared network.
+    expose:
+      - "3000"
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:?}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?}
+      TZ: Asia/Ho_Chi_Minh # log readability only; core uses an explicit zone
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks:
+      - tunnel
+
+  # One-shot (ADR 0003): started by deploy/run-job.sh from cron, never by `up -d`.
+  stoktok-worker:
+    image: mingming21400/stoktok-worker:${STOKTOK_TAG:?set STOKTOK_TAG to a commit SHA}
+    restart: "no"
+    profiles:
+      - jobs
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:?}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?}
+      TZ: Asia/Ho_Chi_Minh
+    networks:
+      - tunnel
+
+networks:
+  tunnel:
+    external: true
+    # PLACEHOLDER: confirm the cloudflared network name in the deploy repo.
+    name: ${STOKTOK_TUNNEL_NETWORK:-mmlabs}

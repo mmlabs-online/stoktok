@@ -33,4 +33,4 @@ docker build -f apps/worker/Dockerfile -t stoktok-worker .
 docker run --rm stoktok-worker            # prints usage, exits 2
 docker run --rm --env-file apps/worker/.env.local stoktok-worker eod-prices --dry-run
 ```
-The worker is one-shot: one container run per job. Do not give it `restart: always`. Scheduling is decided in STK-018.
+The worker is one-shot: one container run per job. Do not give it `restart: always`. Scheduling and deployment: see `docs/deploy.md` and `docs/adr/0003-deploy-and-scheduling.md`.

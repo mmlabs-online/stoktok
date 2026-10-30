@@ -2,10 +2,11 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P2 |
 | Areas | architecture, security |
-| Attempts | 0 |
+| Attempts | 2 |
+| PR | https://github.com/mmlabs-online/stoktok/pull/18 |
 | Created | 2026-10-22 |
 
 ## Goal
