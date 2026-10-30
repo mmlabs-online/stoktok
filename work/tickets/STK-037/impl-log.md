@@ -45,3 +45,27 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No: the pieces are coupled; the deleted files are replaced by the drafts.
 - Diff size: not committed (orchestrator commits).
+
+## Attempt 2 (REWORK)
+
+### Files touched
+| File | Required because |
+|---|---|
+| `.github/workflows/release.yml` | Issue 1: removed `git fetch --no-tags origin main` (no credentials with persist-credentials false; `fetch-depth: 0` already provides `origin/main`) |
+| `docs/deploy.md` | Issue 2: `sudo -u gh-runner -H` on docker/run-job/docker kill/logs commands, `sudo install -d -o gh-runner` for logs and config dirs, env file created with `-o gh-runner`. Security blocker: new step 9 hard gate (rotate tunnel token, move out of git into a host env file), Access JWT check ("Protect with Access") in the public hostname step; steps renumbered 9-13 |
+
+### Tests added / changed
+None (docs and workflow only).
+
+### Checks
+- typecheck: pass. lint: pass. test: pass (core 429, db 110 + 1 todo, worker 94, web 202).
+- `pnpm check:service-key`: OK. `pnpm check:deploy-env`: OK.
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+- Deployment-repo change itself (rotate tunnel token, move out of git) is outside this diff.
+
+### Scope self-check
+Only the listed review issues were fixed. Not committed (orchestrator commits).

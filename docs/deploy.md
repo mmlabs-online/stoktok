@@ -27,8 +27,7 @@ In the stoktok repo (Settings, Secrets and variables, Actions):
 
 ## One-time setup
 1. Ming merges the deployment-repo setup PR (drafts in `deploy/deployment-repo/`, plus the CODEOWNERS line). Its deploy run skips: there is no `release.env` yet.
-2. Create the secrets file: `install -d -m 700 /Users/gh-runner/.config/stoktok`, then a mode 600 file owned by `gh-runner` with `SUPABASE_URL=` and `SUPABASE_SERVICE_ROLE_KEY=`.
-3. `install -d /Users/gh-runner/stoktok/logs`.
+2. Create the secrets file: `sudo install -d -o gh-runner -m 700 /Users/gh-runner/.config/stoktok`, then a mode 600 file owned by `gh-runner` (create it with `sudo install -o gh-runner -m 600`) with `SUPABASE_URL=` and `SUPABASE_SERVICE_ROLE_KEY=`.3. `sudo install -d -o gh-runner -m 755 /Users/gh-runner/stoktok/logs`.
 4. Install the scheduler: `sudo cp apps/stoktok/launchd/online.mmlabs.stoktok.jobs.plist /Library/LaunchDaemons/`, `sudo chown root:wheel` and `sudo chmod 644` on it, then `sudo launchctl bootstrap system /Library/LaunchDaemons/online.mmlabs.stoktok.jobs.plist`. Verify with `sudo launchctl print system/online.mmlabs.stoktok.jobs`.
 5. Optional log rotation: a line for `/Users/gh-runner/stoktok/logs/*.log` in `/etc/newsyslog.d/stoktok.conf`.
 
@@ -39,13 +38,14 @@ In the stoktok repo (Settings, Secrets and variables, Actions):
 4. Review the release PR: only `apps/stoktok/release.env`, both digests.
 5. Merge it.
 6. Read the `deploy-stoktok` comment on the PR.
-7. Verify: `docker compose -p stoktok ps` shows web healthy, and `docker compose -p stoktok exec stoktok-web node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>r.text()).then(console.log)"` shows `v0.1.0`.
-8. Run `/Users/gh-runner/stoktok/current/run-job.sh eod-prices --dry-run`. The health check does not test the DB secrets; this run does.
-9. **Cloudflare Access application first** (Zero Trust, Access, Applications, Self-hosted): application domain `<APP_HOSTNAME>`; one Allow policy with Include, Emails, Ming's email only; no bypass rules; note the session duration. Check in the dashboard that it is saved and the policy is attached.
-10. **Then add the public hostname** (Networks, Tunnels, the mmlabs tunnel, Public hostname): `<APP_HOSTNAME>` to service `http://stoktok-web:3000`.
-    **Do not reorder steps 9 and 10.** A hostname without Access exposes the portfolio, because the app has no auth.
-11. Verify: in a private window `https://<APP_HOSTNAME>/` shows the Access login, not the app. After logging in with Ming's email the dashboard loads. Submit one form (server actions check Origin/Host); if it fails, record a follow-up. `curl -sI https://<APP_HOSTNAME>/healthz` without a session gets the Access redirect (302/403), not 200.
-12. To take it offline again: delete the public hostname first, then the Access application if wanted. Never the reverse.
+7. Verify (OrbStack runs per user, so run docker as `gh-runner`): `sudo -u gh-runner -H docker compose -p stoktok ps` shows web healthy, and `sudo -u gh-runner -H docker compose -p stoktok exec stoktok-web node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>r.text()).then(console.log)"` shows `v0.1.0`.
+8. Run `sudo -u gh-runner -H /Users/gh-runner/stoktok/current/run-job.sh eod-prices --dry-run`. The health check does not test the DB secrets; this run does.
+9. **HARD GATE: tunnel token.** `mmlabs-online/deployment/proxy/compose.yml` commits the cloudflared tunnel token in git. Before any public hostname is added, rotate the tunnel token in Cloudflare and move it out of git into a host env file (change made in the deployment repo, not this one). Do not continue until this is done and confirmed.
+10. **Cloudflare Access application** (Zero Trust, Access, Applications, Self-hosted): application domain `<APP_HOSTNAME>`; one Allow policy with Include, Emails, Ming's email only; no bypass rules; note the session duration. Check in the dashboard that it is saved and the policy is attached.
+11. **Then add the public hostname** (Networks, Tunnels, the mmlabs tunnel, Public hostname): `<APP_HOSTNAME>` to service `http://stoktok-web:3000`. Turn on the hostname's Access JWT check ("Protect with Access") and select the application from step 10.
+    **Do not reorder steps 9, 10 and 11.** A hostname without Access exposes the portfolio, because the app has no auth.
+12. Verify: in a private window `https://<APP_HOSTNAME>/` shows the Access login, not the app. After logging in with Ming's email the dashboard loads. Submit one form (server actions check Origin/Host); if it fails, record a follow-up. `curl -sI https://<APP_HOSTNAME>/healthz` without a session gets the Access redirect (302/403), not 200.
+13. To take it offline again: delete the public hostname first, then the Access application if wanted. Never the reverse.
 
 ## Roll back
 - Automatic: if the new web image is not healthy within 120 s, `deploy-stoktok` restores the previous `apps/stoktok/`, redeploys it, republishes the scheduler directory and pushes the revert to deployment `main`. The run stays red.
@@ -54,7 +54,7 @@ In the stoktok repo (Settings, Secrets and variables, Actions):
 
 ## Logs
 ```
-docker compose -p stoktok logs -f stoktok-web
+sudo -u gh-runner -H docker compose -p stoktok logs -f stoktok-web
 tail -f /Users/gh-runner/stoktok/logs/eod-prices.log     # also financials.log, signals.log, schedule.log, launchd.log
 ```
 `run --rm` discards the container's logs, which is why `run-job.sh` appends to host files.
@@ -79,8 +79,8 @@ Names only. Values live in the host env file, never in this repo (R3). Reserved 
 Spec section 7: the worker tolerates restarts. Automated coverage (`pnpm test`): `eod-sync.test.ts` (re-run gives the same rows except `fetched_at`, no new gaps), `financials-sync.test.ts` (same), `medium-signals.test.ts` (two runs identical except `computed_at`).
 
 Manual check on the Mac:
-1. Run each job twice (`run-job.sh <job>`); row counts of `prices_daily`, `financials`, `signals`, `data_gaps` must not change on the second run.
-2. Start `eod-prices`, `docker kill` the container mid-run, rerun, and confirm the counts match a clean run.
+1. Run each job twice (`sudo -u gh-runner -H /Users/gh-runner/stoktok/current/run-job.sh <job>`); row counts of `prices_daily`, `financials`, `signals`, `data_gaps` must not change on the second run.
+2. Start `eod-prices`, `sudo -u gh-runner -H docker kill` the container mid-run, rerun, and confirm the counts match a clean run.
 3. Resume is window-based: EOD recomputes the last 20 trading days, financials the last 12 quarters, with idempotent upserts. Outages longer than that need the STK-032 backfill.
 4. Overlap: `run-job.sh` takes one shared `mkdir` lock (waits up to 30 min, clears a stale lock), so jobs never run concurrently; a timeout exits 1. launchd never runs one job twice at once, and slots missed during sleep coalesce into one run on wake.
 
