@@ -33,6 +33,8 @@ export type EntryErrorCode =
   | 'OUT_OF_RANGE'
   | 'WHOLE_NUMBER_INVALID'
   | 'TREATMENT_INVALID'
+  | 'MIN_CONSECUTIVE_ABOVE_COMPARISONS'
+  | 'MA_LONG_NOT_ABOVE_SHORT'
   | 'EXCHANGE_INVALID'
   | 'WATCHLIST_DUPLICATE'
   | 'SAVE_FAILED';
@@ -112,6 +114,10 @@ export function entryMessage(code: EntryErrorCode, params: EntryParams = {}): st
       return 'Nhập số nguyên, ví dụ 100.';
     case 'TREATMENT_INVALID':
       return 'Chọn cách xử lý cổ tức tiền mặt.';
+    case 'MIN_CONSECUTIVE_ABOVE_COMPARISONS':
+      return 'Không được lớn hơn số quý so sánh.';
+    case 'MA_LONG_NOT_ABOVE_SHORT':
+      return 'MA dài phải lớn hơn MA ngắn.';
     case 'EXCHANGE_INVALID':
       return 'Chọn sàn HOSE, HNX, UPCoM hoặc để trống.';
     case 'WATCHLIST_DUPLICATE':

@@ -6,6 +6,7 @@ vi.mock('../db', async (importActual) => ({
   saveAppSettings: vi.fn(),
 }));
 
+import { DEFAULT_SIGNAL_RULES, signalRulesToFormValues } from '@stoktok/core';
 import { DataError, saveAppSettings } from '../db';
 import type { Db } from '../db';
 import { handleSaveSettings } from './handlers';
@@ -28,6 +29,7 @@ const form = (o: Record<string, string> = {}) =>
     lotSize: '100',
     concentrationThreshold: '25',
     cashDividendTreatment: 'income',
+    ...signalRulesToFormValues(DEFAULT_SIGNAL_RULES),
     ...o,
   });
 
@@ -44,7 +46,25 @@ describe('handleSaveSettings', () => {
       priceLimitPpm: { HOSE: 70000, HNX: 100000, UPCOM: 150000 },
       concentrationThresholdPpm: 250000,
       cashDividendTreatment: 'income',
+      signalRules: DEFAULT_SIGNAL_RULES,
     });
+  });
+
+  it('unchecked toggle saves enabled:false', async () => {
+    const f = form();
+    f.delete('peEnabled');
+    await handleSaveSettings(db, f);
+    const saved = vi.mocked(saveAppSettings).mock.calls[0]?.[1];
+    expect(saved?.signalRules.peVsSector.enabled).toBe(false);
+    expect(saved?.signalRules.pbVsSector.enabled).toBe(true);
+  });
+
+  it('invalid signal field returns Vietnamese error and does not save', async () => {
+    const r = await handleSaveSettings(db, form({ maShortDays: '50', maLongDays: '50' }));
+    if (r.ok) throw new Error('expected failure');
+    expect(r.fieldErrors.maLongDays?.message).toBe('MA dài phải lớn hơn MA ngắn.');
+    expect(r.values).toMatchObject({ maShortDays: '50', maLongDays: '50' });
+    expect(saveAppSettings).not.toHaveBeenCalled();
   });
 
   it('invalid input returns Vietnamese fieldErrors and echoes raw values', async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_MARKET_SETTINGS } from '../ledger/settings';
 import { DEFAULT_MARKET_RULES } from '../settings/market-rules';
+import { DEFAULT_SIGNAL_RULES } from '../signals/config';
 import type { SettingsInput } from '../settings/validate-settings';
 import type { SettingsFullRow } from './rows';
 import {
@@ -213,7 +214,13 @@ describe('appSettingsFromRow', () => {
       feeRatePpm: null,
       concentrationThresholdPpm: null,
       marketRules: DEFAULT_MARKET_RULES,
+      signalRules: DEFAULT_SIGNAL_RULES,
     });
+  });
+  it('null row gives DEFAULT_SIGNAL_RULES and a stored row is parsed', () => {
+    expect(appSettingsFromRow(null).signalRules).toEqual(DEFAULT_SIGNAL_RULES);
+    const rc = { signals: { medium: { freshness: { financialsMaxFetchAgeDays: 9 } } } };
+    expect(appSettingsFromRow({ ...full, rule_configs: rc }).signalRules.freshness.financialsMaxFetchAgeDays).toBe(9);
   });
   it('maps concentration and rule_configs and keeps a null fee', () => {
     expect(appSettingsFromRow(full)).toMatchObject({
@@ -237,6 +244,7 @@ describe('settingsInputToRow', () => {
     priceLimitPpm: { HOSE: 70000, HNX: 100000, UPCOM: 150000 },
     concentrationThresholdPpm: null,
     cashDividendTreatment: 'reduceCost',
+    signalRules: DEFAULT_SIGNAL_RULES,
   };
   it('keeps withholding, holidays, cost method and other rule_configs keys from the existing row', () => {
     const existing: SettingsFullRow = {
@@ -260,6 +268,21 @@ describe('settingsInputToRow', () => {
       fee_rate_ppm: null,
     });
     expect(row.rule_configs).toMatchObject({ signals: { a: 1 }, market: { lotSize: 10 } });
+  });
+  it('writes market and signals.medium and keeps other keys', () => {
+    const rules = { ...DEFAULT_SIGNAL_RULES, freshness: { financialsMaxFetchAgeDays: 30 } };
+    const existing: SettingsFullRow = {
+      id: 1, fee_rate_ppm: null, sell_tax_rate_ppm: 1000, dividend_withholding_rate_ppm: 50000, settlement_days: 2,
+      holidays: [], cash_dividend_treatment: 'reduceCost', cost_method: 'WAC', concentration_threshold_ppm: null,
+      rule_configs: { other: 1, signals: { long: { x: 1 } } },
+    };
+    const row = settingsInputToRow({ ...input, signalRules: rules }, existing);
+    expect(row.rule_configs).toMatchObject({
+      other: 1,
+      market: { lotSize: 10 },
+      signals: { long: { x: 1 }, medium: { freshness: { financialsMaxFetchAgeDays: 30 } } },
+    });
+    expect(appSettingsFromRow(row).signalRules).toEqual(rules);
   });
   it('without an existing row uses the defaults', () => {
     expect(settingsInputToRow(input, null)).toMatchObject({

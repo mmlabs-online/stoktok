@@ -3,6 +3,8 @@ import { isValidDate } from '../calendar';
 import type { CorporateAction, LedgerSettings, Transaction } from '../ledger/types';
 import { DEFAULT_MARKET_SETTINGS } from '../ledger/settings';
 import { DEFAULT_MARKET_RULES, mergeRuleConfigs, parseMarketRules } from '../settings/market-rules';
+import { DEFAULT_SIGNAL_RULES, parseSignalRules } from '../signals/config';
+import { mergeSignalRules } from '../settings/signal-rules-form';
 import type { AppSettings, SettingsInput } from '../settings/validate-settings';
 import type { CorporateActionRow, SettingsFullRow, SettingsRow, TransactionInsert, TransactionRow } from './rows';
 
@@ -187,6 +189,7 @@ export function appSettingsFromRow(row: SettingsFullRow | null): AppSettings {
       feeRatePpm: null,
       concentrationThresholdPpm: null,
       marketRules: DEFAULT_MARKET_RULES,
+      signalRules: DEFAULT_SIGNAL_RULES,
     };
   }
   const t = 'settings';
@@ -205,6 +208,7 @@ export function appSettingsFromRow(row: SettingsFullRow | null): AppSettings {
     concentrationThresholdPpm:
       row.concentration_threshold_ppm === null ? null : toSafeInt(row.concentration_threshold_ppm, 'concentration_threshold_ppm', t),
     marketRules: parseMarketRules(row.rule_configs),
+    signalRules: parseSignalRules(row.rule_configs),
   };
 }
 
@@ -224,6 +228,9 @@ export function settingsInputToRow(input: SettingsInput, existing: SettingsFullR
     cash_dividend_treatment: input.cashDividendTreatment,
     cost_method: existing?.cost_method ?? DEFAULT_MARKET_SETTINGS.costMethod,
     concentration_threshold_ppm: input.concentrationThresholdPpm,
-    rule_configs: mergeRuleConfigs(existing?.rule_configs, { lotSize: input.lotSize, priceLimitPpm: input.priceLimitPpm }),
+    rule_configs: mergeSignalRules(
+      mergeRuleConfigs(existing?.rule_configs, { lotSize: input.lotSize, priceLimitPpm: input.priceLimitPpm }),
+      input.signalRules,
+    ),
   };
 }

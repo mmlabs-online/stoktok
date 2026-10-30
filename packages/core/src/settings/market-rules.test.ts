@@ -34,6 +34,10 @@ describe('mergeRuleConfigs', () => {
       market: { extra: true, lotSize: 10, priceLimitPpm: { HOSE: 60000, HNX: 90000, UPCOM: 140000, XYZ: 5 } },
     });
   });
+  it('preserves signals', () => {
+    const signals = { medium: { priceVsMa: { shortDays: 20 } } };
+    expect(mergeRuleConfigs({ signals }, rules)).toMatchObject({ signals });
+  });
   it('wraps a non-object existing value', () => {
     expect(mergeRuleConfigs(null, rules)).toEqual({ market: rules });
     expect(mergeRuleConfigs([1], rules)).toEqual({ market: rules });
