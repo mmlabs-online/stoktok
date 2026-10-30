@@ -44,3 +44,42 @@ No violations found. R3: secrets only in the host env_file, the compose interpol
 
 ### Security blockers (added by orchestrator from security-review.md, attempt 1)
 - 🔴 **Tunnel token gate missing from the runbook.** `mmlabs-online/deployment/proxy/compose.yml:11` commits the cloudflared tunnel token, and this release makes stoktok public. In-ticket fix (docs only, R7): add a hard gate in `docs/deploy.md` before the public-hostname step (step 10) — rotate the tunnel token and move it out of git into a host env file — and in step 10 turn on the hostname's Access JWT check ("Protect with Access"). The deployment-repo change itself is not part of this diff.
+
+## Attempt 2 — 2026-10-30
+Verdict: PASS
+
+### Checks (run by reviewer)
+- typecheck: pass (exit 0)
+- lint: pass (exit 0)
+- test: pass. core 429, db 110 + 1 todo, worker 94, web 202 (matches impl-log)
+- `pnpm check:service-key`: "OK: no service key material in client bundle". `pnpm check:deploy-env`: "OK: deploy env lists consistent"
+- Attempt-2 commit `fba2059` touches only `.github/workflows/release.yml`, `docs/deploy.md` and ticket/backlog files.
+
+### Previous issues
+- Issue 1 (🔴 release guard fetch): fixed. `release.yml:48` `git fetch --no-tags origin main` is removed. Checkout keeps `fetch-depth: 0` and `persist-credentials: false` (`release.yml:33-36`), so `origin/main` exists for `merge-base --is-ancestor` (`release.yml:48`). The token is not added back to git config.
+- Issue 2 (🟡 runbook user): fixed. `docs/deploy.md` step 2 uses `sudo install -d -o gh-runner -m 700` and an env file owned by `gh-runner`, mode 600. Setup step 3 uses `sudo install -d -o gh-runner -m 755`. Cut steps 7 and 8, the Logs block and both restart-safety commands use `sudo -u gh-runner -H`. A grep for `docker`/`run-job` lines without the prefix finds only prose.
+- Security blocker (🔴 tunnel token gate): fixed in docs. `docs/deploy.md:43` (step 9) is a HARD GATE: rotate the tunnel token and move it out of git into a host env file before any hostname, with "Do not continue until this is done". Step 11 (`:45`) turns on "Protect with Access" bound to the step-10 application. `:46` says not to reorder steps 9–11. The teardown order is kept (step 13). The deployment-repo change itself stays out of this diff, as the orchestrator asked.
+
+### Acceptance criteria
+- [x] AC1 release.yml: the tag trigger, guards (now runnable on a private repo), build and push of both images tagged with the version, digest verify, and a release PR that changes only `apps/stoktok/release.env`. Evidence: `release.yml`, with the attempt-1 review details unchanged apart from the fix above.
+- [x] AC2 `/healthz`: `apps/web/app/healthz/route.ts`, plus `apps/web/test/healthz.test.ts` (passes as part of web's 202).
+- [x] AC3 conventions: unchanged since attempt 1 (accepted then).
+- [x] AC4 deployment-repo drafts: unchanged since attempt 1 (accepted then). Opening the PR is the orchestrator's step after DONE.
+- [x] AC5 runbook: secrets, tag push, release PR, merge, rollback, then the token gate, the Access app, the hostname with the Access JWT check, and verification. No hostname is written (`<APP_HOSTNAME>` placeholder only) and no auth code is added.
+- [x] AC6 checks: all green (above).
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found. R3: unchanged, and secrets stay in the host env file only. R6 is suspended and no auth code was added. R7: attempt 2 changes only the files that the review issues name.
+
+### Nits (do not block)
+- `docs/deploy.md:30`: setup steps 2 and 3 run together on one line (`…SUPABASE_SERVICE_ROLE_KEY=`.3. `sudo install -d …`). The command is still there, but rendered Markdown shows it inside step 2 and renumbers the later steps. Put a newline before `3.`.
+- `docs/deploy.md:30`: `sudo install -o gh-runner -m 600` needs a source and a target. Example: `sudo install -o gh-runner -m 600 /dev/null /Users/gh-runner/.config/stoktok/stoktok.env`.
+- Attempt-1 nits still apply (check-image.sh mode, the financials coalesce note, the publish-step gap).
+
+### Follow-ups (out of scope)
+- Optional security-review items: the `if: github.ref == 'refs/heads/main'` guard on the deploy-stoktok job, SHA-pinned actions, the tag ruleset and `release` environment, deployment `main` protection, and moving the job lock out of `/tmp`.
+- The deployment-repo PR for the tunnel token rotation and moving it out of git. Step 9 of the runbook gates on it.
+- The attempt-1 follow-ups still apply.
