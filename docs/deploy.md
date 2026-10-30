@@ -3,7 +3,7 @@
 Decisions: `docs/adr/0003-deploy-and-scheduling.md`. Drafts for the deployment repo: `deploy/deployment-repo/` (see its README). Only Ming merges.
 
 ## Flow
-Tag `vX.Y.Z` on main, then `release.yml` builds and pushes `stoktok-web` and `stoktok-worker`, then it opens PR `release/stoktok-vX.Y.Z` on `mmlabs-online/deployment` (only `apps/stoktok/release.env`, both images pinned by digest). Merging it runs `deploy-stoktok` on `macbook-runner`: pull, `up -d --wait` on `/healthz`, then publish compose, `release.env` and the job scripts to `/Users/gh-runner/stoktok/current`. A launchd job reads that directory and runs the worker jobs.
+Every push to branch `release` (its commit must already be on main) runs `release.yml`: it takes the next version (last `vX.Y.Z` tag, patch +1; `v0.1.0` if none), creates and pushes that git tag, builds and pushes `stoktok-web` and `stoktok-worker`, then it opens PR `release/stoktok-vX.Y.Z` on `mmlabs-online/deployment` (only `apps/stoktok/release.env`, both images pinned by digest). Merging it runs `deploy-stoktok` on `macbook-runner`: pull, `up -d --wait` on `/healthz`, then publish compose, `release.env` and the job scripts to `/Users/gh-runner/stoktok/current`. A launchd job reads that directory and runs the worker jobs.
 
 ## Placeholders and gates
 | Placeholder | Value | Status |
@@ -31,10 +31,10 @@ In the stoktok repo (Settings, Secrets and variables, Actions):
 4. Install the scheduler: `sudo cp apps/stoktok/launchd/online.mmlabs.stoktok.jobs.plist /Library/LaunchDaemons/`, `sudo chown root:wheel` and `sudo chmod 644` on it, then `sudo launchctl bootstrap system /Library/LaunchDaemons/online.mmlabs.stoktok.jobs.plist`. Verify with `sudo launchctl print system/online.mmlabs.stoktok.jobs`.
 5. Optional log rotation: a line for `/Users/gh-runner/stoktok/logs/*.log` in `/etc/newsyslog.d/stoktok.conf`.
 
-## Cut v0.1.0
+## Cut a release (first one is v0.1.0)
 1. Apply pending migrations by hand. Every migration must work with the previous image.
-2. `git switch main && git pull && git tag v0.1.0 && git push origin v0.1.0`.
-3. Watch the `release` run. It fails before any PR if the tag is not on main, a secret is missing, or an image check fails.
+2. Promote main: `git fetch origin && git push origin origin/main:refs/heads/release` (fast-forward `release` to main; never commit to `release` directly). The workflow picks the version and pushes the tag; do not tag by hand, except to bump minor/major (tag `vX.Y.0` on an already released commit, then the next push continues from it).
+3. Watch the `release` run. It fails before any PR if the commit is not on main, the commit is already released, a secret is missing, or an image check fails. A failed run still consumes its version tag; the next push takes the next patch.
 4. Review the release PR: only `apps/stoktok/release.env`, both digests.
 5. Merge it.
 6. Read the `deploy-stoktok` comment on the PR.
