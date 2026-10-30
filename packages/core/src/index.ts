@@ -14,7 +14,29 @@ export {
   vnMinutesOf,
 } from './calendar';
 export { planBackfillChunks } from './market/backfill';
-export { planPriceGaps, priceGapReadRange } from './market/price-gaps';
+export { PRICES_GAP_TYPE, planPriceGaps, priceGapReadRange } from './market/price-gaps';
+export {
+  CHART_GEOMETRY,
+  CHART_RANGES,
+  DEFAULT_CHART_RANGE,
+  buildChartSeries,
+  chartWindow,
+  subtractCalendarMonths,
+} from './market/chart-series';
+export type {
+  ChartBand,
+  ChartDot,
+  ChartRange,
+  ChartSegment,
+  ChartSeries,
+  ChartSlot,
+  ChartStats,
+  ChartTick,
+  ChartVolumeBar,
+  ChartWindow,
+  ChartXLabel,
+  SlotKind,
+} from './market/chart-series';
 export type { PriceGapPlan } from './market/price-gaps';
 export {
   DEFAULT_FINANCIALS_PUBLISH_LAG_DAYS,

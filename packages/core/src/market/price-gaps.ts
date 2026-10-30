@@ -2,6 +2,9 @@
 import { tradingDaysBetween, vnDateOf, vnDayBoundsUtc } from '../calendar';
 import type { OpenGap } from './quarters';
 
+/** `data_gaps.data_type` of daily price gaps; shared by the worker and the web chart. */
+export const PRICES_GAP_TYPE = 'prices_daily';
+
 export interface PriceGapPlan {
   /** Trading days ('YYYY-MM-DD') to insert as new gaps. */
   toRecord: string[];

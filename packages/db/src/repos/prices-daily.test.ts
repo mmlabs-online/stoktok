@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
-import { getFirstPriceDates, getLatestCloses, getRecentCloses, listPriceDates, upsertPricesDaily } from './prices-daily';
+import { getFirstPriceDates, getLatestCloses, getRecentCloses, listCloseHistory, listPriceDates, upsertPricesDaily } from './prices-daily';
 
 const row = (symbol: string, over: Record<string, unknown> = {}) => ({
   symbol,
@@ -176,5 +176,36 @@ describe('getFirstPriceDates', () => {
     const f = createFake();
     expect(await getFirstPriceDates(f.db, [])).toEqual({});
     expect(f.calls).toHaveLength(0);
+  });
+});
+
+describe('listCloseHistory', () => {
+  test('eq symbol, gte/lte trade_date, order asc, paged with range(); maps to StoredClose', async () => {
+    const f = createFake();
+    f.respond({ data: [row('FPT', { trade_date: '2026-10-22', volume: 400 }), row('FPT', { volume: 500 })] });
+    const out = await listCloseHistory(f.db, 'FPT', '2026-10-01', '2026-10-31');
+    expect(f.methods('select')[0]?.args).toEqual(['symbol,trade_date,close,source,fetched_at,volume']);
+    expect(f.methods('eq')[0]?.args).toEqual(['symbol', 'FPT']);
+    expect(f.methods('gte')[0]?.args).toEqual(['trade_date', '2026-10-01']);
+    expect(f.methods('lte')[0]?.args).toEqual(['trade_date', '2026-10-31']);
+    expect(f.methods('order')[0]?.args).toEqual(['trade_date', { ascending: true }]);
+    expect(f.methods('range')[0]?.args).toEqual([0, 999]);
+    expect(out.map((q) => [q.tradeDate, q.close, q.volume, q.source, q.fetchedAt])).toEqual([
+      ['2026-10-22', 125400, 400, 'vnd', '2026-10-23T11:30:00Z'],
+      ['2026-10-23', 125400, 500, 'vnd', '2026-10-23T11:30:00Z'],
+    ]);
+  });
+  test('empty result -> []', async () => {
+    const f = createFake();
+    f.respond({ data: [] });
+    expect(await listCloseHistory(f.db, 'FPT', 'a', 'b')).toEqual([]);
+  });
+  test('DB error -> DataError; negative volume -> MAPPING', async () => {
+    const a = createFake();
+    a.respond({ error: { code: '42501' } });
+    await expect(listCloseHistory(a.db, 'FPT', 'a', 'b')).rejects.toMatchObject({ code: 'DB_ERROR' });
+    const b = createFake();
+    b.respond({ data: [row('FPT', { volume: -1 })] });
+    await expect(listCloseHistory(b.db, 'FPT', 'a', 'b')).rejects.toMatchObject({ code: 'MAPPING' });
   });
 });
