@@ -1,0 +1,58 @@
+# Stoktok (mmlabs-online/stoktok) on the Mac runner host, project `stoktok`. The images come only
+# from release.env, which the stoktok release workflow writes in a release/stoktok-vX.Y.Z pull
+# request as
+#   STOKTOK_WEB_IMAGE=mingming21400/stoktok-web:vX.Y.Z@sha256:<digest>
+#   STOKTOK_WORKER_IMAGE=mingming21400/stoktok-worker:vX.Y.Z@sha256:<digest>
+#   STOKTOK_VERSION=vX.Y.Z
+# Merging it runs .github/workflows/deploy-stoktok.yml. By hand:
+#   docker compose -p stoktok -f apps/stoktok/compose.yml --env-file apps/stoktok/release.env up -d --wait
+#
+# Web: Next.js on :3000, no ports: cloudflared reaches it as `stoktok-web` on the `web` network.
+# Worker: one-shot jobs (profile `jobs`), started by run-job.sh from launchd, never by `up -d`.
+# The worker is not on `web`.
+#
+# The server-only secrets (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) live in
+# /Users/gh-runner/.config/stoktok/stoktok.env on the Mac, never in this repository. It sits
+# outside the checkout because the runner's checkout deletes untracked files. If it is missing,
+# `config` fails and nothing starts.
+
+name: stoktok
+
+services:
+  stoktok-web:
+    image: ${STOKTOK_WEB_IMAGE:?STOKTOK_WEB_IMAGE is unset - pass --env-file apps/stoktok/release.env}
+    restart: unless-stopped
+    env_file: /Users/gh-runner/.config/stoktok/stoktok.env
+    environment:
+      STOKTOK_VERSION: ${STOKTOK_VERSION:-}
+      # Next's standalone server binds to $HOSTNAME, which Docker sets to the container id; bind
+      # every interface so the health check on 127.0.0.1 reaches it.
+      HOSTNAME: 0.0.0.0
+      TZ: Asia/Ho_Chi_Minh # log readability only; core uses an explicit zone
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks: [tunnel]
+
+  stoktok-worker:
+    image: ${STOKTOK_WORKER_IMAGE:?STOKTOK_WORKER_IMAGE is unset - pass --env-file apps/stoktok/release.env}
+    restart: "no"
+    profiles: [jobs]
+    env_file: /Users/gh-runner/.config/stoktok/stoktok.env
+    environment:
+      STOKTOK_VERSION: ${STOKTOK_VERSION:-}
+      TZ: Asia/Ho_Chi_Minh
+
+networks:
+  tunnel:
+    external: true
+    # The network cloudflared is on: `web`, created by proxy/compose.yml.
+    name: web

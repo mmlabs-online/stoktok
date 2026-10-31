@@ -1,0 +1,180 @@
+name: deploy-stoktok
+
+# Same flow as deploy-recordin.yml. A merge to main that touches apps/stoktok/ deploys stoktok, and
+# only stoktok, on the Mac's self-hosted runner (macbook-runner): pull the images pinned in
+# release.env, start the web service, wait for its health check (/healthz). If it is not healthy,
+# restore apps/stoktok/ as it was before the push, redeploy that, and push the revert. A restored
+# deploy is still a red run. After a healthy deploy, compose.yml, release.env and the job scripts
+# are copied to a stable directory that the launchd jobs read, never the runner's _work checkout.
+# workflow_dispatch redeploys what main pins, e.g. after a manual `docker rm`.
+#
+# No migrate step: schema changes are human. Every migration must stay compatible with the
+# previous release's images, because a restore never touches the database.
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps/stoktok/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write # the revert push after a restore
+  pull-requests: write # the outcome comment on the merged release PR
+
+concurrency:
+  group: deploy-stoktok
+  cancel-in-progress: false
+
+env:
+  APP_DIR: apps/stoktok
+  PROJECT: stoktok
+  ENV_FILE: /Users/gh-runner/.config/stoktok/stoktok.env
+  SCHED_DIR: /Users/gh-runner/stoktok/current
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, macbook-runner]
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: release
+        id: release
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if grep -n 'TODO-operator' "$APP_DIR/compose.yml"; then
+            echo "::error::$APP_DIR/compose.yml still holds a TODO-operator placeholder. Replace it before deploying. Nothing was started."
+            exit 1
+          fi
+          if [ ! -f "$APP_DIR/release.env" ]; then
+            echo "::notice::No $APP_DIR/release.env yet: nothing has been released. Nothing was deployed."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          web_pattern='^mingming21400/stoktok-web:v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?@sha256:[0-9a-f]{64}$'
+          worker_pattern='^mingming21400/stoktok-worker:v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?@sha256:[0-9a-f]{64}$'
+          image="$(sed -n 's/^STOKTOK_WEB_IMAGE=//p' "$APP_DIR/release.env")"
+          worker="$(sed -n 's/^STOKTOK_WORKER_IMAGE=//p' "$APP_DIR/release.env")"
+          version="$(sed -n 's/^STOKTOK_VERSION=//p' "$APP_DIR/release.env")"
+          if ! [[ "$image" =~ $web_pattern ]]; then
+            echo "::error::STOKTOK_WEB_IMAGE in $APP_DIR/release.env is '$image', not one mingming21400/stoktok-web:vX.Y.Z@sha256:<digest>. Nothing was started."
+            exit 1
+          fi
+          if ! [[ "$worker" =~ $worker_pattern ]]; then
+            echo "::error::STOKTOK_WORKER_IMAGE in $APP_DIR/release.env is '$worker', not one mingming21400/stoktok-worker:vX.Y.Z@sha256:<digest>. Nothing was started."
+            exit 1
+          fi
+          web_version="${image#*:}"; web_version="${web_version%%@*}"
+          worker_version="${worker#*:}"; worker_version="${worker_version%%@*}"
+          if [ "$web_version" != "$version" ] || [ "$worker_version" != "$version" ]; then
+            echo "::error::web ($web_version), worker ($worker_version) and STOKTOK_VERSION ($version) must be the same version. Nothing was started."
+            exit 1
+          fi
+          # Key names only; values are never printed.
+          if [ ! -r "$ENV_FILE" ] || ! grep -q '^SUPABASE_URL=' "$ENV_FILE" \
+             || ! grep -q '^SUPABASE_SERVICE_ROLE_KEY=' "$ENV_FILE"; then
+            echo "::error::$ENV_FILE is missing, unreadable, or lacks SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY. Nothing was started."
+            exit 1
+          fi
+          previous=""
+          # BEFORE is empty on workflow_dispatch: no previous release, so a failure is not restored.
+          if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
+             && git cat-file -e "$BEFORE:$APP_DIR/release.env" 2>/dev/null; then
+            previous="$(git show "$BEFORE:$APP_DIR/release.env" | sed -n 's/^STOKTOK_WEB_IMAGE=//p')"
+          fi
+          {
+            echo "skip=false"
+            echo "image=$image"
+            echo "previous=$previous"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: deploy
+        id: deploy
+        if: steps.release.outputs.skip != 'true'
+        run: |
+          compose=(docker compose -p "$PROJECT" -f "$APP_DIR/compose.yml" --env-file "$APP_DIR/release.env")
+          "${compose[@]}" config --quiet
+          "${compose[@]}" --profile jobs pull
+          "${compose[@]}" up -d --wait --wait-timeout 120
+
+      - name: publish
+        id: publish
+        if: steps.release.outputs.skip != 'true'
+        run: |
+          rm -rf "$SCHED_DIR.new"
+          mkdir -p "$SCHED_DIR.new"
+          cp "$APP_DIR/compose.yml" "$APP_DIR/release.env" "$APP_DIR/run-job.sh" "$APP_DIR/run-schedule.sh" "$SCHED_DIR.new/"
+          rm -rf "$SCHED_DIR.old"
+          if [ -d "$SCHED_DIR" ]; then mv "$SCHED_DIR" "$SCHED_DIR.old"; fi
+          mv "$SCHED_DIR.new" "$SCHED_DIR"
+
+      - name: rollback
+        id: rollback
+        if: failure() && steps.deploy.outcome == 'failure'
+        env:
+          BEFORE: ${{ github.event.before }}
+          FAILED: ${{ steps.release.outputs.image }}
+          PREVIOUS: ${{ steps.release.outputs.previous }}
+        run: |
+          if [ -z "$PREVIOUS" ]; then
+            echo "::error::$FAILED failed its health check and there is no previous release to restore. Nothing was pushed."
+            echo "result=no-previous" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          git restore --source="$BEFORE" --staged --worktree -- "$APP_DIR"
+          compose=(docker compose -p "$PROJECT" -f "$APP_DIR/compose.yml" --env-file "$APP_DIR/release.env")
+          if ! "${compose[@]}" --profile jobs pull || ! "${compose[@]}" up -d --wait --wait-timeout 120; then
+            echo "::error::$FAILED failed its health check, and restoring $PREVIOUS failed too. Nothing was pushed."
+            echo "result=restore-failed" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          rm -rf "$SCHED_DIR.new"
+          mkdir -p "$SCHED_DIR.new"
+          cp "$APP_DIR/compose.yml" "$APP_DIR/release.env" "$APP_DIR/run-job.sh" "$APP_DIR/run-schedule.sh" "$SCHED_DIR.new/"
+          rm -rf "$SCHED_DIR.old"
+          if [ -d "$SCHED_DIR" ]; then mv "$SCHED_DIR" "$SCHED_DIR.old"; fi
+          mv "$SCHED_DIR.new" "$SCHED_DIR"
+          failed_version="${FAILED#*:}"; failed_version="${failed_version%%@*}"
+          previous_version="${PREVIOUS#*:}"; previous_version="${previous_version%%@*}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Restore stoktok ${previous_version}: ${failed_version} failed its health check"
+          if ! git push origin HEAD:main; then
+            echo "::error::Restored $PREVIOUS on the server, but the revert could not be pushed to main. The repository and the server disagree until it is."
+            echo "result=restore-unpushed" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+          echo "result=restored" >> "$GITHUB_OUTPUT"
+          echo "::error::$FAILED failed its health check. Restored $PREVIOUS and pushed the revert."
+          exit 1
+
+      - name: notify
+        if: always() && steps.release.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEPLOY: ${{ steps.deploy.outcome }}
+          RESULT: ${{ steps.rollback.outputs.result }}
+          IMAGE: ${{ steps.release.outputs.image }}
+          PREVIOUS: ${{ steps.release.outputs.previous }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          case "$DEPLOY:$RESULT" in
+            success:)                  msg="deployed: \`$IMAGE\` is running and healthy." ;;
+            failure:restored)          msg="restored: \`$IMAGE\` failed its health check; \`$PREVIOUS\` is running again and the revert is on main." ;;
+            failure:restore-unpushed)  msg="restored, revert NOT pushed: \`$PREVIOUS\` is running, but main still pins \`$IMAGE\`." ;;
+            failure:no-previous)       msg="no-previous: \`$IMAGE\` failed its health check and there was no earlier release to restore." ;;
+            failure:restore-failed)    msg="restore-failed: \`$IMAGE\` failed its health check and so did \`$PREVIOUS\`. Stoktok needs a hand." ;;
+            *)                         msg="did-not-complete: the deploy did not run to the end (deploy: ${DEPLOY:-not run}, restore: ${RESULT:-not run})." ;;
+          esac
+          {
+            echo "### deploy-stoktok"
+            echo ""
+            echo "$msg"
+          } >> "$GITHUB_STEP_SUMMARY"
+          pr="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '.[0].number // empty' || true)"
+          if [ -n "$pr" ]; then
+            gh pr comment "$pr" --repo "$GITHUB_REPOSITORY" --body "deploy-stoktok — $msg Run: $RUN_URL"
+          fi
