@@ -7,7 +7,7 @@
 | Areas | ui, finance |
 | Attempts | 1 |
 | Created | 2026-10-26 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/24 |
 
 ## Goal
 `/symbols/[symbol]` lists the stored medium-term signals with their inputs, hidden with an explanation when data is stale. Split out of STK-016 (slice 3), 2026-10-26.
