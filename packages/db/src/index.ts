@@ -41,7 +41,7 @@ export {
 export type { DataGapInsert, FinancialInsert, PriceDailyInsert, SignalInsert, SymbolSectorRow } from './rows';
 export { listFinancials, upsertFinancials } from './repos/financials';
 export { insertGaps, listOpenGaps, listOpenMarketGaps, resolveGaps } from './repos/data-gaps';
-export { upsertSignals } from './repos/signals';
+export { listLatestSignals, upsertSignals } from './repos/signals';
 export { createAsset, deleteAsset, getAsset, listAssets, updateAsset } from './repos/assets';
 export { addToWatchlist, listWatchlist, removeFromWatchlist } from './repos/watchlist';
 export { getSymbolExchanges, listSymbolSectors, setSymbolExchange, setSymbolSector } from './repos/symbols';

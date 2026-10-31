@@ -65,6 +65,7 @@ export {
   planFinancialGaps,
   quarterBounds,
 } from './market/quarters';
+export { FINANCIALS_GAP_TYPE } from './market/quarters';
 export type { FinancialGapPlan, OpenGap } from './market/quarters';
 export { ROUNDING_MODE, applyRatePpm, mulDiv, roundDiv } from './money';
 export { buildLedger } from './ledger/build-ledger';
@@ -195,7 +196,29 @@ export type { EvaluateInput } from './signals/evaluate';
 export { resolveSignalDate } from './signals/inputs';
 export { checkRawPriceWindow, isBeyondDailyLimit, resolveLimitPpm } from './signals/raw-price-guard';
 export type { PriceLimitPpm, RawPriceGuardResult, RawPriceJump } from './signals/raw-price-guard';
-export { DATA_REASONS, REASON_ORDER, RULE_IDS, RULE_REASONS, RULE_VERSION, SIGNAL_HORIZON, maRuleId } from './signals/types';
+export {
+  DATA_REASONS,
+  REASON_ORDER,
+  RULE_IDS,
+  RULE_REASONS,
+  RULE_VERSION,
+  SIGNAL_HORIZON,
+  isReasonCode,
+  maRuleId,
+  parseMaRuleId,
+} from './signals/types';
+export { expectedRuleIds, parseSignalSnapshot, signalVisibility } from './signals/visibility';
+export type {
+  MaWindowInfo,
+  ParsedSnapshot,
+  SignalVisibility,
+  VisibilityCause,
+  VisibilityCode,
+  VisibilityContext,
+} from './signals/visibility';
+export { DIRECTION_LABELS, REASON_LABELS, RULE_LABELS, VISIBILITY_LABELS, reasonLabel, ruleName } from './signals/labels-vi';
+export { NO_SIGNAL_TEXT, presentMediumSignals } from './signals/present';
+export type { InputVM, ReasonVM, SignalRowVM, SignalsSectionVM } from './signals/present';
 export type {
   EpsBasis,
   GapRef,
@@ -205,4 +228,5 @@ export type {
   SignalResult,
   SignalStatus,
   StoredFinancials,
+  StoredSignal,
 } from './signals/types';

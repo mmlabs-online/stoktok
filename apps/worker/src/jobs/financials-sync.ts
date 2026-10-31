@@ -1,10 +1,10 @@
-import { addQuarters, comparePeriods, latestExpectedPeriod, normalizeSymbol, planFinancialGaps, quarterBounds, vnDateOf } from '@stoktok/core';
+import { FINANCIALS_GAP_TYPE, addQuarters, comparePeriods, latestExpectedPeriod, normalizeSymbol, planFinancialGaps, quarterBounds, vnDateOf } from '@stoktok/core';
 import type { Result } from '@stoktok/core';
 import type { DataGapInsert, FinancialInsert, FinancialRecord, OpenGapRecord } from '@stoktok/db';
 import type { FinancialsSyncConfig } from '../config';
 import type { FinancialsSource, RejectedPeriod } from '../sources/financials-source';
 
-export const FINANCIALS_GAP_TYPE = 'financials';
+export { FINANCIALS_GAP_TYPE };
 
 export interface FinancialsStore {
   listWatchlistSymbols(): Promise<string[]>;

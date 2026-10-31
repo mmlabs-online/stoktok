@@ -3,6 +3,9 @@ import { isValidDate } from '../calendar';
 /** A quarter label 'YYYYQn', n in 1..4 (the source's fiscal-quarter label, treated as calendar quarter). */
 const PERIOD_RE = /^(\d{4})Q([1-4])$/;
 const DAY_MS = 86_400_000;
+
+/** `data_gaps.data_type` of a missing financials quarter. */
+export const FINANCIALS_GAP_TYPE = 'financials';
 const LAST_DAY = ['', '03-31', '06-30', '09-30', '12-31'] as const;
 
 /** null unless year is an integer in 1990..2100 and quarter an integer in 1..4. */
