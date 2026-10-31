@@ -6,6 +6,7 @@ import { parseChartRange } from '../../../../lib/chart-range-query';
 import { LotsTable } from '../../../../components/symbol/lots-table';
 import { PositionCard } from '../../../../components/symbol/position-card';
 import { PriceChart } from '../../../../components/symbol/price-chart';
+import { SignalsSection } from '../../../../components/symbol/signals-section';
 import { SymbolHeader } from '../../../../components/symbol/symbol-header';
 import { TransactionList } from '../../../../components/transactions/transaction-list';
 import { nowInstant } from '../../../../server/clock';
@@ -38,6 +39,7 @@ export default async function Page({
     <div className="space-y-6">
       <SymbolHeader row={view.header} refEstimated={view.refEstimated} />
       <PriceChart series={view.chart} range={view.chartRange} symbol={view.symbol} />
+      <SignalsSection vm={view.signals} />
       <div className="grid gap-6 md:grid-cols-2">
         <div className="space-y-6">
           <PositionCard position={view.position} />

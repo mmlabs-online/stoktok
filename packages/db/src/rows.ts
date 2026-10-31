@@ -110,6 +110,20 @@ export interface SignalInsert {
   computed_at: string;
 }
 
+/** Selected columns only. `value` and `rule_version` may arrive as strings (PostgREST bigint). */
+export interface SignalRow {
+  symbol: string;
+  rule_id: string;
+  signal_date: string;
+  status: string;
+  label: string | null;
+  value: number | string | null;
+  reason_codes: string[] | null;
+  inputs_snapshot: unknown;
+  rule_version: number | string;
+  computed_at: string;
+}
+
 /** Selected columns only. */
 export interface SymbolSectorRow {
   symbol: string;

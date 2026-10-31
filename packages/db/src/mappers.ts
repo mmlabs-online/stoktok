@@ -1,7 +1,7 @@
 /** Row <-> domain conversions for assets and watchlist. No financial calculation (R1); integers only (R2). */
 import { EXCHANGES, RowMappingError, toSafeInt } from '@stoktok/core';
-import type { Exchange, PriceQuote, SectorInfo, StoredClose } from '@stoktok/core';
-import type { AssetRow, FinancialRow, OpenGapRow, PriceCloseRow, PriceDailyRow, SymbolSectorRow, TradeDateRow, WatchlistRow } from './rows';
+import type { Exchange, PriceQuote, SectorInfo, SignalLabel, SignalStatus, StoredClose, StoredSignal } from '@stoktok/core';
+import type { AssetRow, FinancialRow, OpenGapRow, PriceCloseRow, PriceDailyRow, SignalRow, SymbolSectorRow, TradeDateRow, WatchlistRow } from './rows';
 
 export interface Asset {
   id: string;
@@ -133,4 +133,31 @@ export function symbolSectorFromRow(row: SymbolSectorRow): SectorInfo {
     throw new RowMappingError(t, 'sector_fetched_at', 'missing sector fetched_at');
   }
   return { sector: row.sector, source: row.sector_source, fetchedAt: row.sector_fetched_at };
+}
+
+const SIGNAL_LABELS: readonly string[] = ['bullish', 'bearish', 'neutral'];
+
+/**
+ * Strict on what the table checks guarantee (status, label, date, integers: R2). Lenient on `reason_codes`
+ * (unknown codes are kept) and `inputs_snapshot` (passed through): core parses and labels them.
+ */
+export function signalFromRow(row: SignalRow): StoredSignal {
+  const t = 'signals';
+  if (row.status !== 'ok' && row.status !== 'suppressed') throw new RowMappingError(t, 'status', `invalid status: ${String(row.status)}`);
+  if (row.label !== null && !SIGNAL_LABELS.includes(row.label)) throw new RowMappingError(t, 'label', `invalid label: ${String(row.label)}`);
+  if (typeof row.signal_date !== 'string' || !DATE_RE.test(row.signal_date)) {
+    throw new RowMappingError(t, 'signal_date', `invalid date: ${String(row.signal_date)}`);
+  }
+  return {
+    symbol: row.symbol,
+    ruleId: row.rule_id,
+    signalDate: row.signal_date,
+    status: row.status as SignalStatus,
+    label: row.label as SignalLabel | null,
+    value: row.value === null ? null : toSafeInt(row.value, 'value', t),
+    reasonCodes: Array.isArray(row.reason_codes) ? row.reason_codes.filter((c): c is string => typeof c === 'string') : [],
+    inputs: row.inputs_snapshot,
+    ruleVersion: toSafeInt(row.rule_version, 'rule_version', t),
+    computedAt: row.computed_at,
+  };
 }

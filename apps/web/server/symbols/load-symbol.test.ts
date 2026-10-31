@@ -1,5 +1,5 @@
-import { DEFAULT_MARKET_RULES, DEFAULT_MARKET_SETTINGS } from '@stoktok/core';
-import type { StoredClose, Transaction } from '@stoktok/core';
+import { DEFAULT_MARKET_RULES, DEFAULT_MARKET_SETTINGS, DEFAULT_SIGNAL_RULES, RULE_VERSION } from '@stoktok/core';
+import type { StoredClose, StoredSignal, Transaction } from '@stoktok/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('server-only', () => ({}));
@@ -14,6 +14,8 @@ vi.mock('../db', async (importActual) => ({
   getRecentCloses: vi.fn(),
   getFirstPriceDates: vi.fn(),
   listCloseHistory: vi.fn(),
+  getSignalRules: vi.fn(),
+  listLatestSignals: vi.fn(),
   listOpenGaps: vi.fn(),
   listOpenMarketGaps: vi.fn(),
 }));
@@ -23,9 +25,11 @@ import {
   getFirstPriceDates,
   getMarketRules,
   getRecentCloses,
+  getSignalRules,
   getSymbolExchanges,
   listCloseHistory,
   listCorporateActions,
+  listLatestSignals,
   listOpenGaps,
   listOpenMarketGaps,
   listTransactions,
@@ -77,6 +81,8 @@ beforeEach(() => {
   vi.mocked(listCloseHistory).mockResolvedValue([...fptBars.FPT].reverse());
   vi.mocked(listOpenGaps).mockResolvedValue([]);
   vi.mocked(listOpenMarketGaps).mockResolvedValue([]);
+  vi.mocked(getSignalRules).mockResolvedValue(DEFAULT_SIGNAL_RULES);
+  vi.mocked(listLatestSignals).mockResolvedValue([]);
 });
 
 describe('loadSymbol', () => {
@@ -260,5 +266,66 @@ describe('loadSymbol chart', () => {
     ]);
     const view = await loadSymbol(db, 'FPT', now);
     expect(view?.chart.slots.find((s) => s.date === '2026-10-22')).toMatchObject({ kind: 'gap_recorded', gapId: 9 });
+  });
+});
+
+describe('loadSymbol signals', () => {
+  const stored = (ruleId: string, over: Partial<StoredSignal> = {}): StoredSignal => ({
+    symbol: 'FPT',
+    ruleId,
+    signalDate: '2026-10-23',
+    status: 'ok',
+    label: 'bullish',
+    value: 32_000,
+    reasonCodes: [],
+    inputs: {
+      refs: [{ ref: 'financials:FPT:2026Q2', source: 'vnd', fetchedAt: '2026-10-22T10:00:00Z' }],
+    },
+    ruleVersion: RULE_VERSION,
+    computedAt: '2026-10-23T12:00:00Z',
+    ...over,
+  });
+
+  it('reads signal rules, both gap types, and listLatestSignals with expectedRuleIds', async () => {
+    await loadSymbol(db, 'FPT', now);
+    expect(getSignalRules).toHaveBeenCalledWith(db);
+    expect(listOpenGaps).toHaveBeenCalledWith(db, 'financials', ['FPT']);
+    expect(listOpenMarketGaps).toHaveBeenCalledWith(db, 'financials');
+    expect(listLatestSignals).toHaveBeenCalledWith(db, 'FPT', [
+      'pe_vs_sector',
+      'pb_vs_sector',
+      'earnings_growth_trend',
+      'price_vs_ma_50',
+      'price_vs_ma_200',
+    ]);
+  });
+  it('no stored signals -> empty section', async () => {
+    expect((await loadSymbol(db, 'FPT', now))?.signals).toEqual({ kind: 'empty' });
+  });
+  it('a current signal is listed', async () => {
+    vi.mocked(listLatestSignals).mockResolvedValue([stored('pb_vs_sector')]);
+    const s = (await loadSymbol(db, 'FPT', now))?.signals;
+    expect(s).toMatchObject({ kind: 'list', summaryText: '1 tín hiệu, 0 tạm ẩn' });
+  });
+  it('signals hidden when signal_date < expected date', async () => {
+    vi.mocked(listLatestSignals).mockResolvedValue([stored('pb_vs_sector', { signalDate: '2026-10-22' })]);
+    expect((await loadSymbol(db, 'FPT', now))?.signals).toEqual({
+      kind: 'hidden',
+      lastSignalDateText: '22/10/2026',
+      causes: ['Tín hiệu chưa được tính lại cho phiên 23/10/2026'],
+    });
+  });
+  it("financials gap from listOpenGaps('financials') hides the P/B row", async () => {
+    vi.mocked(listLatestSignals).mockResolvedValue([stored('pb_vs_sector')]);
+    vi.mocked(listOpenGaps).mockImplementation(async (_db, type) =>
+      type === 'financials' ? [{ id: 5, symbol: 'FPT', fromTs: '2026-03-31T17:00:00.000Z', toTs: '2026-06-30T16:59:59.000Z' }] : [],
+    );
+    const s = (await loadSymbol(db, 'FPT', now))?.signals;
+    expect(s).toMatchObject({ kind: 'hidden', causes: [expect.stringContaining('BCTC')] });
+  });
+  it('price gaps are read once and shared by chart and signals', async () => {
+    await loadSymbol(db, 'FPT', now);
+    expect(vi.mocked(listOpenGaps).mock.calls.filter((c) => c[1] === 'prices_daily')).toHaveLength(1);
+    expect(vi.mocked(listOpenMarketGaps).mock.calls.filter((c) => c[1] === 'prices_daily')).toHaveLength(1);
   });
 });

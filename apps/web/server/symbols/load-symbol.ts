@@ -1,8 +1,10 @@
 import {
   resolveConcentrationThreshold,
   DEFAULT_CHART_RANGE,
+  DEFAULT_FINANCIALS_PUBLISH_LAG_DAYS,
   DEFAULT_PRICE_CUTOFF_MINUTES_VN,
   DEFAULT_TICK_BANDS,
+  FINANCIALS_GAP_TYPE,
   PRICES_GAP_TYPE,
   buildChartSeries,
   buildLedger,
@@ -10,18 +12,31 @@ import {
   buildPriceBoardRow,
   chartWindow,
   expectedPriceDate,
+  expectedRuleIds,
+  presentMediumSignals,
   vnDateOf,
 } from '@stoktok/core';
-import type { ChartRange, ChartSeries, Holding, LedgerError, Lot, PortfolioRow, Transaction } from '@stoktok/core';
+import type {
+  ChartRange,
+  ChartSeries,
+  Holding,
+  LedgerError,
+  Lot,
+  PortfolioRow,
+  SignalsSectionVM,
+  Transaction,
+} from '@stoktok/core';
 import { listHref } from '../../lib/transaction-list-query';
 import {
   getEntrySettings,
   getMarketRules,
   getFirstPriceDates,
   getRecentCloses,
+  getSignalRules,
   getSymbolExchanges,
   listCloseHistory,
   listCorporateActions,
+  listLatestSignals,
   listOpenGaps,
   listOpenMarketGaps,
   listTransactions,
@@ -50,6 +65,7 @@ export interface SymbolView {
   ledgerHref: string;
   chart: ChartSeries;
   chartRange: ChartRange;
+  signals: SignalsSectionVM;
 }
 
 /**
@@ -100,19 +116,34 @@ export async function loadSymbol(
   const header: WatchRow = { ...board, priceDateDiffers: board.tradeDate !== null && board.tradeDate !== expected };
 
   const win = chartWindow({ endDate: expected, range, firstStoredDate: firstDates[symbol] ?? null });
-  const [history, symbolGaps, marketGaps] =
-    win.from > win.to
-      ? [[], [], []]
-      : await Promise.all([
-          listCloseHistory(db, symbol, win.from, win.to),
-          listOpenGaps(db, PRICES_GAP_TYPE, [symbol]),
-          listOpenMarketGaps(db, PRICES_GAP_TYPE),
-        ]);
+  const [history, priceSymbolGaps, priceMarketGaps, financialsSymbolGaps, financialsMarketGaps, signalRules] = await Promise.all([
+    win.from > win.to ? [] : listCloseHistory(db, symbol, win.from, win.to),
+    listOpenGaps(db, PRICES_GAP_TYPE, [symbol]),
+    listOpenMarketGaps(db, PRICES_GAP_TYPE),
+    listOpenGaps(db, FINANCIALS_GAP_TYPE, [symbol]),
+    listOpenMarketGaps(db, FINANCIALS_GAP_TYPE),
+    getSignalRules(db),
+  ]);
+  const priceGaps = [...priceSymbolGaps, ...priceMarketGaps];
   const chart = buildChartSeries({
     bars: history,
-    openGaps: [...symbolGaps, ...marketGaps],
+    openGaps: win.from > win.to ? [] : priceGaps,
     window: win,
     holidays: entry.settings.holidays,
+  });
+
+  const ruleIds = expectedRuleIds(signalRules);
+  const signals = presentMediumSignals({
+    ruleIds,
+    rows: await listLatestSignals(db, symbol, ruleIds),
+    ctx: {
+      expectedDate: expected,
+      holidays: entry.settings.holidays,
+      publishLagDays: DEFAULT_FINANCIALS_PUBLISH_LAG_DAYS,
+      rules: signalRules,
+      priceGaps,
+      financialsGaps: [...financialsSymbolGaps, ...financialsMarketGaps],
+    },
   });
 
   const ledger = buildLedger(txs, cas, entry.settings, vnDateOf(now));
@@ -152,5 +183,6 @@ export async function loadSymbol(
     ledgerHref: listHref({ page: 1, symbol }),
     chart,
     chartRange: range,
+    signals,
   };
 }

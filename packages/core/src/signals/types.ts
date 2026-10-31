@@ -1,6 +1,7 @@
 import type { CorporateAction } from '../ledger/types';
 import type { StoredClose } from '../market/price-board';
 import type { Exchange } from '../settings/market-rules';
+import { SIGNAL_RULE_BOUNDS } from './config';
 import type { SignalRules } from './config';
 
 /** Shared shapes for the medium-term signal rules (STK-015). Pure types and constants, no I/O. */
@@ -16,6 +17,16 @@ export const RULE_IDS = {
 
 export function maRuleId(days: number): string {
   return `price_vs_ma_${days}`;
+}
+
+const MA_RULE_ID_RE = /^price_vs_ma_(\d{1,3})$/;
+
+/** The MA window length of a `price_vs_ma_N` rule ID; null for any other ID or an N outside the configured bounds. */
+export function parseMaRuleId(id: string): number | null {
+  const m = MA_RULE_ID_RE.exec(id);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return n >= SIGNAL_RULE_BOUNDS.maDays.min && n <= SIGNAL_RULE_BOUNDS.maDays.max ? n : null;
 }
 
 /** Data reasons: the input data is stale, gapped or missing. They set dataFresh=false. */
@@ -49,6 +60,10 @@ export type ReasonCode = DataReason | (typeof RULE_REASONS)[number];
 
 /** Fixed order in which reasons are reported. */
 export const REASON_ORDER: readonly ReasonCode[] = [...DATA_REASONS, ...RULE_REASONS];
+
+export function isReasonCode(s: string): s is ReasonCode {
+  return (REASON_ORDER as readonly string[]).includes(s);
+}
 
 export type SignalStatus = 'ok' | 'suppressed';
 /** A direction of a rule, never an action (R9, R10). */
@@ -134,4 +149,19 @@ export interface SignalResult {
   reasons: ReasonCode[];
   /** Inputs snapshot for audit. */
   inputs: Record<string, unknown>;
+}
+
+/** A signal row as stored (domain shape of the `signals` table). `inputs` is untrusted JSON: core parses it. */
+export interface StoredSignal {
+  symbol: string;
+  ruleId: string;
+  signalDate: string;
+  status: SignalStatus;
+  label: SignalLabel | null;
+  value: number | null;
+  /** As stored; may hold a code this version does not know. */
+  reasonCodes: string[];
+  inputs: unknown;
+  ruleVersion: number;
+  computedAt: string;
 }
