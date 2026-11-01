@@ -59,8 +59,9 @@ const bar = (symbol: string, tradeDate: string, close = 10000): DailyBar => ({
   symbol, tradeDate, open: close, high: close, low: close, close, volume: 100, foreignNet: null,
 });
 
-function fakeSource(name = 'fake-src', impl?: (symbol: string, ctx: { lastClose?: number }) => FetchResult | Error) {
-  const calls: { symbol: string; from: string; to: string; ctx: { lastClose?: number } }[] = [];
+type FetchCtx = { lastClose?: number; rejectOnOrBefore?: string };
+function fakeSource(name = 'fake-src', impl?: (symbol: string, ctx: FetchCtx) => FetchResult | Error) {
+  const calls: { symbol: string; from: string; to: string; ctx: FetchCtx }[] = [];
   const source: PriceSource = {
     name,
     fetchDaily: async (symbol, from, to, ctx) => {
@@ -453,5 +454,97 @@ describe('runEodSync with VciPriceSource', () => {
     expect(out.ok).toBe(false);
     expect(out.failedSymbols).toHaveLength(EOD_SYNC_CONFIG.maxConsecutiveFailures);
     expect(v.requests()).toBe(EOD_SYNC_CONFIG.maxConsecutiveFailures);
+  });
+});
+
+describe('runEodSync adjusted history', () => {
+  const config = { ...EOD_SYNC_CONFIG, backfillChunkTradingDays: 5 };
+  const chunks = planBackfillChunks(subtractTradingDays('2026-10-23', 11, []), '2026-10-23', 5, []);
+  const adjusted = (tradeDate: string) => ({ tradeDate, reason: 'adjusted_price_history' });
+
+  test('backfill: adjusted cut-off from the newest chunk is passed as rejectOnOrBefore to older chunks', async () => {
+    const m = memoryStore({ watchlist: ['AAA'], closes: { AAA: 10000 } });
+    const { source, calls } = fakeSource('fake-src', (symbol, ctx) =>
+      ctx.rejectOnOrBefore === undefined
+        ? { bars: [bar(symbol, '2026-10-23', 10100)], rejected: [adjusted('2026-10-22')], adjustedCutoff: '2026-10-22' }
+        : { bars: [], rejected: [], adjustedCutoff: ctx.rejectOnOrBefore },
+    );
+    await runEodSync(deps({ store: m.store, source, config, backfillTradingDays: 12 }).d);
+    expect(calls).toHaveLength(3);
+    expect(calls[0]?.ctx).toEqual({ lastClose: 10000 });
+    expect(calls[1]?.ctx).toEqual({ lastClose: 10100, rejectOnOrBefore: '2026-10-22' });
+    expect(calls[2]?.ctx).toEqual({ lastClose: 10100, rejectOnOrBefore: '2026-10-22' });
+  });
+
+  test('adjusted_price_history rejections alone keep ok true; rejected and rejectedBySymbol still report them', async () => {
+    const m = memoryStore({ watchlist: ['AAA'] });
+    const { source } = fakeSource('fake-src', (symbol) => ({
+      bars: [bar(symbol, '2026-10-23')],
+      rejected: [adjusted('2026-10-21'), adjusted('2026-10-22')],
+      adjustedCutoff: '2026-10-22',
+    }));
+    const { d, logs } = deps({ store: m.store, source });
+    const out = await runEodSync(d);
+    expect(out.ok).toBe(true);
+    expect(out.rejected).toBe(2);
+    expect(out.rejectedBySymbol.AAA).toEqual([adjusted('2026-10-21'), adjusted('2026-10-22')]);
+    expect(logs).toContain('adjusted history AAA: bars on or before 2026-10-22 rejected');
+  });
+
+  test('newest window with a cut-off and zero accepted bars -> ok false and an error log', async () => {
+    const m = memoryStore({ watchlist: ['AAA'] });
+    const { source } = fakeSource('fake-src', () => ({ bars: [], rejected: [adjusted('2026-10-23')], adjustedCutoff: '2026-10-23' }));
+    const { d, logs } = deps({ store: m.store, source });
+    const out = await runEodSync(d);
+    expect(out.ok).toBe(false);
+    expect(logs).toContain('error: AAA: newest window is all adjusted history (cut-off 2026-10-23)');
+  });
+
+  test('other rejection reasons still flip ok false alongside adjusted ones', async () => {
+    const m = memoryStore({ watchlist: ['AAA'] });
+    const { source } = fakeSource('fake-src', (symbol) => ({
+      bars: [bar(symbol, '2026-10-23')],
+      rejected: [adjusted('2026-10-21'), { tradeDate: '2026-10-22', reason: 'price_off_step' }],
+      adjustedCutoff: '2026-10-21',
+    }));
+    const out = await runEodSync(deps({ store: m.store, source }).d);
+    expect(out.ok).toBe(false);
+  });
+
+  test('with VciPriceSource, backfill: fractional bars in the newest chunk reject the all-integer older chunk', async () => {
+    const newest = chunks[0];
+    expect(newest && newest.from < newest.to).toBe(true);
+    const vnSeconds = (d: string) => Math.floor(Date.parse(`${d}T00:00:00+07:00`) / 1000);
+    let request = 0;
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      request += 1;
+      const body = JSON.parse(init?.body as string) as { to: number };
+      // newest chunk: fractional bar on its first day, raw bar on its last day; older chunks: one whole bar at their end
+      const rows =
+        request === 1
+          ? [
+              { t: vnSeconds(chunks[0]?.from as string), o: 33501.5, h: 33801.5, l: 33401.5, c: 33701.5 },
+              { t: vnSeconds(chunks[0]?.to as string), o: 33500, h: 33800, l: 33400, c: 33700 },
+            ]
+          : [{ t: body.to - 86400, o: 33500, h: 33800, l: 33400, c: 33700 }];
+      const json = [{ symbol: 'TCB', t: rows.map((r) => r.t), o: rows.map((r) => r.o), h: rows.map((r) => r.h), l: rows.map((r) => r.l), c: rows.map((r) => r.c), v: rows.map(() => 1000) }];
+      return { ok: true, status: 200, json: async () => json } as Response;
+    }) as unknown as typeof fetch;
+    const http = { timeoutMs: 1000, maxAttempts: 1, backoffBaseMs: 1, sleep: async () => undefined, log: () => undefined };
+    const source = new VciPriceSource({ fetchImpl, http });
+    const olderDates = chunks.slice(1).map((c) => c.to);
+    const m = memoryStore({ watchlist: ['TCB'], prior: { TCB: olderDates } });
+    const out = await runEodSync(deps({ store: m.store, source, config, backfillTradingDays: 12 }).d);
+    expect(request).toBe(chunks.length);
+    expect(out.rejectedBySymbol.TCB).toEqual([
+      { tradeDate: newest?.from, reason: 'adjusted_price_history' },
+      ...olderDates.map((d) => ({ tradeDate: d, reason: 'adjusted_price_history' })),
+    ]);
+    expect(out.ok).toBe(true);
+    expect(out.barsFetched).toBe(1);
+    expect(out.rowsUpserted).toBe(1);
+    const written = [...m.table.values()].filter((r) => r.source !== undefined);
+    expect(written.map((r) => r.trade_date)).toEqual([newest?.to]);
+    for (const d of olderDates) expect(m.table.get(`TCB|${d}`)?.source).toBeUndefined();
   });
 });

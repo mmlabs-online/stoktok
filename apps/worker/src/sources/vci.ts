@@ -1,4 +1,4 @@
-import { DEFAULT_PRICE_SANITY, normalizeDailyBar, vnDateOf } from '@stoktok/core';
+import { ADJUSTED_HISTORY_REASON, DEFAULT_PRICE_SANITY, adjustedHistoryCutoff, normalizeDailyBar, vnDateOf } from '@stoktok/core';
 import type { PriceSanity, PriceUnit, RawDailyBar } from '@stoktok/core';
 import { VCI_CONFIG } from '../config';
 import { postJson } from './http';
@@ -9,9 +9,10 @@ import type { FetchResult, PriceSource, RejectedBar } from './price-source';
 export const VCI_PRICE_SOURCE_NAME = 'vci-public';
 
 /**
- * UNVERIFIED (sandbox cannot reach VN hosts; see docs/adr/0004-vci-eod-price-source.md): the unit,
- * raw-vs-adjusted prices and the `t` encoding follow vnstock's reading of the endpoint. If the unit
- * is wrong, core normalizeDailyBar rejects the bars (unit guard) instead of storing them.
+ * The unit and the `t` encoding follow vnstock's reading of the endpoint (see docs/adr/0004-vci-eod-price-source.md).
+ * If the unit is wrong, core normalizeDailyBar rejects the bars (unit guard) instead of storing them.
+ * VCI returns adjusted (fractional) prices before a symbol's latest corporate action: every bar on or before the
+ * latest fractional bar is rejected as adjusted history (ADR 0004).
  */
 export const VCI_PRICE_UNIT: PriceUnit = 'VND';
 
@@ -50,7 +51,12 @@ export class VciPriceSource implements PriceSource {
     };
   }
 
-  async fetchDaily(symbol: string, fromDate: string, toDate: string, ctx: { lastClose?: number }): Promise<FetchResult> {
+  async fetchDaily(
+    symbol: string,
+    fromDate: string,
+    toDate: string,
+    ctx: { lastClose?: number; rejectOnOrBefore?: string },
+  ): Promise<FetchResult> {
     const body = this.requestBody(symbol, fromDate, toDate);
     if (body.countBack > (this.o.maxCalendarDaysPerRequest ?? VCI_CONFIG.maxCalendarDaysPerRequest)) {
       throw new SourceError('requested range too long', false);
@@ -86,13 +92,22 @@ export class VciPriceSource implements PriceSource {
     }
     if (n > body.countBack) throw new SourceError('unexpected response shape: more bars than requested', false);
 
+    const dateAt = (i: number): string | undefined => {
+      const tn = num(ts[i]);
+      return typeof tn === 'number' && Number.isSafeInteger(tn) && tn >= 0 ? vnDateOf(new Date(tn * 1000)) : undefined;
+    };
+    // All bars count, also those outside [from, to]: they still reveal adjusted history.
+    const own = adjustedHistoryCutoff(
+      ts.map((_, i) => ({ tradeDate: dateAt(i), open: num(os[i]), high: num(hs[i]), low: num(ls[i]), close: num(cs[i]) })),
+      toDate,
+    );
+    const effective = [own, ctx.rejectOnOrBefore].filter((d): d is string => d != null).sort().pop();
+
     const bars: FetchResult['bars'] = [];
     const rejected: RejectedBar[] = [];
     const seen = new Set<string>();
     for (let i = 0; i < n; i++) {
-      const tn = num(ts[i]);
-      const tradeDate =
-        typeof tn === 'number' && Number.isSafeInteger(tn) && tn >= 0 ? vnDateOf(new Date(tn * 1000)) : undefined;
+      const tradeDate = dateAt(i);
       if (tradeDate !== undefined && (tradeDate < fromDate || tradeDate > toDate)) continue;
       if (tradeDate !== undefined) {
         if (seen.has(tradeDate)) {
@@ -100,6 +115,10 @@ export class VciPriceSource implements PriceSource {
           continue;
         }
         seen.add(tradeDate);
+        if (effective !== undefined && tradeDate <= effective) {
+          rejected.push({ tradeDate, reason: ADJUSTED_HISTORY_REASON });
+          continue;
+        }
       }
       const raw: RawDailyBar = {
         open: num(os[i]),
@@ -113,6 +132,6 @@ export class VciPriceSource implements PriceSource {
       if (r.ok) bars.push(r.bar);
       else rejected.push({ ...(tradeDate !== undefined ? { tradeDate } : {}), reason: r.reason });
     }
-    return { bars, rejected };
+    return { bars, rejected, ...(effective !== undefined ? { adjustedCutoff: effective } : {}) };
   }
 }

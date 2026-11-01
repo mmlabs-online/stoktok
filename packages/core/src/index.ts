@@ -47,6 +47,7 @@ export {
 export type { FinancialsSanity, PriceSanity, TickBand } from './market/config';
 export { buildPriceBoardRow, isOnTick, priceLimits, splitWatchlistGroups, tickSize } from './market/price-board';
 export type { PriceBoardRow, StoredClose } from './market/price-board';
+export { ADJUSTED_HISTORY_REASON, adjustedHistoryCutoff } from './market/adjusted-history';
 export { normalizeDailyBar, toVnd } from './market/daily-bar';
 export type { DailyBar, NormalizeResult, PriceUnit, RawDailyBar } from './market/daily-bar';
 export { normalizeQuarterlyFinancials, normalizeSectorLabel, toVndAmount } from './market/financials';
