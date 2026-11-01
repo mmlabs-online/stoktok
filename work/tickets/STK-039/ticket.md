@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P2 |
 | Areas | data, finance |
-| Attempts | 1 |
+| Attempts | 2 |
 | Created | 2026-11-01 |
 | PR | — |
 

@@ -62,3 +62,70 @@ No violations found.
 - Live `--dry-run` with the ADR 0005 checklist (Ming/orchestrator). It is a gate for the `'unverified'` → `'ttm'` flip, not for this merge.
 - The follow-ups already listed in the ADR: EPS lower bound, `financials_source_mixed`, peers by `sector_source`, bank/broker/insurer mapping, KBS/VNDirect fallback.
 - The PR is High tier (money derivation in `packages/core`), so Ming reviews it.
+
+## Attempt 2 — 2026-11-01
+Verdict: PASS
+
+### Checks (run by reviewer)
+Node v22.23.4.
+- typecheck: all 4 packages Done, no errors.
+- lint: all 4 packages Done, no errors or warnings.
+- test: core 40 files / 483 passed; db 14 files / 117 passed, 1 todo; worker 13 files / 150 passed (+4 since attempt 1); web 25 files / 214 passed. These numbers match impl-log.md attempt 2.
+- `apps/web/next-env.d.ts` did not change; the tree is clean after the checks.
+
+### Attempt-1 blocker (Issue 1): fixed
+- `vci-iq-financials.ts:133-136` sorts `allKeys`, keeps keys `>= addQuarters(latest, -(N-1))` and drops older keys before the `unsupported_company_type` branch. `netIncomeByPeriod` (line 147) is still built from all of `income.rows`, so the TTM window of the oldest emitted quarter is complete.
+- `N` = `this.o.maxQuarters ?? FINANCIALS_SYNC_CONFIG.vciIqMaxQuarters` (16, `config.ts:61`), so it is configuration (R5).
+- `financials-sync.ts` is unchanged (`git diff main...HEAD` is empty for it).
+- **Live-sample verification (reviewer, offline)**: I ran `VciIqFinancialsSource.fetchQuarterly('HPG')` through tsx with a stub `fetchImpl` that serves the 5 files in `work/tickets/STK-039/live-samples/` (35 quarters, 2018Q1–2026Q3). No network.
+  - default N (16): 16 periods, 2022Q4..2026Q3, `rejected: []`.
+  - N = 12: 12 periods, 2023Q4..2026Q3, `rejected: []`.
+  - N = 35 (old behaviour): 29 periods. There are 6 rejects: 2018Q1–Q3 `missing_eps`, plus 2021Q2, 2021Q4 and 2022Q1 `missing_shares`. That is exactly the attempt-1 failure, and now nothing is emitted that old.
+  - So a default-config run on valid live data gives `rejected: 0`, and the job no longer ends `ok:false` by construction.
+- The 16-quarter range covers the job window in both cases:
+  - Normal: latest expected quarter ≤ 2026Q3, so `windowStart` ≥ 2023Q4.
+  - Early publisher: the latest key is 1 quarter ahead and the emitted range still starts 3 quarters before `windowStart`.
+- The ADR 0005 "Derivation" and "Request accounting" sections each have the emitted-range line.
+
+### Acceptance criteria
+- [x] Source choice and ADR: unchanged since attempt 1. Evidence as in attempt 1.
+- [x] The new source feeds the existing validation, gaps and sector rules unchanged. Evidence: the job and core normalizer diffs are still empty, and the attempt-1 tests pass.
+- [x] Selected by config, no credentials. Evidence: unchanged, plus `vciIqMaxQuarters` in config.
+- [x] `pnpm worker:financials` / `--dry-run` work with the new source. The blocker is resolved: on the live-sample shape, a default run gives zero rejects (verification above). The new tests pass:
+  - "maxQuarters keeps only the latest N quarters"
+  - "missing shares for a quarter older than the emitted range -> no reject"
+  - "missing shares inside the emitted range is still rejected"
+  - "unsupported_company_type reports only the emitted range"
+- [x] Fixtures only, no-network guard, checks green.
+
+### Implementer's deviation (default-N fixture test)
+The recorded fixture has only 15 quarters (fewer than N+3 = 19). Because of that, the default-N test still expects 2023Q1–Q3 `missing_eps`, and fix item 4(a) is covered with `maxQuarters: 12`. I judge the coverage sufficient:
+- The trimming logic does not depend on N, and it is tested with an N that actually drops quarters, at both boundaries (outside the range: no reject; inside the range: still rejected).
+- I verified the default value end to end against the full live sample (above).
+- The only path left without a test is the `??` fallback to config when trimming actually drops quarters. That is low risk, and it is typed as `number`.
+- Noted as a nit below, not a blocker.
+
+### Scope
+Attempt-2 files are `config.ts`, `vci-iq-financials.ts`, its test, ADR 0005, and the workflow files (`ticket.md`, `backlog.md`, `impl-log.md`). All of them are in the plan or are the review-mandated fix. There are no out-of-plan product files.
+
+### Rules R1–R10
+No violations.
+- R1/R2: no new arithmetic outside the existing core derivation. Period comparison is lexical on the `YYYYQn` keys, which sort correctly.
+- R4: `source` / `fetched_at` unchanged.
+- R5: N is config.
+- R6: suspended, not checked.
+- R7: in scope.
+- R8: green, with tests added.
+
+### Nits (do not block)
+- `vci-iq-financials.test.ts:65`: the default-N fixture test still asserts 3 `missing_eps`. A reader may take that to mean that default runs reject. Two cheaper options:
+  - build an in-memory ≥19-quarter variant from `work/tickets/STK-039/live-samples/` (or extend the fixture) and assert `rejected: []` at the default N;
+  - or add a comment saying the fixture is shorter than N+3 on purpose.
+- The attempt-1 nits are still open: a distinct reason for a `details` 404, and narrowing `args.source` in `cli.ts`.
+
+### Follow-ups (out of scope)
+- These are unchanged from attempt 1:
+  - the `apps/worker/README.md` source text;
+  - the live `--dry-run` with the ADR 0005 checklist;
+  - the ADR follow-ups.
+- The PR is High tier (money derivation in `packages/core`), so Ming reviews it before merge.
