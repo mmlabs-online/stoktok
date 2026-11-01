@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P1 |
 | Areas | data, architecture |
 | Attempts | 0 |
@@ -28,3 +28,4 @@ docs/spec-v1.md §2.2 (data constraints: public sources are unofficial, check te
 - **Source changed to VietCap (Ming, 2026-11-01).** SSI FastConnect was dropped: it needs an SSI brokerage account and in-person registration, and Ming only wants price data. TCBS iFlash Open API was considered but needs checking (keys may carry trading rights; token exchange may need OTP). The SSI consults and plan are kept as `*-ssi-superseded.md` for reference.
 - Risk accepted by Ming, as with TCBS: the VCI endpoint is unofficial and may change or block without notice. The source-selection seam keeps the next swap to one adapter.
 - Plan gate: P1, so workspace CLAUDE.md §8 requires Ming's PLAN approval before IMPLEMENT.
+- **Plan approved (Ming, 2026-11-01).** Future P1/High tickets: workspace §8 gate applies (stop after PLAN for approval); project CLAUDE.md to be aligned separately.
