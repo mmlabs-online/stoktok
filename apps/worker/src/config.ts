@@ -72,6 +72,8 @@ export const FINANCIALS_SYNC_CONFIG = {
   upsertChunkSize: 500,
   /** A response with more quarters than this is rejected as malformed. */
   maxPeriodsPerResponse: 200,
+  /** Exact reject reason codes that are reported (`unsupportedSymbols`) but do not make the run fail. Their in-window quarters are still recorded as gaps (R4). */
+  nonFailingRejectReasons: ['unsupported_company_type'] as readonly string[],
 };
 export type FinancialsSyncConfig = typeof FINANCIALS_SYNC_CONFIG;
 

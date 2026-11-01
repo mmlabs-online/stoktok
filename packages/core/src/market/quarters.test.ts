@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   addQuarters,
   comparePeriods,
+  isPeriodInWindow,
   latestExpectedPeriod,
   parsePeriod,
   periodOf,
@@ -58,5 +59,15 @@ describe('planFinancialGaps', () => {
     ];
     const plan = planFinancialGaps({ ...base, openGaps, knownPeriods: ['2025Q2', '2026Q1'], presentPeriods: ['2025Q2', '2025Q4', '2026Q1'] });
     expect(plan).toEqual({ toRecord: [], toResolve: [8] });
+  });
+});
+
+describe('isPeriodInWindow', () => {
+  test('start and end are inclusive; outside either end is false; works across a year boundary', () => {
+    expect(isPeriodInWindow('2023Q3', '2023Q3', '2026Q2')).toBe(true);
+    expect(isPeriodInWindow('2026Q2', '2023Q3', '2026Q2')).toBe(true);
+    expect(isPeriodInWindow('2023Q2', '2023Q3', '2026Q2')).toBe(false);
+    expect(isPeriodInWindow('2026Q3', '2023Q3', '2026Q2')).toBe(false);
+    expect(isPeriodInWindow('2025Q1', '2024Q4', '2026Q1')).toBe(true);
   });
 });

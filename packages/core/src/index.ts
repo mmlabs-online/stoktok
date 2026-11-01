@@ -62,6 +62,7 @@ export type { DerivedQuarter, DeriveQuarterInput } from './market/financials-der
 export {
   addQuarters,
   comparePeriods,
+  isPeriodInWindow,
   latestExpectedPeriod,
   parsePeriod,
   periodOf,

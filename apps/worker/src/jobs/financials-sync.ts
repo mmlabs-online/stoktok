@@ -1,4 +1,4 @@
-import { FINANCIALS_GAP_TYPE, addQuarters, comparePeriods, latestExpectedPeriod, normalizeSymbol, planFinancialGaps, quarterBounds, vnDateOf } from '@stoktok/core';
+import { FINANCIALS_GAP_TYPE, addQuarters, comparePeriods, isPeriodInWindow, latestExpectedPeriod, normalizeSymbol, planFinancialGaps, quarterBounds, vnDateOf } from '@stoktok/core';
 import type { Result } from '@stoktok/core';
 import type { DataGapInsert, FinancialInsert, FinancialRecord, OpenGapRecord } from '@stoktok/db';
 import type { FinancialsSyncConfig } from '../config';
@@ -29,7 +29,7 @@ export interface FinancialsDeps {
 }
 
 export interface FinancialsSummary {
-  /** False on any failed or skipped symbol, rejected period, sector fetch error or ledger error. */
+  /** False on any failed or skipped symbol, in-window failing reject, sector fetch error or ledger error. */
   ok: boolean;
   dryRun: boolean;
   source: string;
@@ -39,8 +39,16 @@ export interface FinancialsSummary {
   symbols: string[];
   periodsFetched: number;
   rowsUpserted: number;
+  /** In-window rejects that are not in `config.nonFailingRejectReasons`; any of these fails the run. */
   rejected: number;
   rejectedBySymbol: Record<string, RejectedPeriod[]>;
+  /** Rejects with a period outside windowStart..windowEnd. Reported, not failing. */
+  rejectedOutOfWindow: number;
+  rejectedOutOfWindowBySymbol: Record<string, RejectedPeriod[]>;
+  /** Rejects whose reason is in `config.nonFailingRejectReasons`. Reported, not failing. */
+  rejectedNonFailing: number;
+  /** Sorted symbols with any non-failing reject (e.g. unsupported company type). */
+  unsupportedSymbols: string[];
   /** 'SYM 2026Q2: eps,revenue': stored values that changed on re-sync. */
   restated: string[];
   /** Missing quarters found per symbol (reported on dry-run too). */
@@ -85,6 +93,8 @@ export async function runFinancialsSync(deps: FinancialsDeps): Promise<Financial
   const gapRows: DataGapInsert[] = [];
   const resolveIds: number[] = [];
   const rejectedBySymbol: FinancialsSummary['rejectedBySymbol'] = {};
+  const rejectedOutOfWindowBySymbol: FinancialsSummary['rejectedOutOfWindowBySymbol'] = {};
+  const unsupportedSymbols: string[] = [];
   const restated: string[] = [];
   const missingPeriods: Record<string, string[]> = {};
   const sectors: { symbol: string; sector: string }[] = [];
@@ -95,6 +105,8 @@ export async function runFinancialsSync(deps: FinancialsDeps): Promise<Financial
   const symbolsWithoutData: string[] = [];
   let periodsFetched = 0;
   let rejected = 0;
+  let rejectedOutOfWindow = 0;
+  let rejectedNonFailing = 0;
   let consecutiveFailures = 0;
 
   for (const [i, symbol] of symbols.entries()) {
@@ -118,9 +130,20 @@ export async function runFinancialsSync(deps: FinancialsDeps): Promise<Financial
     const kept = res.periods.filter((p) => comparePeriods(p.period, windowStart) >= 0);
     periodsFetched += kept.length;
     if (res.periods.length === 0 && res.rejected.length === 0 && storedHere.size === 0) symbolsWithoutData.push(symbol);
-    if (res.rejected.length > 0) {
-      rejected += res.rejected.length;
-      rejectedBySymbol[symbol] = res.rejected;
+    for (const r of res.rejected) {
+      if (config.nonFailingRejectReasons.includes(r.reason)) {
+        rejectedNonFailing += 1;
+        if (!unsupportedSymbols.includes(symbol)) {
+          unsupportedSymbols.push(symbol);
+          log(`unsupported ${symbol}: ${r.reason}`);
+        }
+      } else if (r.period !== undefined && !isPeriodInWindow(r.period, windowStart, windowEnd)) {
+        rejectedOutOfWindow += 1;
+        (rejectedOutOfWindowBySymbol[symbol] ??= []).push(r);
+      } else {
+        rejected += 1;
+        (rejectedBySymbol[symbol] ??= []).push(r);
+      }
     }
     for (const p of kept) {
       const old = storedHere.get(p.period);
@@ -202,6 +225,10 @@ export async function runFinancialsSync(deps: FinancialsDeps): Promise<Financial
     rowsUpserted,
     rejected,
     rejectedBySymbol,
+    rejectedOutOfWindow,
+    rejectedOutOfWindowBySymbol,
+    rejectedNonFailing,
+    unsupportedSymbols,
     restated,
     missingPeriods,
     gapsRecorded: deps.dryRun ? 0 : gapRows.length,

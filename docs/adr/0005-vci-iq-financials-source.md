@@ -23,6 +23,7 @@ On 2026-11-01 the TCBS public API used by ADR 0002 is behind a Cloudflare bot ch
 5. Existing TCBS financials rows are kept; nothing is deleted. Overlapping periods are overwritten by the existing policy and appear in `restated`.
 6. Banks, brokers and insurers (`comTypeCode` other than `CT`) are rejected as `unsupported_company_type` and recorded as gaps. A follow-up ticket maps their layouts.
 7. Sector label: `sectorVn` (Vietnamese ICB level 2).
+8. Run health: the run fails only for in-window rejects whose reason is not in `FINANCIALS_SYNC_CONFIG.nonFailingRejectReasons` (default `['unsupported_company_type']`). Out-of-window rejects (before `windowStart`, or after `windowEnd` when the ratio endpoint lags the statements) are listed in `rejectedOutOfWindowBySymbol` and do not fail the run. Unsupported symbols are listed in `unsupportedSymbols`; their in-window quarters stay recorded as open gaps (R4), so no signal is produced from them.
 
 ## Endpoints (recorded 2026-11-01, symbol HPG, HTTP 200)
 Base `https://iq.vietcap.com.vn/api/iq-insight-service/v1/company`. Requests carried only the honest `User-Agent` and `Accept`; no cookie, handshake, Origin or Referer was needed. No credentials, so `.env.example` is unchanged.
@@ -47,7 +48,7 @@ Conversion is `toVndAmount`; division rounds half away from zero (`roundDiv`). D
 - BVPS(P) = round( (`bsa78`(P) - `bsa210`(P)) / shares(P) ).
 - A missing or invalid share count rejects the period (`missing_shares` / `invalid_shares`). A missing quarter, equity or minority value leaves that value missing (`missing_eps` / `missing_bvps`), so the period is rejected. A null `bsa210` is "missing", not 0.
 - Vendor `pe` / `pb` are not used.
-- Emitted range: the source returns full history, so only the latest `vciIqMaxQuarters` (16 = lookback 12 + 4) quarters are derived and reported. Older quarters are dropped silently, so they never count as rejects; the full income history still feeds the TTM window of the oldest emitted quarter.
+- Emitted range: the source returns full history, so only the latest `vciIqMaxQuarters` (16 = lookback 12 + 4) quarters are derived and reported. Older quarters are dropped silently, so they never count as rejects (rejects among the extra 4 quarters before `windowStart` are reported as out-of-window); the full income history still feeds the TTM window of the oldest emitted quarter.
 
 ## Header policy
 Hard rule: only `User-Agent` (honest `stoktok/...`) and `Accept`. A 403 or challenge page fails the run with a non-retryable error; there is no circumvention.
