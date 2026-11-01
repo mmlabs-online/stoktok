@@ -7,7 +7,7 @@
 | Areas | data, architecture |
 | Attempts | 1 |
 | Created | 2026-11-01 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/25 |
 
 ## Goal
 Add a VietCap (VCI) public-endpoint implementation of `PriceSource` and make it the primary end-of-day price source, because the TCBS public endpoint now sits behind a Cloudflare bot challenge and every request fails (HTTP 403/404, 2026-11-01).
