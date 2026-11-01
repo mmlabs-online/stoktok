@@ -2,7 +2,9 @@
 
 ## End-of-day price sync (`eod-prices`)
 
-Fetches daily OHLCV for watchlist and held symbols from the TCBS public API and upserts `prices_daily` (idempotent; `source` and `fetched_at` on every row). See `docs/adr/0001-eod-price-source.md`.
+Fetches daily OHLCV for watchlist and held symbols from the VietCap (VCI) public endpoint (default, source `vci-public`) and upserts `prices_daily` (idempotent; `source` and `fetched_at` on every row). See `docs/adr/0004-vci-eod-price-source.md` and `docs/adr/0001-eod-price-source.md`.
+
+`--source <vci-public|tcbs-public>` picks the source for one run; the default is `EOD_SYNC_CONFIG.priceSource` in `src/config.ts`. **First live run: `pnpm worker:eod --dry-run --source vci-public`** and work through the checklist in ADR 0004. An HTTP 403 means the source blocks us: the run fails, there is no bypass (only an honest User-Agent, Accept and Content-Type are sent).
 
 ```
 pnpm worker:eod              # fetch and write

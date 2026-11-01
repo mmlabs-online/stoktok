@@ -9,8 +9,22 @@ export interface GetJsonOptions {
   log: (message: string) => void;
 }
 
-/** Polite client: only User-Agent and Accept are sent. Retries network errors, 429 and 5xx with backoff. */
-export async function getJson(fetchImpl: typeof fetch, url: string, o: GetJsonOptions): Promise<unknown> {
+interface RequestInitLite {
+  method: 'GET' | 'POST';
+  body?: string;
+}
+
+/** Polite client: only User-Agent and Accept (plus Content-Type for POST) are sent. Retries network errors, 429 and 5xx with backoff. */
+export function getJson(fetchImpl: typeof fetch, url: string, o: GetJsonOptions): Promise<unknown> {
+  return requestJson(fetchImpl, url, { method: 'GET' }, o);
+}
+
+/** Same policy as getJson, with a JSON body. No caller-supplied headers (no browser-like headers by design). */
+export function postJson(fetchImpl: typeof fetch, url: string, body: unknown, o: GetJsonOptions): Promise<unknown> {
+  return requestJson(fetchImpl, url, { method: 'POST', body: JSON.stringify(body) }, o);
+}
+
+async function requestJson(fetchImpl: typeof fetch, url: string, init: RequestInitLite, o: GetJsonOptions): Promise<unknown> {
   let last: SourceError | undefined;
   for (let attempt = 1; attempt <= o.maxAttempts; attempt++) {
     if (attempt > 1) {
@@ -20,7 +34,12 @@ export async function getJson(fetchImpl: typeof fetch, url: string, o: GetJsonOp
     }
     try {
       const res = await fetchImpl(url, {
-        headers: { 'User-Agent': o.userAgent, Accept: 'application/json' },
+        ...(init.method === 'POST' ? { method: 'POST', body: init.body } : {}),
+        headers: {
+          'User-Agent': o.userAgent,
+          Accept: 'application/json',
+          ...(init.method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
+        },
         signal: AbortSignal.timeout(o.timeoutMs),
       });
       if (res.ok) {

@@ -1,7 +1,13 @@
 import { DEFAULT_FINANCIALS_PUBLISH_LAG_DAYS } from '@stoktok/core';
 
 /** R5: sync tuning is configuration, not literals in code. */
+export const PRICE_SOURCE_IDS = ['vci-public', 'tcbs-public'] as const;
+export type PriceSourceId = (typeof PRICE_SOURCE_IDS)[number];
+export const isPriceSourceId = (v: string): v is PriceSourceId => (PRICE_SOURCE_IDS as readonly string[]).includes(v);
+
 export const EOD_SYNC_CONFIG = {
+  /** Active end-of-day price source (ADR 0004). `--source <id>` overrides it per run. */
+  priceSource: 'vci-public' as PriceSourceId,
   /** Trading days fetched per symbol, ending at the target date. */
   lookbackTradingDays: 20,
   /** Pause between symbols (low request volume). */
@@ -16,7 +22,7 @@ export const EOD_SYNC_CONFIG = {
   backfillDefaultTradingDays: 260,
   /** Upper bound accepted by the CLI for `--backfill <n>`. */
   backfillMaxTradingDays: 520,
-  /** Trading days per source request in backfill mode (the TCBS range cap is unverified, ADR 0001). */
+  /** Trading days per source request in backfill mode (source range caps are unverified, ADR 0001/0004). */
   backfillChunkTradingDays: 60,
   /** A backfill planning more requests than this aborts before any fetch. */
   maxBackfillRequests: 500,
@@ -27,6 +33,14 @@ export const TCBS_CONFIG = {
   baseUrl: 'https://apipubaws.tcbs.com.vn',
   userAgent: 'stoktok/0.1 (personal portfolio tracker; low-volume end-of-day sync)',
   financialsUserAgent: 'stoktok/0.1 (personal portfolio tracker; low-volume daily financials check)',
+};
+
+export const VCI_CONFIG = {
+  baseUrl: 'https://trading.vietcap.com.vn/api',
+  chartPath: '/chart/OHLCChart/gap-chart',
+  userAgent: 'stoktok/0.1 (personal portfolio tracker; low-volume end-of-day sync)',
+  /** Largest countBack (calendar days) accepted per request; the real server cap is unverified (ADR 0004). */
+  maxCalendarDaysPerRequest: 400,
 };
 
 export const FINANCIALS_SYNC_CONFIG = {

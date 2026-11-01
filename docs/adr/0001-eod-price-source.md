@@ -2,6 +2,8 @@
 
 Status: accepted (Ming, 2026-10-24)
 
+Amended 2026-11-01 by ADR 0004: TCBS public endpoint is behind a Cloudflare bot challenge (403/404); primary EOD source is now `vci-public` (Ming). TCBS stays selectable via `--source tcbs-public`.
+
 ## Context
 Spec §9 Q4 asks for a primary and fallback price source after a license/terms check. The `PriceSource` interface (spec §4.3) keeps the source swappable.
 
