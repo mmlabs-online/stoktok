@@ -10,6 +10,10 @@ test('financials source defaults to vci-iq', () => {
   expect(FINANCIALS_SYNC_CONFIG.financialsSource).toBe('vci-iq');
 });
 
+test("financials nonFailingRejectReasons default is ['unsupported_company_type']", () => {
+  expect(FINANCIALS_SYNC_CONFIG.nonFailingRejectReasons).toEqual(['unsupported_company_type']);
+});
+
 test('VCI IQ user agent is honest: stoktok, no browser tokens', () => {
   expect(VCI_IQ_CONFIG.userAgent).toMatch(/^stoktok\//);
   for (const token of ['Mozilla', 'Chrome', 'Safari', 'AppleWebKit']) expect(VCI_IQ_CONFIG.userAgent).not.toContain(token);

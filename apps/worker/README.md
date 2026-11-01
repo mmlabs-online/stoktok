@@ -61,7 +61,7 @@ pnpm worker:financials --dry-run    # fetch and validate, write nothing
 
 Env as for the EOD sync. **First live run: use `--dry-run` and check** that EPS is in the thousands of VND, BVPS is above 100 VND, revenue is in billions of VND (stored as integer VND) and which EPS basis the source uses (quarterly vs TTM; this is unverified). Wrong units are rejected (see `rejectedBySymbol`) instead of stored; `missingPeriods` is reported on dry-run too.
 
-Output: one JSON summary line on stdout (logs on stderr). Exit code: 0 ok; 1 partial or failed run (a symbol failed or was skipped, a period was rejected, the sector fetch failed, the ledger could not be read, or a fatal error); 2 usage error. Symbols with no data (ETFs) do not fail the run.
+Output: one JSON summary line on stdout (logs on stderr). Exit code: 0 ok; 1 partial or failed run (a symbol failed or was skipped, an in-window period was rejected (unsupported company types and out-of-window rejects are reported, not failing), the sector fetch failed, the ledger could not be read, or a fatal error); 2 usage error. Symbols with no data (ETFs) do not fail the run.
 
 Schedule (documented only), after the EOD sync:
 

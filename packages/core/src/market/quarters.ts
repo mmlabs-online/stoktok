@@ -39,6 +39,11 @@ export function comparePeriods(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
+/** True when windowStart <= period <= windowEnd. */
+export function isPeriodInWindow(period: string, windowStart: string, windowEnd: string): boolean {
+  return comparePeriods(period, windowStart) >= 0 && comparePeriods(period, windowEnd) <= 0;
+}
+
 /** First instant and last whole second of the quarter in Asia/Ho_Chi_Minh (+07:00, no DST), as ISO UTC strings. */
 export function quarterBounds(period: string): { fromTs: string; toTs: string } {
   const { year, quarter } = mustParse(period);

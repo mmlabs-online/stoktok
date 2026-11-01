@@ -220,4 +220,70 @@ describe('runFinancialsSync', () => {
     const { summary } = await run(m, fakeSource(periodsOf(['2026Q2'])).source);
     expect(summary).toMatchObject({ ok: true, source: 'fake-src', rowsUpserted: 1 });
   });
+  describe('run health (STK-041)', () => {
+    const rej = (period: string | undefined, reason: string) => (period === undefined ? { reason } : { period, reason });
+    const bank = (): QuarterlyResult => ({ periods: [], rejected: range('2022Q4', '2026Q3').map((p) => rej(p, 'unsupported_company_type')) });
+    test('reject before windowStart: ok true, listed out-of-window', async () => {
+      const m = memoryStore({ watchlist: ['BCG'] });
+      const { summary } = await run(m, fakeSource(periodsOf(['2026Q2'], [rej('2021Q2', 'missing_shares')])).source);
+      expect(summary).toMatchObject({ ok: true, rejected: 0, rejectedOutOfWindow: 1, rejectedBySymbol: {}, rejectedOutOfWindowBySymbol: { BCG: [{ period: '2021Q2', reason: 'missing_shares' }] } });
+    });
+    test('reject after windowEnd: ok true, no gap for 2026Q3', async () => {
+      const m = memoryStore({ watchlist: ['GAS'] });
+      const { summary } = await run(m, fakeSource(periodsOf(range(START, '2026Q2'), [rej('2026Q3', 'missing_shares')])).source);
+      expect(summary).toMatchObject({ ok: true, rejected: 0, rejectedOutOfWindow: 1 });
+      expect(summary.missingPeriods).toEqual({});
+    });
+    test.each(['missing_shares', 'missing_eps'])('in-window %s -> ok false', async (reason) => {
+      const m = memoryStore({ watchlist: ['AAA'] });
+      const { summary } = await run(m, fakeSource(periodsOf(['2026Q1'], [rej('2026Q2', reason)])).source);
+      expect(summary).toMatchObject({ ok: false, rejected: 1, rejectedBySymbol: { AAA: [{ period: '2026Q2', reason }] } });
+    });
+    test('period-less reject is in-window and failing', async () => {
+      const m = memoryStore({ watchlist: ['AAA'] });
+      const { summary } = await run(m, fakeSource(periodsOf(['2026Q2'], [rej(undefined, 'invalid_row')])).source);
+      expect(summary).toMatchObject({ ok: false, rejected: 1 });
+    });
+    test('unsupported company type: ok true, listed, 12 gaps, idempotent, one log line', async () => {
+      const m = memoryStore({ watchlist: ['TCB'] });
+      const a = await run(m, fakeSource(bank).source);
+      expect(a.summary).toMatchObject({ ok: true, unsupportedSymbols: ['TCB'], rejected: 0, rejectedNonFailing: 16, gapsRecorded: 12 });
+      expect(a.summary.rejectedBySymbol).toEqual({});
+      expect(a.logs.filter((l) => l.startsWith('unsupported TCB'))).toHaveLength(1);
+      expect(m.table.size).toBe(0);
+      expect(a.summary.missingPeriods.TCB).toEqual(range(START, '2026Q2'));
+      const b = await run(m, fakeSource(bank).source);
+      expect(b.summary.gapsRecorded).toBe(0);
+      expect(m.gaps).toHaveLength(12);
+    });
+    test('unsupported plus a failing reject on the same symbol -> ok false', async () => {
+      const m = memoryStore({ watchlist: ['TCB'] });
+      const { summary } = await run(m, fakeSource(() => ({ periods: [], rejected: [...bank().rejected, rej(undefined, 'invalid_row')] })).source);
+      expect(summary).toMatchObject({ ok: false, rejected: 1, unsupportedSymbols: ['TCB'] });
+    });
+    test('reason list comes from config', async () => {
+      const m = memoryStore({ watchlist: ['TCB'] });
+      const { summary } = await run(m, fakeSource(bank).source, { config: { ...FINANCIALS_SYNC_CONFIG, nonFailingRejectReasons: [] } });
+      expect(summary).toMatchObject({ ok: false, rejected: 12, rejectedOutOfWindow: 4, unsupportedSymbols: [] });
+    });
+    describe('replay 2026-11-01 dry-run shape', () => {
+      const banks = ['AGR', 'BSI', 'SHB', 'TCB', 'TPB', 'VCB', 'VND'];
+      const impl = (extra: boolean) => (symbol: string): QuarterlyResult => {
+        if (banks.includes(symbol)) return bank();
+        if (symbol === 'BCG') return periodsOf(range('2023Q3', '2024Q4'), ['2021Q2', '2021Q4', '2022Q1'].map((p) => rej(p, 'missing_shares')))(symbol);
+        if (symbol === 'GAS') return periodsOf(range('2023Q3', '2026Q2'), [rej('2026Q3', 'missing_shares'), ...(extra ? [rej('2025Q4', 'missing_shares')] : [])])(symbol);
+        return periodsOf(range('2023Q3', '2026Q3'))(symbol);
+      };
+      const watchlist = [...banks, 'BCG', 'GAS', 'FPT', 'HPG'];
+      const now = new Date('2026-11-01T11:28:00Z');
+      test('ok true', async () => {
+        const { summary } = await run(memoryStore({ watchlist }), fakeSource(impl(false)).source, { now, dryRun: true });
+        expect(summary).toMatchObject({ windowEnd: '2026Q2', periodsFetched: 44, rejected: 0, rejectedOutOfWindow: 4, rejectedNonFailing: 112, unsupportedSymbols: [...banks].sort(), ok: true });
+      });
+      test('one extra in-window missing_shares -> ok false', async () => {
+        const { summary } = await run(memoryStore({ watchlist }), fakeSource(impl(true)).source, { now, dryRun: true });
+        expect(summary).toMatchObject({ ok: false, rejected: 1 });
+      });
+    });
+  });
 });
