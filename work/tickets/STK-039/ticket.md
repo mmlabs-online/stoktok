@@ -7,7 +7,7 @@
 | Areas | data, finance |
 | Attempts | 2 |
 | Created | 2026-11-01 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/27 |
 
 ## Goal
 Choose and implement a new `FinancialsSource` for quarterly EPS, BVPS, revenue, net income and sector, because the TCBS public API used by STK-014 is now blocked by a bot challenge.
