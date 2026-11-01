@@ -1,0 +1,154 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": {
+  "years": [
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2023,
+    "lengthReport": 5,
+    "isa3": 118953027893654,
+    "isa22": 6835064334356
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2024,
+    "lengthReport": 5,
+    "isa3": 138855112131387,
+    "isa22": 12021443836074
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2025,
+    "lengthReport": 5,
+    "isa3": 156116094618482,
+    "isa22": 15453174006223
+   }
+  ],
+  "quarters": [
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2023,
+    "lengthReport": 1,
+    "isa3": 26588751786987,
+    "isa22": 397497275202
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2023,
+    "lengthReport": 2,
+    "isa3": 29496383378315,
+    "isa22": 1460042613098
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2023,
+    "lengthReport": 3,
+    "isa3": 28484087800597,
+    "isa22": 2004745086782
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2023,
+    "lengthReport": 4,
+    "isa3": 34383804927755,
+    "isa22": 2972779359274
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2024,
+    "lengthReport": 1,
+    "isa3": 30852359591717,
+    "isa22": 2870588692991
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2024,
+    "lengthReport": 2,
+    "isa3": 39555509827454,
+    "isa22": 3319263141862
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2024,
+    "lengthReport": 3,
+    "isa3": 33956260285527,
+    "isa22": 3022946632050
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2024,
+    "lengthReport": 4,
+    "isa3": 34490982426689,
+    "isa22": 2808645369171
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2025,
+    "lengthReport": 1,
+    "isa3": 37621674553578,
+    "isa22": 3344284694388
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2025,
+    "lengthReport": 2,
+    "isa3": 35910519111209,
+    "isa22": 4256487211764
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2025,
+    "lengthReport": 3,
+    "isa3": 36407416403924,
+    "isa22": 3988318474539
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2025,
+    "lengthReport": 4,
+    "isa3": 46176484549771,
+    "isa22": 3864083625532
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2026,
+    "lengthReport": 1,
+    "isa3": 52900847302653,
+    "isa22": 8994003244142
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2026,
+    "lengthReport": 2,
+    "isa3": 55158902298901,
+    "isa22": 6371019004563
+   },
+   {
+    "organCode": "HPG",
+    "ticker": "HPG",
+    "yearReport": 2026,
+    "lengthReport": 3,
+    "isa3": 62214187236976,
+    "isa22": 8217339610974
+   }
+  ]
+ }
+}

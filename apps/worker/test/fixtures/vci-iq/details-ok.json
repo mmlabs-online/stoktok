@@ -1,0 +1,14 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": {
+  "organCode": "HPG",
+  "ticker": "HPG",
+  "comTypeCode": "CT",
+  "sector": "Basic Resources",
+  "sectorVn": "Tài nguyên Cơ bản",
+  "icbCodeLv2": "1700",
+  "isBank": false,
+  "numberOfSharesMktCap": 8442964520
+ }
+}

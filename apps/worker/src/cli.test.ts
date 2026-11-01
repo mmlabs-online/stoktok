@@ -70,6 +70,15 @@ describe('parseArgs', () => {
         expect(parseArgs(argv)).toMatchObject({ ok: false });
       }
     });
+    test('financials accepts vci-iq / tcbs-public, rejects price-only ids; eod-prices rejects vci-iq', () => {
+      for (const id of ['vci-iq', 'tcbs-public'] as const) {
+        expect(parseArgs(['financials', '--source', id])).toEqual({ ok: true, job: 'financials', dryRun: false, source: id });
+        expect(parseArgs(['financials', '--dry-run', '--source', id])).toEqual({ ok: true, job: 'financials', dryRun: true, source: id });
+      }
+      expect(parseArgs(['financials', '--source', 'vci-public'])).toMatchObject({ ok: false });
+      expect(parseArgs(['eod-prices', '--source', 'vci-iq'])).toMatchObject({ ok: false });
+      expect(parseArgs(['financials', '--source', 'vci-iq', '--source', 'tcbs-public'])).toMatchObject({ ok: false });
+    });
     test('without --source the result has no source key', () => {
       expect(parseArgs(['eod-prices', '--dry-run'])).not.toHaveProperty('source');
     });
