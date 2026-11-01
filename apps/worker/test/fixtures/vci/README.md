@@ -14,3 +14,5 @@ curl -sS -A 'stoktok/0.1 (manual check)' \
 Only these three headers are allowed; no Origin/Referer/browser headers.
 
 Files: `chart-ok.json` (valid, both `t` encodings), `chart-wrapped.json` (`{data:[...]}` root), `chart-thousand-vnd.json` (wrong unit), `chart-malformed.json` (one good bar plus bad ones), `chart-unequal-arrays.json`, `chart-empty.json`, `chart-other-symbol.json`, `chart-too-many-bars.json`.
+
+Adjusted-history fixtures (STK-040, synthetic, modelled on the 2026-11-01 dry-run): `chart-adjusted-mixed.json` (TCB, 2026-10-26..30: fractional, integer coincidence, fractional, then two raw integer bars), `chart-adjusted-latest.json` (same days, newest bar fractional).

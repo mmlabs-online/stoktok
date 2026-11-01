@@ -33,3 +33,4 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-037 | Release workflow and deployment-repo integration | DONE | P1 | architecture, security | 2 | 2026-10-30 |
 | STK-038 | VietCap (VCI) public endpoint as end-of-day price source | DONE | P1 | data, architecture | 1 | 2026-11-01 |
 | STK-039 | Replace the quarterly financials source | DONE | P2 | data, finance | 2 | 2026-11-01 |
+| STK-040 | Reject adjusted-price history in VCI responses | DONE | P2 | data | 1 | 2026-11-01 |

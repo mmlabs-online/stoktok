@@ -183,3 +183,99 @@ describe('VciPriceSource', () => {
     }
   });
 });
+
+describe('VciPriceSource adjusted history', () => {
+  const F = '2026-10-26';
+  const T = '2026-10-30';
+  const col = (rows: { t: number; o: unknown; h: unknown; l: unknown; c: unknown }[]) => [
+    { symbol: 'TCB', t: rows.map((r) => r.t), o: rows.map((r) => r.o), h: rows.map((r) => r.h), l: rows.map((r) => r.l), c: rows.map((r) => r.c), v: rows.map(() => 1000) },
+  ];
+  const D26 = 1792947600; // 2026-10-26 00:00 VN
+  const day = (n: number) => D26 + n * 86400;
+
+  test('mixed response rejects every bar on or before the latest fractional bar', async () => {
+    const r = await ok('chart-adjusted-mixed.json').source.fetchDaily('TCB', F, T, {});
+    expect(r.rejected).toEqual([
+      { tradeDate: '2026-10-26', reason: 'adjusted_price_history' },
+      { tradeDate: '2026-10-27', reason: 'adjusted_price_history' },
+      { tradeDate: '2026-10-28', reason: 'adjusted_price_history' },
+    ]);
+    expect(r.bars.map((b) => [b.tradeDate, b.close])).toEqual([['2026-10-29', 33700], ['2026-10-30', 33800]]);
+    expect(r.adjustedCutoff).toBe('2026-10-28');
+  });
+
+  test('integer-valued bar older than the latest fractional bar is rejected too', async () => {
+    // 2026-10-27 is whole, on the 10-VND step and within every guard; alone it would be accepted.
+    const alone = await setup([res(200, col([{ t: day(1), o: 22800, h: 23100, l: 22700, c: 22900 }]))]).source.fetchDaily('TCB', F, T, {});
+    expect(alone.bars).toHaveLength(1);
+    const r = await ok('chart-adjusted-mixed.json').source.fetchDaily('TCB', F, T, {});
+    expect(r.rejected.find((x) => x.tradeDate === '2026-10-27')?.reason).toBe('adjusted_price_history');
+    expect(r.bars.find((b) => b.tradeDate === '2026-10-27')).toBeUndefined();
+  });
+
+  test('bars after the cut-off are normalized as before', async () => {
+    const body = col([
+      { t: day(0), o: 22701.14, h: 22990.5, l: 22600.8, c: 22850.2 },
+      { t: day(1), o: 33505, h: 33800, l: 33400, c: 33700 }, // off the 10-VND step
+      { t: day(2), o: 33500, h: 33800, l: 33400, c: 33700 },
+    ]);
+    const r = await setup([res(200, body)]).source.fetchDaily('TCB', F, T, {});
+    expect(r.rejected).toEqual([
+      { tradeDate: '2026-10-26', reason: 'adjusted_price_history' },
+      { tradeDate: '2026-10-27', reason: 'price_off_step' },
+    ]);
+    expect(r.bars.map((b) => b.tradeDate)).toEqual(['2026-10-28']);
+  });
+
+  test('fractional bar outside [from, to] still sets the cut-off', async () => {
+    const body = col([
+      { t: day(0), o: 22701.14, h: 22990.5, l: 22600.8, c: 22850.2 },
+      { t: day(2), o: 33500, h: 33800, l: 33400, c: 33700 },
+      { t: day(3), o: 33500, h: 33800, l: 33400, c: 33700 },
+    ]);
+    const r = await setup([res(200, body)]).source.fetchDaily('TCB', '2026-10-27', T, {});
+    expect(r.rejected).toEqual([]);
+    expect(r.bars).toHaveLength(2);
+    expect(r.adjustedCutoff).toBe('2026-10-26');
+    // the cut-off date is inside the range once the fractional bar is dated inside it
+    const r2 = await setup([res(200, body)]).source.fetchDaily('TCB', '2026-10-26', T, {});
+    expect(r2.rejected).toEqual([{ tradeDate: '2026-10-26', reason: 'adjusted_price_history' }]);
+  });
+
+  test('fractional bar with an invalid t rejects the whole response', async () => {
+    const body = col([
+      { t: day(0), o: 33500, h: 33800, l: 33400, c: 33700 },
+      { t: -1, o: 22701.14, h: 22990.5, l: 22600.8, c: 22850.2 },
+    ]);
+    const r = await setup([res(200, body)]).source.fetchDaily('TCB', F, T, {});
+    expect(r.bars).toEqual([]);
+    expect(r.rejected).toEqual([
+      { tradeDate: '2026-10-26', reason: 'adjusted_price_history' },
+      { reason: 'invalid_trade_date' },
+    ]);
+    expect(r.adjustedCutoff).toBe(T);
+  });
+
+  test('newest bar fractional -> every bar rejected, adjustedCutoff = that date', async () => {
+    const r = await ok('chart-adjusted-latest.json').source.fetchDaily('TCB', F, T, {});
+    expect(r.bars).toEqual([]);
+    expect(r.rejected).toHaveLength(5);
+    expect(r.rejected.every((x) => x.reason === 'adjusted_price_history')).toBe(true);
+    expect(r.adjustedCutoff).toBe('2026-10-30');
+  });
+
+  test('ctx.rejectOnOrBefore rejects integer bars on or before it; result carries it as adjustedCutoff', async () => {
+    const r = await ok('chart-ok.json').source.fetchDaily('VNM', FROM, TO, { rejectOnOrBefore: '2026-10-21' });
+    expect(r.rejected).toEqual([
+      { tradeDate: '2026-10-20', reason: 'adjusted_price_history' },
+      { tradeDate: '2026-10-21', reason: 'adjusted_price_history' },
+    ]);
+    expect(r.bars.map((b) => b.tradeDate)).toEqual(['2026-10-22']);
+    expect(r.adjustedCutoff).toBe('2026-10-21');
+  });
+
+  test('all-integer response -> no adjustedCutoff field', async () => {
+    const r = await ok('chart-ok.json').source.fetchDaily('VNM', FROM, TO, {});
+    expect('adjustedCutoff' in r).toBe(false);
+  });
+});

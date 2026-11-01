@@ -1,4 +1,5 @@
 import {
+  ADJUSTED_HISTORY_REASON,
   DEFAULT_PRICE_CUTOFF_MINUTES_VN,
   PRICES_GAP_TYPE,
   expectedPriceDate,
@@ -46,7 +47,11 @@ export interface EodDeps {
 }
 
 export interface EodSummary {
-  /** False on any source failure, skipped symbol, ledger error or rejected bar. */
+  /**
+   * False on any source failure, skipped symbol, ledger error or rejected bar. Exceptions: `adjusted_price_history`
+   * rejections do not count (expected for ~20 trading days after a corporate action), unless the newest window of
+   * a symbol has a cut-off and zero accepted bars.
+   */
   ok: boolean;
   dryRun: boolean;
   source: string;
@@ -136,6 +141,8 @@ export async function runEodSync(deps: EodDeps): Promise<EodSummary> {
   const symbolsWithoutBars: string[] = [];
   let barsFetched = 0;
   let rejected = 0;
+  let adjustedRejected = 0;
+  const adjustedNewest: string[] = [];
   let consecutiveFailures = 0;
   let requestsMade = 0;
 
@@ -146,6 +153,9 @@ export async function runEodSync(deps: EodDeps): Promise<EodSummary> {
     // Newest chunk is checked against the stored latest close; each older chunk against the
     // oldest accepted close of the chunk after it (same close_jump rule, correct reference).
     let lastClose = lastCloses[symbol];
+    // Adjusted-history cut-off found so far (newer chunks first): older chunks reject bars on or before it.
+    let cutoff: string | undefined;
+    let newest = true;
     for (const chunk of chunks) {
       if (consecutiveFailures >= config.maxConsecutiveFailures) {
         unmade = true;
@@ -153,14 +163,25 @@ export async function runEodSync(deps: EodDeps): Promise<EodSummary> {
       }
       if (requestsMade > 0) await deps.sleep(config.requestDelayMs);
       requestsMade += 1;
+      const isNewest = newest;
+      newest = false;
       try {
-        const res = await source.fetchDaily(symbol, chunk.from, chunk.to, lastClose !== undefined ? { lastClose } : {});
+        const res = await source.fetchDaily(symbol, chunk.from, chunk.to, {
+          ...(lastClose !== undefined ? { lastClose } : {}),
+          ...(cutoff !== undefined ? { rejectOnOrBefore: cutoff } : {}),
+        });
         consecutiveFailures = 0;
         barsFetched += res.bars.length;
         symbolBars += res.bars.length;
         if (res.rejected.length > 0) {
           rejected += res.rejected.length;
+          adjustedRejected += res.rejected.filter((r) => r.reason === ADJUSTED_HISTORY_REASON).length;
           rejectedBySymbol[symbol] = [...(rejectedBySymbol[symbol] ?? []), ...res.rejected];
+        }
+        cutoff = res.adjustedCutoff ?? cutoff;
+        if (isNewest && res.adjustedCutoff !== undefined && res.bars.length === 0) {
+          adjustedNewest.push(symbol);
+          log(`error: ${symbol}: newest window is all adjusted history (cut-off ${res.adjustedCutoff})`);
         }
         const oldest = [...res.bars].sort((x, y) => x.tradeDate.localeCompare(y.tradeDate))[0];
         if (oldest) lastClose = oldest.close;
@@ -184,6 +205,7 @@ export async function runEodSync(deps: EodDeps): Promise<EodSummary> {
         log(`error: ${symbol}: ${e instanceof Error ? e.message : 'unknown error'}`);
       }
     }
+    if (cutoff !== undefined) log(`adjusted history ${symbol}: bars on or before ${cutoff} rejected`);
     if (failed) failedSymbols.push(symbol);
     else if (unmade) skippedSymbols.push(symbol);
     else if (symbolBars === 0) symbolsWithoutBars.push(symbol);
@@ -221,7 +243,12 @@ export async function runEodSync(deps: EodDeps): Promise<EodSummary> {
   }
 
   return {
-    ok: failedSymbols.length === 0 && skippedSymbols.length === 0 && rejected === 0 && ledgerError === undefined,
+    ok:
+      failedSymbols.length === 0 &&
+      skippedSymbols.length === 0 &&
+      rejected - adjustedRejected === 0 &&
+      adjustedNewest.length === 0 &&
+      ledgerError === undefined,
     dryRun: deps.dryRun,
     source: source.name,
     fetchedAt,
