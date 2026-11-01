@@ -7,7 +7,7 @@
 | Areas | data |
 | Attempts | 1 |
 | Created | 2026-11-01 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/28 |
 
 ## Goal
 Make `pnpm worker:financials` report `ok: true` when the only problems are expected ones. Today the first live dry-run with `vci-iq` (2026-11-01) ended `ok: false` / exit 1 for three reasons. 7 of 11 symbols are banks or brokers and are rejected as `unsupported_company_type`. The source emits 16 quarters while the job window is 12 (2023Q3..2026Q2), so rejects outside the window still count. And the newest quarter is rejected as `missing_shares` while VietCap's ratio endpoint lags the statements (GAS 2026Q3).
