@@ -1,0 +1,186 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": [
+  {
+   "year": "2023",
+   "quarter": 1,
+   "organCode": "HPG",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 5814785700,
+   "pe": 236.4276962683,
+   "pb": 1.6295193838,
+   "marketCap": 156999213900000
+  },
+  {
+   "year": "2023",
+   "quarter": 2,
+   "organCode": "HPG",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 5814785700,
+   "pe": -78.6217447436,
+   "pb": 1.5342243138,
+   "marketCap": 150021471060000
+  },
+  {
+   "year": "2023",
+   "quarter": 3,
+   "organCode": "HPG",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 5814785700,
+   "pe": 84.3899895658,
+   "pb": 1.5819866919,
+   "marketCap": 157871431755000
+  },
+  {
+   "year": "2023",
+   "quarter": 4,
+   "organCode": "HPG",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 5814785700,
+   "pe": 25.4793258989,
+   "pb": 1.6945775155,
+   "marketCap": 174152831715000
+  },
+  {
+   "year": "2023",
+   "quarter": 5,
+   "organCode": "HPG",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 5814785700,
+   "pe": 23.8587381014,
+   "pb": 1.5078627976,
+   "marketCap": 174152831715000
+  },
+  {
+   "year": "2024",
+   "quarter": 1,
+   "organCode": "HPG",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 6396250200,
+   "pe": 19.5842372597,
+   "pb": 1.7275618097,
+   "marketCap": 182293130700000
+  },
+  {
+   "year": "2024",
+   "quarter": 2,
+   "organCode": "HPG",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 6396250200,
+   "pe": 15.4932155555,
+   "pb": 1.5935546072,
+   "marketCap": 173018567910000
+  },
+  {
+   "year": "2024",
+   "quarter": 3,
+   "organCode": "HPG",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 6396250200,
+   "pe": 13.5687507009,
+   "pb": 1.481702522,
+   "marketCap": 165343067670000
+  },
+  {
+   "year": "2024",
+   "quarter": 4,
+   "organCode": "HPG",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 6396250200,
+   "pe": 13.7540107432,
+   "pb": 1.4458567276,
+   "marketCap": 165343067670000
+  },
+  {
+   "year": "2024",
+   "quarter": 5,
+   "organCode": "HPG",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 6396250200,
+   "pe": 14.3449697107,
+   "pb": 1.4766196367,
+   "marketCap": 165343067670000
+  },
+  {
+   "year": "2025",
+   "quarter": 1,
+   "organCode": "HPG",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 7675465855,
+   "pe": 15.8176097536,
+   "pb": 1.6791986446,
+   "marketCap": 197643245766250
+  },
+  {
+   "year": "2025",
+   "quarter": 2,
+   "organCode": "HPG",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 7675465855,
+   "pe": 16.199639802,
+   "pb": 1.7904411564,
+   "marketCap": 217599456989250
+  },
+  {
+   "year": "2025",
+   "quarter": 3,
+   "organCode": "HPG",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 7675465855,
+   "pe": 14.5270373191,
+   "pb": 1.6674132281,
+   "marketCap": 209156444548750
+  },
+  {
+   "year": "2025",
+   "quarter": 4,
+   "organCode": "HPG",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 7675465855,
+   "pe": 13.9322068816,
+   "pb": 1.6666291513,
+   "marketCap": 215296817232750
+  },
+  {
+   "year": "2025",
+   "quarter": 5,
+   "organCode": "HPG",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 7675465855,
+   "pe": 10.5362105889,
+   "pb": 1.2477437497,
+   "marketCap": 215296817232750
+  },
+  {
+   "year": "2026",
+   "quarter": 1,
+   "organCode": "HPG",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 8442964520,
+   "pe": 9.0019271622,
+   "pb": 1.3672120654,
+   "marketCap": 189966701700000
+  },
+  {
+   "year": "2026",
+   "quarter": 2,
+   "organCode": "HPG",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 8442964520,
+   "pe": 7.5638735537,
+   "pb": 1.2485299552,
+   "marketCap": 175613662016000
+  },
+  {
+   "year": "2026",
+   "quarter": 3,
+   "organCode": "HPG",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 8442964520,
+   "pe": 6.4599350402,
+   "pb": 1.1915841079,
+   "marketCap": 177302254920000
+  }
+ ]
+}

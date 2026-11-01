@@ -1,6 +1,7 @@
 # ADR 0002: Quarterly financials source
 
 Status: accepted (Ming, 2026-10-25)
+Superseded in part by ADR 0005 (source; derivation policy for EPS/BVPS)
 
 ## Context
 Spec §3 F4 (medium-term signals) needs quarterly EPS, BVPS, revenue and net income plus a sector label. Spec §9 Q4 asks for a source after a license/terms check. The `FinancialsSource` interface (spec §4.3) keeps the source swappable.

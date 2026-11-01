@@ -1,30 +1,28 @@
 import { pathToFileURL } from 'node:url';
 import { createServiceClient } from '@stoktok/db';
-import { EOD_SYNC_CONFIG, FINANCIALS_SYNC_CONFIG, SIGNALS_JOB_CONFIG, TCBS_CONFIG, isPriceSourceId } from './config';
-import type { PriceSourceId } from './config';
+import { EOD_SYNC_CONFIG, FINANCIALS_SYNC_CONFIG, SIGNALS_JOB_CONFIG, isFinancialsSourceId, isPriceSourceId } from './config';
+import type { FinancialsSourceId, PriceSourceId } from './config';
 import { runEodSync } from './jobs/eod-sync';
 import { runFinancialsSync } from './jobs/financials-sync';
 import { runMediumSignals } from './jobs/medium-signals';
-import {
-  TCBS_FINANCIALS_EPS_BASIS,
-  TCBS_FINANCIALS_SOURCE_NAME,
-  TcbsFinancialsSource,
-} from './sources/tcbs-financials';
+import { TCBS_FINANCIALS_EPS_BASIS, TCBS_FINANCIALS_SOURCE_NAME } from './sources/tcbs-financials';
+import { VCI_IQ_FINANCIALS_EPS_BASIS, VCI_IQ_FINANCIALS_SOURCE_NAME } from './sources/vci-iq-financials';
+import { createFinancialsSource } from './sources/select-financials-source';
 import { createPriceSource } from './sources/select-price-source';
 import { createDbEodStore, createDbFinancialsStore, createDbSignalsStore } from './store';
 
 export type ParsedArgs =
-  | { ok: true; job: 'eod-prices' | 'financials' | 'signals'; dryRun: boolean; backfillTradingDays?: number; source?: PriceSourceId }
+  | { ok: true; job: 'eod-prices' | 'financials' | 'signals'; dryRun: boolean; backfillTradingDays?: number; source?: PriceSourceId | FinancialsSourceId }
   | { ok: false; usage: string };
 
-const USAGE = 'usage: cli.ts <eod-prices|financials|signals> [--dry-run] [--backfill [<tradingDays>]  (eod-prices only)] [--source <vci-public|tcbs-public>  (eod-prices only)]';
+const USAGE = 'usage: cli.ts <eod-prices|financials|signals> [--dry-run] [--backfill [<tradingDays>]  (eod-prices only)] [--source <vci-public|tcbs-public>  (eod-prices) | <vci-iq|tcbs-public>  (financials)]';
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const [job, ...flags] = argv;
   if (job !== 'eod-prices' && job !== 'financials' && job !== 'signals') return { ok: false, usage: USAGE };
   let dryRun = false;
   let backfillTradingDays: number | undefined;
-  let source: PriceSourceId | undefined;
+  let source: PriceSourceId | FinancialsSourceId | undefined;
   for (let i = 0; i < flags.length; i++) {
     const f = flags[i];
     if (f === '--dry-run') {
@@ -45,10 +43,10 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       }
     } else if (f === '--source') {
       const next = flags[i + 1];
-      if (job !== 'eod-prices' || source !== undefined || next === undefined || !isPriceSourceId(next)) {
-        return { ok: false, usage: USAGE };
-      }
-      source = next;
+      if (source !== undefined || next === undefined) return { ok: false, usage: USAGE };
+      if (job === 'eod-prices' && isPriceSourceId(next)) source = next;
+      else if (job === 'financials' && isFinancialsSourceId(next)) source = next;
+      else return { ok: false, usage: USAGE };
       i += 1;
     } else {
       return { ok: false, usage: USAGE };
@@ -74,17 +72,17 @@ async function main(): Promise<void> {
       now: new Date(),
       log,
       dryRun: args.dryRun,
-      epsBasisBySource: { [TCBS_FINANCIALS_SOURCE_NAME]: TCBS_FINANCIALS_EPS_BASIS },
+      epsBasisBySource: {
+        [TCBS_FINANCIALS_SOURCE_NAME]: TCBS_FINANCIALS_EPS_BASIS,
+        [VCI_IQ_FINANCIALS_SOURCE_NAME]: VCI_IQ_FINANCIALS_EPS_BASIS,
+      },
     });
   } else if (args.job === 'financials') {
     const c = FINANCIALS_SYNC_CONFIG;
-    const source = new TcbsFinancialsSource({
-      fetchImpl: fetch,
-      http: { timeoutMs: c.timeoutMs, maxAttempts: c.maxAttempts, backoffBaseMs: c.backoffBaseMs, sleep, log },
-      userAgent: TCBS_CONFIG.financialsUserAgent,
-      requestDelayMs: c.requestDelayMs,
-      maxPeriodsPerResponse: c.maxPeriodsPerResponse,
-    });
+    const source = createFinancialsSource(
+      args.source !== undefined && isFinancialsSourceId(args.source) ? args.source : c.financialsSource,
+      { fetchImpl: fetch, http: { timeoutMs: c.timeoutMs, maxAttempts: c.maxAttempts, backoffBaseMs: c.backoffBaseMs, sleep, log } },
+    );
     summary = await runFinancialsSync({
       store: createDbFinancialsStore(db, { upsertChunkSize: c.upsertChunkSize }),
       source,
@@ -96,7 +94,7 @@ async function main(): Promise<void> {
     });
   } else {
     const c = EOD_SYNC_CONFIG;
-    const source = createPriceSource(args.source ?? c.priceSource, {
+    const source = createPriceSource(args.source !== undefined && isPriceSourceId(args.source) ? args.source : c.priceSource, {
       fetchImpl: fetch,
       http: { timeoutMs: c.timeoutMs, maxAttempts: c.maxAttempts, backoffBaseMs: c.backoffBaseMs, sleep, log },
     });

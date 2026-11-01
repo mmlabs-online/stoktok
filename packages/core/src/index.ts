@@ -56,6 +56,8 @@ export type {
   QuarterlyFinancials,
   RawQuarterlyFinancials,
 } from './market/financials';
+export { deriveVciIqQuarter } from './market/financials-derive';
+export type { DerivedQuarter, DeriveQuarterInput } from './market/financials-derive';
 export {
   addQuarters,
   comparePeriods,

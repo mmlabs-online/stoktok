@@ -5,6 +5,10 @@ export const PRICE_SOURCE_IDS = ['vci-public', 'tcbs-public'] as const;
 export type PriceSourceId = (typeof PRICE_SOURCE_IDS)[number];
 export const isPriceSourceId = (v: string): v is PriceSourceId => (PRICE_SOURCE_IDS as readonly string[]).includes(v);
 
+export const FINANCIALS_SOURCE_IDS = ['vci-iq', 'tcbs-public'] as const;
+export type FinancialsSourceId = (typeof FINANCIALS_SOURCE_IDS)[number];
+export const isFinancialsSourceId = (v: string): v is FinancialsSourceId => (FINANCIALS_SOURCE_IDS as readonly string[]).includes(v);
+
 export const EOD_SYNC_CONFIG = {
   /** Active end-of-day price source (ADR 0004). `--source <id>` overrides it per run. */
   priceSource: 'vci-public' as PriceSourceId,
@@ -43,7 +47,15 @@ export const VCI_CONFIG = {
   maxCalendarDaysPerRequest: 400,
 };
 
+/** VietCap IQ financials (ADR 0005). Public, no credentials. */
+export const VCI_IQ_CONFIG = {
+  baseUrl: 'https://iq.vietcap.com.vn/api/iq-insight-service/v1/company',
+  userAgent: 'stoktok/0.1 (personal portfolio tracker; low-volume daily financials check)',
+};
+
 export const FINANCIALS_SYNC_CONFIG = {
+  /** Active quarterly financials source (ADR 0005). `--source <id>` overrides it per run. */
+  financialsSource: 'vci-iq' as FinancialsSourceId,
   /** Quarters kept per symbol, ending at the latest expected quarter. */
   lookbackQuarters: 12,
   /** Days after quarter end by which the report is expected (VN quarterly-report deadline, 30/45 days). */
