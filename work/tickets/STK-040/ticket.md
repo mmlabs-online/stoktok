@@ -7,7 +7,7 @@
 | Areas | data |
 | Attempts | 1 |
 | Created | 2026-11-01 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/26 |
 
 ## Goal
 Make sure the VCI source never stores adjusted prices. VCI returns adjusted prices for every session before a symbol's latest corporate action. When a response contains a bar with a non-integer price, every bar on or before the latest such date is rejected, including bars whose adjusted values happen to be whole numbers.
