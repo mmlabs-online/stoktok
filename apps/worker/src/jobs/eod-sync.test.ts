@@ -4,6 +4,7 @@ import type { DataGapInsert, OpenGapRecord, PriceDailyInsert } from '@stoktok/db
 import { describe, expect, test } from 'vitest';
 import { EOD_SYNC_CONFIG } from '../config';
 import { SourceError } from '../sources/price-source';
+import { VciPriceSource } from '../sources/vci';
 import type { FetchResult, PriceSource } from '../sources/price-source';
 import { runEodSync } from './eod-sync';
 import type { EodStore } from './eod-sync';
@@ -401,5 +402,56 @@ describe('runEodSync', () => {
       expect(out.missingDates.VNM).toEqual(['2026-10-20', '2026-10-21', '2026-10-22']);
       expect(out).toMatchObject({ gapsRecorded: 0, gapsResolved: 0 });
     });
+  });
+});
+
+describe('runEodSync with VciPriceSource', () => {
+  const http = { timeoutMs: 1000, maxAttempts: 1, backoffBaseMs: 1, sleep: async () => undefined, log: () => undefined };
+  // Fixture-backed fetch: answers with one VND bar on the last day of the requested range.
+  function vciFetch(status = 200) {
+    let requests = 0;
+    const fetchImpl = (async (_url: string, init?: RequestInit) => {
+      requests += 1;
+      const body = JSON.parse(init?.body as string) as { to: number; symbols: string[] };
+      const json = [{ symbol: body.symbols[0], t: [body.to - 86400], o: [61500], h: [62000], l: [61200], c: [61800], v: [1000] }];
+      return { ok: status === 200, status, json: async () => json } as Response;
+    }) as unknown as typeof fetch;
+    return { source: new VciPriceSource({ fetchImpl, http }), requests: () => requests };
+  }
+
+  test('writes source=vci-public and the run fetched_at on every row', async () => {
+    const m = memoryStore({ watchlist: ['VNM', 'FPT'] });
+    await runEodSync(deps({ store: m.store, source: vciFetch().source }).d);
+    expect(m.table.size).toBe(2);
+    for (const r of m.table.values()) {
+      expect(r.source).toBe('vci-public');
+      expect(r.fetched_at).toBe(AFTER_CUTOFF.toISOString());
+    }
+  });
+
+  test('re-run is idempotent; requestsMade = symbols x chunks (daily and backfill)', async () => {
+    const m = memoryStore({ watchlist: ['VNM', 'FPT'] });
+    const daily = vciFetch();
+    await runEodSync(deps({ store: m.store, source: daily.source }).d);
+    await runEodSync(deps({ store: m.store, source: daily.source }).d);
+    expect(m.table.size).toBe(2);
+    expect(daily.requests()).toBe(4);
+
+    const config = { ...EOD_SYNC_CONFIG, backfillChunkTradingDays: 5 };
+    const chunks = planBackfillChunks(subtractTradingDays('2026-10-23', 11, []), '2026-10-23', 5, []);
+    const back = vciFetch();
+    const out = await runEodSync(deps({ store: memoryStore({ watchlist: ['VNM', 'FPT'] }).store, source: back.source, config, backfillTradingDays: 12 }).d);
+    expect(back.requests()).toBe(2 * chunks.length);
+    expect(out.requestsMade).toBe(2 * chunks.length);
+  });
+
+  test('403 on every symbol -> failedSymbols, breaker stops after maxConsecutiveFailures, ok=false', async () => {
+    const symbols = Array.from({ length: EOD_SYNC_CONFIG.maxConsecutiveFailures + 3 }, (_, i) => `AA${String.fromCharCode(65 + i)}`);
+    const m = memoryStore({ watchlist: symbols });
+    const v = vciFetch(403);
+    const out = await runEodSync(deps({ store: m.store, source: v.source }).d);
+    expect(out.ok).toBe(false);
+    expect(out.failedSymbols).toHaveLength(EOD_SYNC_CONFIG.maxConsecutiveFailures);
+    expect(v.requests()).toBe(EOD_SYNC_CONFIG.maxConsecutiveFailures);
   });
 });

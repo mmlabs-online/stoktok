@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { getJson } from './http';
+import { getJson, postJson } from './http';
 import { SourceError } from './price-source';
 
 const res = (status: number, body: unknown = {}) =>
@@ -55,5 +55,25 @@ describe('getJson', () => {
     const s = setup([new TypeError('fetch failed'), res(200, { ok: 1 })]);
     await expect(getJson(s.fetchImpl, 'https://x', s.opts)).resolves.toEqual({ ok: 1 });
     expect(s.calls).toHaveLength(2);
+  });
+});
+
+describe('postJson', () => {
+  test('headers are exactly User-Agent, Accept, Content-Type; method POST; JSON body', async () => {
+    const s = setup([res(200, { a: 1 })]);
+    await expect(postJson(s.fetchImpl, 'https://x/y', { k: [1] }, s.opts)).resolves.toEqual({ a: 1 });
+    const init = s.calls[0]?.[1];
+    expect(init?.method).toBe('POST');
+    expect(init?.body).toBe(JSON.stringify({ k: [1] }));
+    expect(init?.headers).toEqual({ 'User-Agent': 'test-agent', Accept: 'application/json', 'Content-Type': 'application/json' });
+  });
+  test('retries 5xx with backoff; 403 is not retried; error message never contains the body', async () => {
+    const a = setup([res(503), res(200, { ok: true })]);
+    await expect(postJson(a.fetchImpl, 'https://x', { secret: 'abc' }, a.opts)).resolves.toEqual({ ok: true });
+    expect(a.sleeps).toEqual([1000]);
+    const b = setup([res(403)]);
+    const err = await postJson(b.fetchImpl, 'https://x', { secret: 'abc' }, b.opts).catch((e: unknown) => e);
+    expect(err).toMatchObject({ retryable: false, status: 403, message: 'HTTP 403' });
+    expect(b.calls).toHaveLength(1);
   });
 });

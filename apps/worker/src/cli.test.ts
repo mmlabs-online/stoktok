@@ -47,4 +47,31 @@ describe('parseArgs', () => {
       }
     });
   });
+
+  describe('--source', () => {
+    test('vci-public / tcbs-public accepted, alone and with other flags in any order', () => {
+      for (const id of ['vci-public', 'tcbs-public'] as const) {
+        expect(parseArgs(['eod-prices', '--source', id])).toEqual({ ok: true, job: 'eod-prices', dryRun: false, source: id });
+        expect(parseArgs(['eod-prices', '--dry-run', '--source', id])).toEqual({ ok: true, job: 'eod-prices', dryRun: true, source: id });
+        expect(parseArgs(['eod-prices', '--source', id, '--backfill', '30', '--dry-run'])).toEqual({
+          ok: true, job: 'eod-prices', dryRun: true, backfillTradingDays: 30, source: id,
+        });
+      }
+    });
+    test('unknown id, missing value, repeated, or on financials/signals -> usage', () => {
+      for (const argv of [
+        ['eod-prices', '--source', 'nope'],
+        ['eod-prices', '--source'],
+        ['eod-prices', '--source', '--dry-run'],
+        ['eod-prices', '--source', 'vci-public', '--source', 'tcbs-public'],
+        ['financials', '--source', 'vci-public'],
+        ['signals', '--source', 'vci-public'],
+      ]) {
+        expect(parseArgs(argv)).toMatchObject({ ok: false });
+      }
+    });
+    test('without --source the result has no source key', () => {
+      expect(parseArgs(['eod-prices', '--dry-run'])).not.toHaveProperty('source');
+    });
+  });
 });
