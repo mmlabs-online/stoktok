@@ -1,4 +1,5 @@
 import {
+  addQuarters,
   DEFAULT_FINANCIALS_SANITY,
   deriveVciIqQuarter,
   normalizeQuarterlyFinancials,
@@ -49,6 +50,8 @@ export interface VciIqFinancialsOptions {
   userAgent?: string;
   sanity?: FinancialsSanity;
   maxPeriodsPerResponse?: number;
+  /** Latest quarters emitted (older history is dropped silently). */
+  maxQuarters?: number;
   /** Pause between requests. */
   requestDelayMs?: number;
 }
@@ -127,7 +130,10 @@ export class VciIqFinancialsSource implements FinancialsSource {
 
     const rejected: RejectedPeriod[] = [...stats.rejected, ...income.rejected, ...balance.rejected];
     const dupes = new Set([...stats.dupes, ...income.dupes, ...balance.dupes]);
-    const keys = [...new Set([...stats.rows.keys(), ...income.rows.keys(), ...balance.rows.keys()])].filter((k) => !dupes.has(k)).sort();
+    const allKeys = [...new Set([...stats.rows.keys(), ...income.rows.keys(), ...balance.rows.keys()])].filter((k) => !dupes.has(k)).sort();
+    const latest = allKeys[allKeys.length - 1];
+    const oldest = latest === undefined ? '' : addQuarters(latest, -((this.o.maxQuarters ?? FINANCIALS_SYNC_CONFIG.vciIqMaxQuarters) - 1));
+    const keys = allKeys.filter((k) => k >= oldest);
     const periods: QuarterlyResult['periods'] = [];
     if (keys.length === 0) return { periods, rejected };
 

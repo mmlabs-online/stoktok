@@ -15,7 +15,7 @@ interface Replies {
   balance?: Reply;
   details?: Reply;
 }
-function build(r: Replies = {}, opts: { maxPeriodsPerResponse?: number } = {}) {
+function build(r: Replies = {}, opts: { maxPeriodsPerResponse?: number; maxQuarters?: number } = {}) {
   const replies: Replies = {
     statistics: fixture('statistics-ok.json'),
     income: fixture('income-ok.json'),
@@ -62,12 +62,36 @@ describe('VciIqFinancialsSource.fetchQuarterly', () => {
     expect(last).toMatchObject({ symbol: 'HPG', period: '2026Q3', revenue: 62_214_187_236_976 });
     expect(last?.bvps).toBe(17_624);
     for (const p of out.periods) for (const v of [p.eps, p.bvps, p.revenue, p.netIncome]) expect(Number.isSafeInteger(v)).toBe(true);
-    // the first quarters of the fixture lack a 4-quarter window: rejected as missing_eps, never filled
+    // the default window (16) keeps all 15 fixture quarters: the first 3 lack a 4-quarter window
     expect(out.rejected).toEqual([
       { period: '2023Q1', reason: 'missing_eps' },
       { period: '2023Q2', reason: 'missing_eps' },
       { period: '2023Q3', reason: 'missing_eps' },
     ]);
+  });
+  test('maxQuarters keeps only the latest N quarters; older history is dropped silently, not rejected', async () => {
+    const out = await build({}, { maxQuarters: 12 }).src.fetchQuarterly('HPG');
+    expect(out.rejected).toEqual([]);
+    expect(out.periods).toHaveLength(12);
+    expect(out.periods[0]?.period).toBe('2023Q4');
+  });
+  test('missing shares for a quarter older than the emitted range -> no reject', async () => {
+    const st = clone('statistics-ok.json');
+    st.data = st.data.filter((r: { yearReport: number; quarter: number }) => !(r.yearReport === 2023 && r.quarter === 2));
+    const out = await build({ statistics: st }, { maxQuarters: 12 }).src.fetchQuarterly('HPG');
+    expect(out.rejected).toEqual([]);
+  });
+  test('missing shares inside the emitted range is still rejected', async () => {
+    const st = clone('statistics-ok.json');
+    st.data = st.data.filter((r: { yearReport: number; quarter: number }) => !(r.yearReport === 2025 && r.quarter === 2));
+    const out = await build({ statistics: st }, { maxQuarters: 12 }).src.fetchQuarterly('HPG');
+    expect(out.rejected).toContainEqual({ period: '2025Q2', reason: 'missing_shares' });
+  });
+  test('unsupported_company_type reports only the emitted range', async () => {
+    const out = await build({ details: fixture('details-bank.json') }, { maxQuarters: 12 }).src.fetchQuarterly('HPG');
+    expect(out.periods).toEqual([]);
+    expect(out.rejected).toHaveLength(12);
+    expect(out.rejected.every((r) => r.reason === 'unsupported_company_type')).toBe(true);
   });
   test('passes derived raw values through normalizeQuarterlyFinancials', async () => {
     const inc = clone('income-ok.json');

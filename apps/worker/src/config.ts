@@ -58,6 +58,8 @@ export const FINANCIALS_SYNC_CONFIG = {
   financialsSource: 'vci-iq' as FinancialsSourceId,
   /** Quarters kept per symbol, ending at the latest expected quarter. */
   lookbackQuarters: 12,
+  /** VietCap IQ returns full history; emit only the latest N quarters (lookbackQuarters + 4 covers early publishers and the TTM window). */
+  vciIqMaxQuarters: 16,
   /** Days after quarter end by which the report is expected (VN quarterly-report deadline, 30/45 days). */
   publishLagDays: DEFAULT_FINANCIALS_PUBLISH_LAG_DAYS,
   /** Pause between requests and between symbols (low request volume). */

@@ -40,3 +40,20 @@ None. `jobs/financials-sync.ts` and `core/src/market/financials.ts` are unchange
 ### Scope self-check
 - Could the diff be smaller? No; the sync job and core normalizer are untouched.
 - Diff size: ~+330 lines product/ADR, ~+400 tests and fixtures.
+
+## Attempt 2 (REWORK: review attempt 1, blocker)
+
+### Files touched
+- apps/worker/src/config.ts: `FINANCIALS_SYNC_CONFIG.vciIqMaxQuarters = 16` (R5; lookback 12 + 4).
+- apps/worker/src/sources/vci-iq-financials.ts: `maxQuarters` option; only the latest N quarters (relative to the latest key) are derived/reported; older ones are dropped silently. Full income history still feeds `netIncomeByPeriod`.
+- apps/worker/src/sources/vci-iq-financials.test.ts: `maxQuarters` in `build`; new tests (N=12 gives `rejected: []`; missing shares outside range no reject; inside range still `missing_shares`; unsupported_company_type reports only emitted range). The default-N fixture test still expects the 3 `missing_eps` because the fixture has only 15 quarters (< N+3).
+- docs/adr/0005-vci-iq-financials-source.md: one line each in Derivation and Request accounting.
+
+### Checks (Node 22.23.4)
+typecheck and lint: no errors. test: core 483, db 117 (+1 todo), worker 150, web 214 passed.
+
+### Out-of-plan files
+None. `financials-sync.ts` unchanged. `apps/web/next-env.d.ts` restored.
+
+### Follow-ups
+Review nits (distinct `missing_company_type` reason, narrowing `args.source` in cli.ts) not done.

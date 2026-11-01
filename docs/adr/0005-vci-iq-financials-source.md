@@ -47,12 +47,13 @@ Conversion is `toVndAmount`; division rounds half away from zero (`roundDiv`). D
 - BVPS(P) = round( (`bsa78`(P) - `bsa210`(P)) / shares(P) ).
 - A missing or invalid share count rejects the period (`missing_shares` / `invalid_shares`). A missing quarter, equity or minority value leaves that value missing (`missing_eps` / `missing_bvps`), so the period is rejected. A null `bsa210` is "missing", not 0.
 - Vendor `pe` / `pb` are not used.
+- Emitted range: the source returns full history, so only the latest `vciIqMaxQuarters` (16 = lookback 12 + 4) quarters are derived and reported. Older quarters are dropped silently, so they never count as rejects; the full income history still feeds the TTM window of the oldest emitted quarter.
 
 ## Header policy
 Hard rule: only `User-Agent` (honest `stoktok/...`) and `Accept`. A 403 or challenge page fails the run with a non-retryable error; there is no circumvention.
 
 ## Request accounting
-Four sequential GETs per symbol (statistics, income statement, balance sheet, details; the last is skipped when no periods exist and cached for the sector lookup), 1 s between requests. Existing retry, circuit-breaker and delay config apply.
+Four sequential GETs per symbol (statistics, income statement, balance sheet, details; the last is skipped when no periods exist and cached for the sector lookup), 1 s between requests. Existing retry, circuit-breaker and delay config apply. Responses carry full history; only the latest `vciIqMaxQuarters` quarters are emitted.
 
 ## UNVERIFIED
 - Whether `numberOfSharesMktCap` excludes treasury shares (covered by the BVPS check below).
