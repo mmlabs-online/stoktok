@@ -30,7 +30,7 @@ In the stoktok repo (Settings, Secrets and variables, Actions):
 Create it **before** merging the setup PR. Otherwise GitHub creates the environment on the fly with no branch rule and no secrets.
 1. `mmlabs-online/deployment`, Settings, Environments, New environment `stoktok`.
 2. Deployment branches and tags: selected branches, `main` only. This is the control GitHub enforces; the `if: github.ref == 'refs/heads/main'` guard in the workflow is not one on its own, because a manual run uses the workflow file of the chosen branch.
-3. Environment secrets: `SUPABASE_URL` (`https://<ref>.supabase.co`, no trailing slash or path) and `SUPABASE_SERVICE_ROLE_KEY` (the **new** key, not the one pasted into chat on 2026-11-01).
+3. Environment secrets, prefixed `STOKTOK_` because the deployment repo is shared by every mmlabs app: `STOKTOK_SUPABASE_URL` (`https://<ref>.supabase.co`, no trailing slash or path) and `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` (the **new** key, not the one pasted into chat on 2026-11-01). The workflow writes them into the env file as `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, the names the app reads.
 4. No repo-level secrets with the same names (environment secrets would quietly override them). No required reviewers: the PR merge is already the gate.
 5. Fallback if the org plan has no environments on a private repo: store both as repo-level Actions secrets and remove the `environment: stoktok` line in the deployment PR before merging. The `main` guard, the fail-safe and D5 stay. Weakness: any workflow on any branch can read repo-level secrets. Record a follow-up to restore the line when the plan allows.
 
@@ -44,7 +44,7 @@ If either secret is empty or malformed, `deploy-stoktok` stops at the `secrets` 
 
 ## Rotate the Supabase key
 1. Create the new key in Supabase. For an `sb_secret_...` key, create it next to the old one. For the legacy JWT `service_role` key, rotating means rotating the JWT secret: the old key dies at once and the anon key and sessions are invalidated too (stoktok uses neither yet). Then do steps 2 and 3 right away. Verify which applies in the Supabase dashboard.
-2. Update the `SUPABASE_SERVICE_ROLE_KEY` secret of the `stoktok` environment.
+2. Update the `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` secret of the `stoktok` environment.
 3. Run `deploy-stoktok` with `workflow_dispatch` on `main`. It rewrites the env file and, because the content changed, recreates web.
 4. Check that web was recreated: `sudo -u gh-runner -H docker compose -p stoktok ps` shows a new start time.
 5. Run `sudo -u gh-runner -H /Users/gh-runner/stoktok/current/run-job.sh eod-prices --dry-run`. The health check does not test the DB key (a well-formed wrong key still passes `/healthz`); this run does.
