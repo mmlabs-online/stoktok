@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P1 |
 | Areas | architecture, security |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-11-03 |
 | PR | — |
 
