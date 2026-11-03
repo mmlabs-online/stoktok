@@ -288,7 +288,9 @@ jobs:
           install -m 644 "$src" "$dst.tmp"
           mv -f "$dst.tmp" "$dst"
           disabled="$(launchctl print-disabled "$dom" 2>/dev/null || true)"
-          if [[ "$disabled" =~ \"$AGENT_LABEL\"[[:space:]]*=>[[:space:]]*(true|disabled) ]]; then
+          # Regex in a variable: macOS bash 3.2 rejects a literal `>` inside [[ =~ ]].
+          disabled_re="\"$AGENT_LABEL\"[[:space:]]*=>[[:space:]]*(true|disabled)"
+          if [[ "$disabled" =~ $disabled_re ]]; then
             launchctl enable "$tgt"
           fi
           if [ "$loaded" = yes ]; then
