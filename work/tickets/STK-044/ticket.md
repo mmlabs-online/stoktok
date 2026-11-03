@@ -7,7 +7,7 @@
 | Areas | architecture, security |
 | Attempts | 1 |
 | Created | 2026-11-03 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/30 (deployment: https://github.com/mmlabs-online/deployment/pull/18) |
 
 ## Goal
 The self-hosted runner `macbook-runner` runs as macOS user `mingming` (`/Users/mingming/actions-runner`), not `gh-runner`. Make every deploy path, the launchd schedule and the runbook use the runner's real user so `deploy-stoktok` can write the env file and deploy.
