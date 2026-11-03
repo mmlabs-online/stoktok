@@ -68,5 +68,43 @@ for f in "$ROOT"/deploy/deployment-repo/apps/stoktok/*.sh "$ROOT"/scripts/*.sh; 
   fi
 done
 
+# STK-043: the deploy workflow gets the secrets from the `stoktok` environment and never prints them.
+WF="$ROOT/deploy/deployment-repo/.github/workflows/deploy-stoktok.yml"
+if ! grep -qE '^\s+environment: stoktok\s*$' "$WF"; then
+  echo "FAIL: workflow lacks 'environment: stoktok'" >&2
+  fail=1
+fi
+if ! grep -qF "if: github.ref == 'refs/heads/main'" "$WF"; then
+  echo "FAIL: workflow lacks the main-only guard" >&2
+  fail=1
+fi
+if grep -E '(^|[^.A-Za-z])secrets\.' "$WF" | grep -vE '^\s+[A-Z_]+: \$\{\{ secrets\.[A-Z_]+ \}\}\s*$'; then
+  echo "FAIL: 'secrets.' used outside a step env mapping" >&2
+  fail=1
+fi
+if grep -nE 'set -[A-Za-z]*x|set -o xtrace' "$WF"; then
+  echo "FAIL: set -x in workflow" >&2
+  fail=1
+fi
+if grep -F '" config' "$WF" | grep -vF -- '--quiet'; then
+  echo "FAIL: compose config without --quiet" >&2
+  fail=1
+fi
+if grep -nF '<<' "$WF"; then
+  echo "FAIL: heredoc in workflow" >&2
+  fail=1
+fi
+wf_env_file="$(sed -n 's/^  ENV_FILE: //p' "$WF")"
+compose_env_files="$(sed -n 's/^\s*env_file: //p' "$COMPOSE" | sort -u)"
+if [ -z "$wf_env_file" ] || [ "$compose_env_files" != "$wf_env_file" ]; then
+  echo "FAIL: ENV_FILE in workflow differs from env_file in compose" >&2
+  fail=1
+fi
+if ! grep -qF "printf 'SUPABASE_URL=" "$WF" \
+   || grep -rqF 'SUPABASE_SERVICE_ROLE_KEY=' "$ROOT/deploy/deployment-repo/apps/stoktok/"; then
+  echo "FAIL: env-file writer must be in the workflow, not under apps/stoktok/" >&2
+  fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then exit 1; fi
 echo "OK: deploy env lists consistent"

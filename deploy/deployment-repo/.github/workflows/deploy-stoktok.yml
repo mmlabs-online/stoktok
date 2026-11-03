@@ -6,7 +6,10 @@ name: deploy-stoktok
 # restore apps/stoktok/ as it was before the push, redeploy that, and push the revert. A restored
 # deploy is still a red run. After a healthy deploy, compose.yml, release.env and the job scripts
 # are copied to a stable directory that the launchd jobs read, never the runner's _work checkout.
-# workflow_dispatch redeploys what main pins, e.g. after a manual `docker rm`.
+# workflow_dispatch from main redeploys what main pins and rewrites the env file from the `stoktok`
+# environment secrets (e.g. after a rotation). Runs from any other branch are skipped.
+# SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY come from the `stoktok` environment (main only); the
+# `secrets` step writes $ENV_FILE on every run. Values are never printed.
 #
 # No migrate step: schema changes are human. Every migration must stay compatible with the
 # previous release's images, because a restore never touches the database.
@@ -33,6 +36,8 @@ env:
 
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main'
+    environment: stoktok
     runs-on: [self-hosted, macbook-runner]
     timeout-minutes: 15
     steps:
@@ -73,12 +78,6 @@ jobs:
             echo "::error::web ($web_version), worker ($worker_version) and STOKTOK_VERSION ($version) must be the same version. Nothing was started."
             exit 1
           fi
-          # Key names only; values are never printed.
-          if [ ! -r "$ENV_FILE" ] || ! grep -q '^SUPABASE_URL=' "$ENV_FILE" \
-             || ! grep -q '^SUPABASE_SERVICE_ROLE_KEY=' "$ENV_FILE"; then
-            echo "::error::$ENV_FILE is missing, unreadable, or lacks SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY. Nothing was started."
-            exit 1
-          fi
           previous=""
           # BEFORE is empty on workflow_dispatch: no previous release, so a failure is not restored.
           if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ] \
@@ -91,14 +90,62 @@ jobs:
             echo "previous=$previous"
           } >> "$GITHUB_OUTPUT"
 
+      # Writes the host env file from the environment secrets; only bash builtins touch the values
+      # (no heredoc, no argv, no echo). If it fails, the old file stays and nothing is started.
+      - name: secrets
+        id: secrets
+        if: steps.release.outcome == 'success'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          umask 077
+          missing=""
+          [ -n "$SUPABASE_URL" ] || missing="$missing SUPABASE_URL"
+          [ -n "$SUPABASE_SERVICE_ROLE_KEY" ] || missing="$missing SUPABASE_SERVICE_ROLE_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secret(s) in environment stoktok:$missing. Nothing was started; $ENV_FILE was not changed."
+            exit 1
+          fi
+          if ! [[ "$SUPABASE_URL" =~ ^https://[A-Za-z0-9.-]+$ ]]; then
+            echo "::error::SUPABASE_URL is not https://<host>. Nothing was started; $ENV_FILE was not changed."
+            exit 1
+          fi
+          if ! [[ "$SUPABASE_SERVICE_ROLE_KEY" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::SUPABASE_SERVICE_ROLE_KEY has unexpected characters. Nothing was started; $ENV_FILE was not changed."
+            exit 1
+          fi
+          dir="$(dirname "$ENV_FILE")"
+          mkdir -p "$dir"
+          chmod 700 "$dir"
+          tmp="$(mktemp "$dir/.stoktok.env.XXXXXX")"
+          trap 'rm -f "$tmp"' EXIT
+          printf 'SUPABASE_URL=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\n' "$SUPABASE_URL" "$SUPABASE_SERVICE_ROLE_KEY" > "$tmp"
+          chmod 600 "$tmp"
+          if cmp -s "$tmp" "$ENV_FILE"; then changed=false; else changed=true; fi
+          mv -f "$tmp" "$ENV_FILE"
+          trap - EXIT
+          if [ "$(stat -f '%Su %Lp' "$ENV_FILE")" != "$(id -un) 600" ]; then
+            echo "::error::$ENV_FILE is not owned by $(id -un) with mode 600. Nothing was started."
+            exit 1
+          fi
+          {
+            echo "ok=true"
+            echo "changed=$changed"
+          } >> "$GITHUB_OUTPUT"
+
       - name: deploy
         id: deploy
         if: steps.release.outputs.skip != 'true'
+        env:
+          CHANGED: ${{ steps.secrets.outputs.changed }}
         run: |
+          recreate=()
+          if [ "$CHANGED" = "true" ]; then recreate=(--force-recreate); fi
           compose=(docker compose -p "$PROJECT" -f "$APP_DIR/compose.yml" --env-file "$APP_DIR/release.env")
           "${compose[@]}" config --quiet
           "${compose[@]}" --profile jobs pull
-          "${compose[@]}" up -d --wait --wait-timeout 120
+          "${compose[@]}" up -d --wait --wait-timeout 120 ${recreate[@]+"${recreate[@]}"}
 
       - name: publish
         id: publish
@@ -119,6 +166,11 @@ jobs:
           FAILED: ${{ steps.release.outputs.image }}
           PREVIOUS: ${{ steps.release.outputs.previous }}
         run: |
+          if [ ! -f "$ENV_FILE" ] || [ "$(stat -f '%Su %Lp' "$ENV_FILE")" != "$(id -un) 600" ]; then
+            echo "::error::$ENV_FILE is missing or not owned by $(id -un) with mode 600. Nothing was restored."
+            echo "result=env-missing" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
           if [ -z "$PREVIOUS" ]; then
             echo "::error::$FAILED failed its health check and there is no previous release to restore. Nothing was pushed."
             echo "result=no-previous" >> "$GITHUB_OUTPUT"
@@ -155,13 +207,20 @@ jobs:
         if: always() && steps.release.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          SECRETS: ${{ steps.secrets.outcome }}
           DEPLOY: ${{ steps.deploy.outcome }}
           RESULT: ${{ steps.rollback.outputs.result }}
           IMAGE: ${{ steps.release.outputs.image }}
           PREVIOUS: ${{ steps.release.outputs.previous }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          if [ "$SECRETS" = "failure" ]; then
+            DEPLOY="secrets"
+            RESULT="invalid"
+          fi
           case "$DEPLOY:$RESULT" in
+            secrets:invalid)           msg="secrets missing or invalid in environment \`stoktok\`: nothing was started; see the run for the secret name." ;;
+            failure:env-missing)       msg="env-missing: \`$IMAGE\` failed its health check and $ENV_FILE is missing or has the wrong owner or mode; nothing was restored." ;;
             success:)                  msg="deployed: \`$IMAGE\` is running and healthy." ;;
             failure:restored)          msg="restored: \`$IMAGE\` failed its health check; \`$PREVIOUS\` is running again and the revert is on main." ;;
             failure:restore-unpushed)  msg="restored, revert NOT pushed: \`$PREVIOUS\` is running, but main still pins \`$IMAGE\`." ;;
