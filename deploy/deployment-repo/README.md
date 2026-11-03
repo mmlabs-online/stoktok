@@ -20,4 +20,6 @@ Also add this line to the deployment repo's `.github/CODEOWNERS`:
 deploy-stoktok skips, so merging the setup PR deploys nothing.
 
 No hostname or ingress rule belongs in either repo: cloudflared is remotely managed (Cloudflare
-dashboard). Secrets stay in `/Users/gh-runner/.config/stoktok/stoktok.env` on the Mac (R3).
+dashboard). The secrets come from the `stoktok` environment of the deployment repo; deploy-stoktok
+writes `/Users/gh-runner/.config/stoktok/stoktok.env` on the Mac from them (R3). Create the
+environment and its secrets before merging the setup PR: see `docs/deploy.md`.

@@ -18,18 +18,37 @@ Every push to branch `release` (its commit must already be on main) runs `releas
 - **D1:** the Docker engine is OrbStack and starts at boot for `gh-runner` without a GUI login. Check: reboot, do not log in, run the `runner-check` workflow and see it green. The launchd jobs run in the same context.
 - **D2:** time zone is Asia/Ho_Chi_Minh (`sudo systemsetup -gettimezone`; `run-schedule.sh` refuses to run if `date +%z` is not `+0700`). Sleep is off (`sudo pmset -a sleep 0 disablesleep 1`, or lid open on power), otherwise deploys queue and jobs coalesce on wake.
 - **D3:** the Mac is Intel, so the `linux/amd64` images run natively.
-- **D4:** secrets file `/Users/gh-runner/.config/stoktok/stoktok.env`, mode 600, owner `gh-runner`, outside git and the runner checkout. It holds only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+- **D4:** secrets file `/Users/gh-runner/.config/stoktok/stoktok.env`, mode 600, owner `gh-runner`, outside git and the runner checkout. It holds only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. It is written by `deploy-stoktok` on every run from the `stoktok` environment secrets. Do not edit it by hand: the next deploy overwrites it.
+- **D5:** deployment `main` is protected: PR required, code-owner review, `pr-scope` required, no admin bypass. The `stoktok` secrets reach a job on the self-hosted runner, so this protection is what stands between a push and the key. Side effect: without a `github-actions` bypass, an automatic rollback ends in `restore-unpushed` (the server is restored, the run is red, and Ming reverts the release PR by hand).
 
 ## Repository secrets
 In the stoktok repo (Settings, Secrets and variables, Actions):
 - `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`: push to `mingming21400/stoktok-*`.
 - `DEPLOY_REPO_TOKEN`: fine-grained PAT on `mmlabs-online/deployment` only. Contents read/write, Pull requests read/write.
 
+## Deployment repo: environment `stoktok`
+Create it **before** merging the setup PR. Otherwise GitHub creates the environment on the fly with no branch rule and no secrets.
+1. `mmlabs-online/deployment`, Settings, Environments, New environment `stoktok`.
+2. Deployment branches and tags: selected branches, `main` only. This is the control GitHub enforces; the `if: github.ref == 'refs/heads/main'` guard in the workflow is not one on its own, because a manual run uses the workflow file of the chosen branch.
+3. Environment secrets, prefixed `STOKTOK_` because the deployment repo is shared by every mmlabs app: `STOKTOK_SUPABASE_URL` (`https://<ref>.supabase.co`, no trailing slash or path) and `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` (the **new** key, not the one pasted into chat on 2026-11-01). The workflow writes them into the env file as `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, the names the app reads.
+4. No repo-level secrets with the same names (environment secrets would quietly override them). No required reviewers: the PR merge is already the gate.
+5. Fallback if the org plan has no environments on a private repo: store both as repo-level Actions secrets and remove the `environment: stoktok` line in the deployment PR before merging. The `main` guard, the fail-safe and D5 stay. Weakness: any workflow on any branch can read repo-level secrets. Record a follow-up to restore the line when the plan allows.
+
+If either secret is empty or malformed, `deploy-stoktok` stops at the `secrets` step, names the secret, starts nothing and leaves the old file in place.
+
 ## One-time setup
-1. Ming merges the deployment-repo setup PR (drafts in `deploy/deployment-repo/`, plus the CODEOWNERS line). Its deploy run skips: there is no `release.env` yet.
-2. Create the secrets file: `sudo install -d -o gh-runner -m 700 /Users/gh-runner/.config/stoktok`, then a mode 600 file owned by `gh-runner` (create it with `sudo install -o gh-runner -m 600`) with `SUPABASE_URL=` and `SUPABASE_SERVICE_ROLE_KEY=`.3. `sudo install -d -o gh-runner -m 755 /Users/gh-runner/stoktok/logs`.
-4. Install the scheduler: `sudo cp apps/stoktok/launchd/online.mmlabs.stoktok.jobs.plist /Library/LaunchDaemons/`, `sudo chown root:wheel` and `sudo chmod 644` on it, then `sudo launchctl bootstrap system /Library/LaunchDaemons/online.mmlabs.stoktok.jobs.plist`. Verify with `sudo launchctl print system/online.mmlabs.stoktok.jobs`.
-5. Optional log rotation: a line for `/Users/gh-runner/stoktok/logs/*.log` in `/etc/newsyslog.d/stoktok.conf`.
+1. Create the `stoktok` environment and its secrets (section above), then Ming merges the deployment-repo setup PR (drafts in `deploy/deployment-repo/`, plus the CODEOWNERS line). Merging runs `deploy-stoktok` because `compose.yml` changed under `apps/stoktok/`. With no `release.env` it skips the deploy but still writes the env file. Check: the run is green, and `sudo ls -l /Users/gh-runner/.config/stoktok/stoktok.env` shows `-rw------- gh-runner`.
+2. `sudo install -d -o gh-runner -m 755 /Users/gh-runner/stoktok/logs`.
+3. Install the scheduler: `sudo cp apps/stoktok/launchd/online.mmlabs.stoktok.jobs.plist /Library/LaunchDaemons/`, `sudo chown root:wheel` and `sudo chmod 644` on it, then `sudo launchctl bootstrap system /Library/LaunchDaemons/online.mmlabs.stoktok.jobs.plist`. Verify with `sudo launchctl print system/online.mmlabs.stoktok.jobs`.
+4. Optional log rotation: a line for `/Users/gh-runner/stoktok/logs/*.log` in `/etc/newsyslog.d/stoktok.conf`.
+
+## Rotate the Supabase key
+1. Create the new key in Supabase. For an `sb_secret_...` key, create it next to the old one. For the legacy JWT `service_role` key, rotating means rotating the JWT secret: the old key dies at once and the anon key and sessions are invalidated too (stoktok uses neither yet). Then do steps 2 and 3 right away. Verify which applies in the Supabase dashboard.
+2. Update the `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` secret of the `stoktok` environment.
+3. Run `deploy-stoktok` with `workflow_dispatch` on `main`. It rewrites the env file and, because the content changed, recreates web.
+4. Check that web was recreated: `sudo -u gh-runner -H docker compose -p stoktok ps` shows a new start time.
+5. Run `sudo -u gh-runner -H /Users/gh-runner/stoktok/current/run-job.sh eod-prices --dry-run`. The health check does not test the DB key (a well-formed wrong key still passes `/healthz`); this run does.
+6. Only then revoke the old key. The key pasted into chat on 2026-11-01 must be revoked, not only replaced.
 
 ## Cut a release (first one is v0.1.0)
 1. Apply pending migrations by hand. Every migration must work with the previous image.
@@ -49,7 +68,7 @@ In the stoktok repo (Settings, Secrets and variables, Actions):
 
 ## Roll back
 - Automatic: if the new web image is not healthy within 120 s, `deploy-stoktok` restores the previous `apps/stoktok/`, redeploys it, republishes the scheduler directory and pushes the revert to deployment `main`. The run stays red.
-- Manual: revert the release PR's merge commit on deployment `main`. That re-triggers `deploy-stoktok`. `workflow_dispatch` redeploys what main pins.
+- Manual: revert the release PR's merge commit on deployment `main`. That re-triggers `deploy-stoktok`. `workflow_dispatch` from `main` only (other branches are skipped) redeploys what main pins and rewrites the env file.
 - **Migrations are not undone.** Roll back across a migration only when the old code works with the new schema.
 
 ## Logs
@@ -60,7 +79,7 @@ tail -f /Users/gh-runner/stoktok/logs/eod-prices.log     # also financials.log, 
 `run --rm` discards the container's logs, which is why `run-job.sh` appends to host files.
 
 ## Env list
-Names only. Values live in the host env file, never in this repo (R3). Reserved variables are not passed to containers until a ticket reads them. Deploy-only variables: `STOKTOK_WEB_IMAGE`, `STOKTOK_WORKER_IMAGE` and `STOKTOK_VERSION`, written by `release.yml` into `release.env` (not secrets).
+Names only. Values live in the `stoktok` environment secrets of the deployment repo, and `deploy-stoktok` writes the host env file; they are never in this repo (R3). Reserved variables are not passed to containers until a ticket reads them. Deploy-only variables: `STOKTOK_WEB_IMAGE`, `STOKTOK_WORKER_IMAGE` and `STOKTOK_VERSION`, written by `release.yml` into `release.env` (not secrets).
 
 <!-- env-list:start -->
 | Name | Service | Status | Secret |

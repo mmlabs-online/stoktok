@@ -11,10 +11,10 @@
 # Worker: one-shot jobs (profile `jobs`), started by run-job.sh from launchd, never by `up -d`.
 # The worker is not on `web`.
 #
-# The server-only secrets (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) live in
-# /Users/gh-runner/.config/stoktok/stoktok.env on the Mac, never in this repository. It sits
-# outside the checkout because the runner's checkout deletes untracked files. If it is missing,
-# `config` fails and nothing starts.
+# The server-only secrets (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are written to
+# /Users/gh-runner/.config/stoktok/stoktok.env by deploy-stoktok from the `stoktok` environment
+# secrets, never stored in this repository. It sits outside the checkout because the runner's
+# checkout deletes untracked files. If it is missing, `config` fails and nothing starts.
 
 name: stoktok
 
