@@ -3,22 +3,22 @@
 Decisions: `docs/adr/0003-deploy-and-scheduling.md`. Drafts for the deployment repo: `deploy/deployment-repo/` (see its README). Only Ming merges.
 
 ## Flow
-Every push to branch `release` (its commit must already be on main) runs `release.yml`: it takes the next version (last `vX.Y.Z` tag, patch +1; `v0.1.0` if none), creates and pushes that git tag, builds and pushes `stoktok-web` and `stoktok-worker`, then it opens PR `release/stoktok-vX.Y.Z` on `mmlabs-online/deployment` (only `apps/stoktok/release.env`, both images pinned by digest). Merging it runs `deploy-stoktok` on `macbook-runner`: pull, `up -d --wait` on `/healthz`, then publish compose, `release.env` and the job scripts to `/Users/gh-runner/stoktok/current`. A launchd job reads that directory and runs the worker jobs.
+Every push to branch `release` (its commit must already be on main) runs `release.yml`: it takes the next version (last `vX.Y.Z` tag, patch +1; `v0.1.0` if none), creates and pushes that git tag, builds and pushes `stoktok-web` and `stoktok-worker`, then it opens PR `release/stoktok-vX.Y.Z` on `mmlabs-online/deployment` (only `apps/stoktok/release.env`, both images pinned by digest). Merging it runs `deploy-stoktok` on `macbook-runner`: pull, `up -d --wait` on `/healthz`, then publish compose, `release.env` and the job scripts to `/Users/mingming/stoktok/current`. A launchd job reads that directory and runs the worker jobs.
 
 ## Placeholders and gates
 | Placeholder | Value | Status |
 |---|---|---|
 | `APP_HOSTNAME` | `stoktok.mmlabs.online` | confirmed by Ming (G2). Set only in the Cloudflare dashboard; no file in either repo holds it |
-| Log dir (`STOKTOK_LOG_DIR`) | `/Users/gh-runner/stoktok/logs` | default |
+| Log dir (`STOKTOK_LOG_DIR`) | `/Users/mingming/stoktok/logs` | default |
 
 - **G1:** the Cloudflare Access application exists and is verified **before** any public hostname for `stoktok-web:3000` is added. It is a step of the v0.1.0 cut below.
 - No auth code is in the app (R6 suspended). Access is the only gate until STK-004.
 
 ## Preconditions on the Mac
-- **D1:** the Docker engine is OrbStack and starts at boot for `gh-runner` without a GUI login. Check: reboot, do not log in, run the `runner-check` workflow and see it green. The launchd jobs run in the same context.
+- **D1:** the runner, the Docker engine (OrbStack, set to start at login) and the scheduler all run as `mingming`, in that user's login session. `mingming` must be logged in (auto-login after a reboot). Check: reboot, let it auto-login, run the `runner-check` workflow and see it green. No deploys or jobs run without the session.
 - **D2:** time zone is Asia/Ho_Chi_Minh (`sudo systemsetup -gettimezone`; `run-schedule.sh` refuses to run if `date +%z` is not `+0700`). Sleep is off (`sudo pmset -a sleep 0 disablesleep 1`, or lid open on power), otherwise deploys queue and jobs coalesce on wake.
 - **D3:** the Mac is Intel, so the `linux/amd64` images run natively.
-- **D4:** secrets file `/Users/gh-runner/.config/stoktok/stoktok.env`, mode 600, owner `gh-runner`, outside git and the runner checkout. It holds only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. It is written by `deploy-stoktok` on every run from the `stoktok` environment secrets. Do not edit it by hand: the next deploy overwrites it.
+- **D4:** secrets file `/Users/mingming/.config/stoktok/stoktok.env`, mode 600, owner `mingming`, outside git and the runner checkout. It holds only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. It is written by `deploy-stoktok` on every run from the `stoktok` environment secrets. Do not edit it by hand: the next deploy overwrites it. It sits in a personal home directory: exclude it from Time Machine (`tmutil addexclusion ~/.config/stoktok`) and keep the backup destination encrypted.
 - **D5:** deployment `main` is protected: PR required, code-owner review, `pr-scope` required, no admin bypass. The `stoktok` secrets reach a job on the self-hosted runner, so this protection is what stands between a push and the key. Side effect: without a `github-actions` bypass, an automatic rollback ends in `restore-unpushed` (the server is restored, the run is red, and Ming reverts the release PR by hand).
 
 ## Repository secrets
@@ -37,17 +37,17 @@ Create it **before** merging the setup PR. Otherwise GitHub creates the environm
 If either secret is empty or malformed, `deploy-stoktok` stops at the `secrets` step, names the secret, starts nothing and leaves the old file in place.
 
 ## One-time setup
-1. Create the `stoktok` environment and its secrets (section above), then Ming merges the deployment-repo setup PR (drafts in `deploy/deployment-repo/`, plus the CODEOWNERS line). Merging runs `deploy-stoktok` because `compose.yml` changed under `apps/stoktok/`. With no `release.env` it skips the deploy but still writes the env file. Check: the run is green, and `sudo ls -l /Users/gh-runner/.config/stoktok/stoktok.env` shows `-rw------- gh-runner`.
-2. `sudo install -d -o gh-runner -m 755 /Users/gh-runner/stoktok/logs`.
-3. Install the scheduler: `sudo cp apps/stoktok/launchd/online.mmlabs.stoktok.jobs.plist /Library/LaunchDaemons/`, `sudo chown root:wheel` and `sudo chmod 644` on it, then `sudo launchctl bootstrap system /Library/LaunchDaemons/online.mmlabs.stoktok.jobs.plist`. Verify with `sudo launchctl print system/online.mmlabs.stoktok.jobs`.
-4. Optional log rotation: a line for `/Users/gh-runner/stoktok/logs/*.log` in `/etc/newsyslog.d/stoktok.conf`.
+1. Create the `stoktok` environment and its secrets (section above), then Ming merges the deployment-repo setup PR (drafts in `deploy/deployment-repo/`, plus the CODEOWNERS line). Merging runs `deploy-stoktok` because `compose.yml` changed under `apps/stoktok/`. With no `release.env` it skips the deploy but still writes the env file. Check: the run is green, and `ls -l ~/.config/stoktok/stoktok.env` shows `-rw------- mingming`.
+2. `install -d -m 755 ~/stoktok/logs`.
+3. Install the scheduler as a LaunchAgent of `mingming`. If an earlier LaunchDaemon was installed, remove it first: `sudo launchctl bootout system/online.mmlabs.stoktok.jobs` and `sudo rm /Library/LaunchDaemons/online.mmlabs.stoktok.jobs.plist`. Then `cp apps/stoktok/launchd/online.mmlabs.stoktok.jobs.plist ~/Library/LaunchAgents/` and `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/online.mmlabs.stoktok.jobs.plist`. Verify with `launchctl print gui/$(id -u)/online.mmlabs.stoktok.jobs`.
+4. Optional log rotation: a line for `/Users/mingming/stoktok/logs/*.log` in `/etc/newsyslog.d/stoktok.conf` (owner `mingming:staff`).
 
 ## Rotate the Supabase key
 1. Create the new key in Supabase. For an `sb_secret_...` key, create it next to the old one. For the legacy JWT `service_role` key, rotating means rotating the JWT secret: the old key dies at once and the anon key and sessions are invalidated too (stoktok uses neither yet). Then do steps 2 and 3 right away. Verify which applies in the Supabase dashboard.
 2. Update the `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` secret of the `stoktok` environment.
 3. Run `deploy-stoktok` with `workflow_dispatch` on `main`. It rewrites the env file and, because the content changed, recreates web.
-4. Check that web was recreated: `sudo -u gh-runner -H docker compose -p stoktok ps` shows a new start time.
-5. Run `sudo -u gh-runner -H /Users/gh-runner/stoktok/current/run-job.sh eod-prices --dry-run`. The health check does not test the DB key (a well-formed wrong key still passes `/healthz`); this run does.
+4. Check that web was recreated: `docker compose -p stoktok ps` shows a new start time.
+5. Run `/Users/mingming/stoktok/current/run-job.sh eod-prices --dry-run`. The health check does not test the DB key (a well-formed wrong key still passes `/healthz`); this run does.
 6. Only then revoke the old key. The key pasted into chat on 2026-11-01 must be revoked, not only replaced.
 
 ## Cut a release (first one is v0.1.0)
@@ -57,8 +57,8 @@ If either secret is empty or malformed, `deploy-stoktok` stops at the `secrets` 
 4. Review the release PR: only `apps/stoktok/release.env`, both digests.
 5. Merge it.
 6. Read the `deploy-stoktok` comment on the PR.
-7. Verify (OrbStack runs per user, so run docker as `gh-runner`): `sudo -u gh-runner -H docker compose -p stoktok ps` shows web healthy, and `sudo -u gh-runner -H docker compose -p stoktok exec stoktok-web node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>r.text()).then(console.log)"` shows `v0.1.0`.
-8. Run `sudo -u gh-runner -H /Users/gh-runner/stoktok/current/run-job.sh eod-prices --dry-run`. The health check does not test the DB secrets; this run does.
+7. Verify (OrbStack runs per user, so run docker as `mingming`): `docker compose -p stoktok ps` shows web healthy, and `docker compose -p stoktok exec stoktok-web node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>r.text()).then(console.log)"` shows `v0.1.0`.
+8. Run `/Users/mingming/stoktok/current/run-job.sh eod-prices --dry-run`. The health check does not test the DB secrets; this run does.
 9. **HARD GATE: tunnel token.** `mmlabs-online/deployment/proxy/compose.yml` commits the cloudflared tunnel token in git. Before any public hostname is added, rotate the tunnel token in Cloudflare and move it out of git into a host env file (change made in the deployment repo, not this one). Do not continue until this is done and confirmed.
 10. **Cloudflare Access application** (Zero Trust, Access, Applications, Self-hosted): application domain `<APP_HOSTNAME>`; one Allow policy with Include, Emails, Ming's email only; no bypass rules; note the session duration. Check in the dashboard that it is saved and the policy is attached.
 11. **Then add the public hostname** (Networks, Tunnels, the mmlabs tunnel, Public hostname): `<APP_HOSTNAME>` to service `http://stoktok-web:3000`. Turn on the hostname's Access JWT check ("Protect with Access") and select the application from step 10.
@@ -73,8 +73,8 @@ If either secret is empty or malformed, `deploy-stoktok` stops at the `secrets` 
 
 ## Logs
 ```
-sudo -u gh-runner -H docker compose -p stoktok logs -f stoktok-web
-tail -f /Users/gh-runner/stoktok/logs/eod-prices.log     # also financials.log, signals.log, schedule.log, launchd.log
+docker compose -p stoktok logs -f stoktok-web
+tail -f /Users/mingming/stoktok/logs/eod-prices.log     # also financials.log, signals.log, schedule.log, launchd.log
 ```
 `run --rm` discards the container's logs, which is why `run-job.sh` appends to host files.
 
@@ -98,12 +98,12 @@ Names only. Values live in the `stoktok` environment secrets of the deployment r
 Spec section 7: the worker tolerates restarts. Automated coverage (`pnpm test`): `eod-sync.test.ts` (re-run gives the same rows except `fetched_at`, no new gaps), `financials-sync.test.ts` (same), `medium-signals.test.ts` (two runs identical except `computed_at`).
 
 Manual check on the Mac:
-1. Run each job twice (`sudo -u gh-runner -H /Users/gh-runner/stoktok/current/run-job.sh <job>`); row counts of `prices_daily`, `financials`, `signals`, `data_gaps` must not change on the second run.
-2. Start `eod-prices`, `sudo -u gh-runner -H docker kill` the container mid-run, rerun, and confirm the counts match a clean run.
+1. Run each job twice (`/Users/mingming/stoktok/current/run-job.sh <job>`); row counts of `prices_daily`, `financials`, `signals`, `data_gaps` must not change on the second run.
+2. Start `eod-prices`, `docker kill` the container mid-run, rerun, and confirm the counts match a clean run.
 3. Resume is window-based: EOD recomputes the last 20 trading days, financials the last 12 quarters, with idempotent upserts. Outages longer than that need the STK-032 backfill.
 4. Overlap: `run-job.sh` takes one shared `mkdir` lock (waits up to 30 min, clears a stale lock), so jobs never run concurrently; a timeout exits 1. launchd never runs one job twice at once, and slots missed during sleep coalesce into one run on wake.
 
 ## Exit codes
 - 0: ok. Nothing to do.
-- 1: fatal error, lock timeout or wrong time zone. Read `/Users/gh-runner/stoktok/logs/<job>.log`; the next scheduled run retries.
+- 1: fatal error, lock timeout or wrong time zone. Read `/Users/mingming/stoktok/logs/<job>.log`; the next scheduled run retries.
 - 2: usage error (bad job name or flag). Fix the caller.

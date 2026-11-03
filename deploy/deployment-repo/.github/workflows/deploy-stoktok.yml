@@ -32,8 +32,8 @@ concurrency:
 env:
   APP_DIR: apps/stoktok
   PROJECT: stoktok
-  ENV_FILE: /Users/gh-runner/.config/stoktok/stoktok.env
-  SCHED_DIR: /Users/gh-runner/stoktok/current
+  ENV_FILE: /Users/mingming/.config/stoktok/stoktok.env
+  SCHED_DIR: /Users/mingming/stoktok/current
 
 jobs:
   deploy:
@@ -101,6 +101,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STOKTOK_SUPABASE_SERVICE_ROLE_KEY }}
         run: |
           umask 077
+          [[ "$ENV_FILE" == "$HOME/"* ]] || { echo "::error::ENV_FILE $ENV_FILE is not under the runner user's home $HOME ($(id -un)). Nothing was started; $ENV_FILE was not changed."; exit 1; }
           missing=""
           [ -n "$SUPABASE_URL" ] || missing="$missing STOKTOK_SUPABASE_URL"
           [ -n "$SUPABASE_SERVICE_ROLE_KEY" ] || missing="$missing STOKTOK_SUPABASE_SERVICE_ROLE_KEY"

@@ -37,4 +37,4 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-041 | Financials run health: count only in-window rejects, skip unsupported company types | DONE | P1 | data | 1 | 2026-11-01 |
 | STK-042 | Financials for banks, securities firms and insurers (VietCap IQ) | BACKLOG | P2 | data, finance | 0 | 2026-11-01 |
 | STK-043 | Deploy secrets from the deployment repo's GitHub Secrets | DONE | P1 | architecture, security | 1 | 2026-11-03 |
-| STK-044 | Run deploy and worker jobs as the runner's real user (mingming) | IN_PROGRESS | P1 | architecture, security | 1 | 2026-11-03 |
+| STK-044 | Run deploy and worker jobs as the runner's real user (mingming) | REVIEW | P1 | architecture, security | 1 | 2026-11-03 |
