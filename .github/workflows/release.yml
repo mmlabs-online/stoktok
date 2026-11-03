@@ -1,5 +1,6 @@
-# STK-037: every push to branch `release` (commit must already be on main) takes the next version
-# (last vX.Y.Z tag, patch +1; v0.1.0 if none), creates and pushes that git tag, builds and pushes
+# STK-037: every push to a branch `release/vX.Y` (commit must already be on main) takes the next
+# version in that line (last vX.Y.* tag, patch +1; vX.Y.0 if none), creates and pushes that git tag,
+# builds and pushes
 # stoktok-web and stoktok-worker, then opens a pull
 # request release/stoktok-vX.Y.Z on mmlabs-online/deployment that changes only apps/stoktok/release.env
 # (both images pinned by digest). Merging it runs deploy-stoktok on macbook-runner.
@@ -14,7 +15,7 @@ name: release
 
 on:
   push:
-    branches: [release]
+    branches: ['release/v*']
 
 permissions:
   contents: write # push the version tag
@@ -50,9 +51,13 @@ jobs:
           if git tag --points-at "$GITHUB_SHA" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::error::$GITHUB_SHA is already released ($(git tag --points-at "$GITHUB_SHA" | tr '\n' ' '))"; exit 1
           fi
-          last="$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)"
+          if ! [[ "$GITHUB_REF_NAME" =~ ^release/v([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::branch '$GITHUB_REF_NAME' is not release/vX.Y (for example release/v0.2)"; exit 1
+          fi
+          line="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+          last="$(git tag --list "v$line.*" --sort=-v:refname | grep -E "^v${line//./\\.}\.[0-9]+$" | head -n 1 || true)"
           if [ -z "$last" ]; then
-            TAG=v0.1.0
+            TAG="v$line.0"
           else
             IFS=. read -r major minor patch <<< "${last#v}"
             TAG="v$major.$minor.$((patch + 1))"
