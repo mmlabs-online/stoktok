@@ -7,7 +7,7 @@
 | Areas | architecture, security |
 | Attempts | 1 |
 | Created | 2026-11-03 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/30 (deployment: https://github.com/mmlabs-online/deployment/pull/18) |
 
 ## Goal
 Ming cannot reach the Mac runner. `deploy-stoktok` performs the one-time, no-sudo Mac setup itself on every run (idempotently), so stoktok deploys and its worker schedule work without anyone logging in to the Mac.
