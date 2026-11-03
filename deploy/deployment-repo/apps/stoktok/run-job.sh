@@ -10,8 +10,8 @@ if [ "$#" -lt 1 ]; then
 fi
 
 JOB="$1"
-DIR="${STOKTOK_DIR:-/Users/gh-runner/stoktok/current}"
-LOG_DIR="${STOKTOK_LOG_DIR:-/Users/gh-runner/stoktok/logs}"
+DIR="${STOKTOK_DIR:-/Users/mingming/stoktok/current}"
+LOG_DIR="${STOKTOK_LOG_DIR:-/Users/mingming/stoktok/logs}"
 LOCK=/tmp/stoktok-jobs.lock # macOS clears /tmp at boot
 LOG="$LOG_DIR/$JOB.log"
 now() { date -u +%FT%TZ; }

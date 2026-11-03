@@ -4,7 +4,7 @@
 set -uo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG_DIR="${STOKTOK_LOG_DIR:-/Users/gh-runner/stoktok/logs}"
+LOG_DIR="${STOKTOK_LOG_DIR:-/Users/mingming/stoktok/logs}"
 mkdir -p "$LOG_DIR"
 
 if [ "$(date +%z)" != "+0700" ]; then

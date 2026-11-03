@@ -12,7 +12,7 @@
 # The worker is not on `web`.
 #
 # The server-only secrets (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are written to
-# /Users/gh-runner/.config/stoktok/stoktok.env by deploy-stoktok from the `stoktok` environment
+# /Users/mingming/.config/stoktok/stoktok.env by deploy-stoktok from the `stoktok` environment
 # secrets, never stored in this repository. It sits outside the checkout because the runner's
 # checkout deletes untracked files. If it is missing, `config` fails and nothing starts.
 
@@ -22,7 +22,7 @@ services:
   stoktok-web:
     image: ${STOKTOK_WEB_IMAGE:?STOKTOK_WEB_IMAGE is unset - pass --env-file apps/stoktok/release.env}
     restart: unless-stopped
-    env_file: /Users/gh-runner/.config/stoktok/stoktok.env
+    env_file: /Users/mingming/.config/stoktok/stoktok.env
     environment:
       STOKTOK_VERSION: ${STOKTOK_VERSION:-}
       # Next's standalone server binds to $HOSTNAME, which Docker sets to the container id; bind
@@ -46,7 +46,7 @@ services:
     image: ${STOKTOK_WORKER_IMAGE:?STOKTOK_WORKER_IMAGE is unset - pass --env-file apps/stoktok/release.env}
     restart: "no"
     profiles: [jobs]
-    env_file: /Users/gh-runner/.config/stoktok/stoktok.env
+    env_file: /Users/mingming/.config/stoktok/stoktok.env
     environment:
       STOKTOK_VERSION: ${STOKTOK_VERSION:-}
       TZ: Asia/Ho_Chi_Minh

@@ -6,9 +6,10 @@ on `mmlabs-online/deployment` (not a `release/*` branch, so `pr-scope` does not 
 | Here | Goes to |
 |---|---|
 | `apps/stoktok/compose.yml` | `apps/stoktok/compose.yml` |
-| `apps/stoktok/run-job.sh`, `run-schedule.sh` | `apps/stoktok/` (deploy-stoktok publishes them to `/Users/gh-runner/stoktok/current`) |
-| `apps/stoktok/launchd/online.mmlabs.stoktok.jobs.plist` | `apps/stoktok/launchd/` (installed by hand, see `docs/deploy.md`) |
+| `apps/stoktok/run-job.sh`, `run-schedule.sh` | `apps/stoktok/` (deploy-stoktok publishes them to `/Users/mingming/stoktok/current`) |
+| `apps/stoktok/launchd/online.mmlabs.stoktok.jobs.plist` | `apps/stoktok/launchd/` (published to `$SCHED_DIR` and installed by deploy-stoktok) |
 | `.github/workflows/deploy-stoktok.yml` | `.github/workflows/deploy-stoktok.yml` |
+| `.github/workflows/runner-check.yml` | `.github/workflows/runner-check.yml` (shared by every app; STK-044 only changes the expected runner user to `mingming`) |
 
 Also add this line to the deployment repo's `.github/CODEOWNERS`:
 
@@ -21,5 +22,5 @@ deploy-stoktok skips, so merging the setup PR deploys nothing.
 
 No hostname or ingress rule belongs in either repo: cloudflared is remotely managed (Cloudflare
 dashboard). The secrets come from the `stoktok` environment of the deployment repo; deploy-stoktok
-writes `/Users/gh-runner/.config/stoktok/stoktok.env` on the Mac from them (R3). Create the
+writes `/Users/mingming/.config/stoktok/stoktok.env` on the Mac from them (R3). Create the
 environment and its secrets before merging the setup PR: see `docs/deploy.md`.

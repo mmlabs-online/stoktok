@@ -1,0 +1,34 @@
+name: runner-check
+
+# DRAFT for the deployment repository (calechip CICD-07; STK-044: runner user is mingming). Run by hand
+# from the Actions tab to prove the self-hosted runner macbook-runner picks up a job, runs it as
+# mingming and not as root, and reaches Docker. Run it after registration and after a reboot.
+# workflow_dispatch only: no push, schedule or pull request may start a job on this runner here.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: [self-hosted, macbook-runner]
+    timeout-minutes: 5
+    steps:
+      - name: identity
+        run: |
+          echo "runner: $RUNNER_NAME  user: $(id -un)  groups: $(id -Gn)"
+          if [ "$(id -u)" = "0" ]; then
+            echo "::error::The runner is running as root. The runner must run as mingming."
+            exit 1
+          fi
+          if [ "$(id -un)" != "mingming" ]; then
+            echo "::error::The runner is running as $(id -un), not mingming. See the deploy runbook of the app."
+            exit 1
+          fi
+
+      - name: docker
+        run: |
+          docker version --format 'docker server {{.Server.Version}}'
+          docker compose version
+          docker ps

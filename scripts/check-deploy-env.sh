@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # STK-018/STK-037 (R3): keep docs/deploy.md env table, the draft deployment-repo compose, release.yml
-# and .env.example in sync, and guard the draft compose against secrets and published ports.
+# and .env.example in sync, STK-044: one runner user and agreeing paths across drafts, and guard the draft compose against secrets and published ports.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -103,6 +103,105 @@ fi
 if ! grep -qF "printf 'SUPABASE_URL=" "$WF" \
    || grep -rqF 'SUPABASE_SERVICE_ROLE_KEY=' "$ROOT/deploy/deployment-repo/apps/stoktok/"; then
   echo "FAIL: env-file writer must be in the workflow, not under apps/stoktok/" >&2
+  fail=1
+fi
+
+# STK-044: one runner user; env file, scheduler dir and log dir agree across workflow, compose, scripts, plist, runbook.
+DRAFTS="$ROOT/deploy/deployment-repo"
+ADR="$ROOT/docs/adr/0003-deploy-and-scheduling.md"
+RUNCHECK="$DRAFTS/.github/workflows/runner-check.yml"
+PLIST="$DRAFTS/apps/stoktok/launchd/online.mmlabs.stoktok.jobs.plist"
+RUNJOB="$DRAFTS/apps/stoktok/run-job.sh"
+RUNSCHED="$DRAFTS/apps/stoktok/run-schedule.sh"
+if grep -rn 'gh-runner' "$DRAFTS" "$DOC" "$ADR"; then
+  echo "FAIL: gh-runner found in drafts, docs/deploy.md or ADR 0003" >&2
+  fail=1
+fi
+users="$(grep -rhoE '/Users/[A-Za-z0-9._-]+' "$DRAFTS" "$DOC" | sed 's#/Users/##' | sort -u)"
+if [ "$(echo "$users" | grep -c .)" -ne 1 ]; then
+  echo "FAIL: expected exactly one /Users/<name> in drafts and docs/deploy.md, found: $(echo $users)" >&2
+  fail=1
+fi
+RUNNER_USER="$(echo "$users" | head -n 1)"
+if ! grep -qF "!= \"$RUNNER_USER\"" "$RUNCHECK"; then
+  echo "FAIL: runner-check.yml does not expect runner user $RUNNER_USER" >&2
+  fail=1
+fi
+sched_dir="$(sed -n 's/^  SCHED_DIR: //p' "$WF")"
+job_dir="$(sed -n 's/^DIR="\${STOKTOK_DIR:-\(.*\)}"$/\1/p' "$RUNJOB")"
+plist_prog="$(sed -n 's#^ *<string>\(/Users/[^<]*\)/run-schedule\.sh</string>#\1#p' "$PLIST")"
+if [ -z "$sched_dir" ] || [ "$sched_dir" != "$job_dir" ] || [ "$sched_dir" != "$plist_prog" ]; then
+  echo "FAIL: scheduler dir differs (workflow SCHED_DIR '$sched_dir', run-job.sh '$job_dir', plist '$plist_prog')" >&2
+  fail=1
+fi
+log_job="$(sed -n 's/^LOG_DIR="\${STOKTOK_LOG_DIR:-\(.*\)}"$/\1/p' "$RUNJOB")"
+log_sched="$(sed -n 's/^LOG_DIR="\${STOKTOK_LOG_DIR:-\(.*\)}"$/\1/p' "$RUNSCHED")"
+log_out="$(sed -n 's#.*<key>StandardOutPath</key><string>\(.*\)/[^/]*</string>.*#\1#p' "$PLIST")"
+log_err="$(sed -n 's#.*<key>StandardErrorPath</key><string>\(.*\)/[^/]*</string>.*#\1#p' "$PLIST")"
+log_doc="$(sed -n 's#^| Log dir (`STOKTOK_LOG_DIR`) | `\([^`]*\)`.*#\1#p' "$DOC")"
+if [ -z "$log_job" ] || [ "$log_job" != "$log_sched" ] || [ "$log_job" != "$log_out" ] \
+   || [ "$log_job" != "$log_err" ] || [ "$log_job" != "$log_doc" ]; then
+  echo "FAIL: log dir differs (run-job '$log_job', run-schedule '$log_sched', plist out '$log_out' err '$log_err', doc '$log_doc')" >&2
+  fail=1
+fi
+if grep -q '<key>UserName</key>' "$PLIST"; then
+  echo "FAIL: plist must be a LaunchAgent without UserName" >&2
+  fail=1
+fi
+if command -v plutil >/dev/null 2>&1 && ! plutil -lint "$PLIST" >/dev/null; then
+  echo "FAIL: plutil -lint $PLIST" >&2
+  fail=1
+fi
+
+# STK-045: Mac-side setup in the workflow: no root, no system settings, one publish list, ordered steps, secrets confined.
+if grep -nwE 'sudo' "$WF"; then
+  echo "FAIL: sudo in workflow" >&2
+  fail=1
+fi
+if grep -nE 'fdesetup|pmset|systemsetup|sysadminctl|defaults write|osascript|orb start|addexclusion -p' "$WF"; then
+  echo "FAIL: system-setting command in workflow" >&2
+  fail=1
+fi
+agent_label="$(sed -n 's/^  AGENT_LABEL: //p' "$WF")"
+plist_label="$(sed -n 's#.*<key>Label</key><string>\(.*\)</string>.*#\1#p' "$PLIST")"
+doc_label="$(sed -n 's#.*/Library/LaunchDaemons/\([A-Za-z0-9._-]*\)\.plist.*#\1#p' "$DOC" | sort -u)"
+if [ -z "$agent_label" ] || [ "$(basename "$PLIST" .plist)" != "$agent_label" ] || [ "$plist_label" != "$agent_label" ] || [ "$doc_label" != "$agent_label" ]; then
+  echo "FAIL: plist label differs (workflow '$agent_label', plist '$plist_label', file '$(basename "$PLIST")', doc '$doc_label')" >&2
+  fail=1
+fi
+publish_files="$(sed -n 's/^  PUBLISH_FILES: //p' "$WF")"
+case " $publish_files " in *" launchd/$agent_label.plist "*) ;; *)
+  echo "FAIL: PUBLISH_FILES lacks launchd/$agent_label.plist" >&2
+  fail=1 ;;
+esac
+for f in $publish_files; do
+  if [ "$f" != release.env ] && [ ! -f "$DRAFTS/apps/stoktok/$f" ]; then
+    echo "FAIL: PUBLISH_FILES lists missing file $f" >&2
+    fail=1
+  fi
+done
+if [ "$(grep -cF 'for f in $PUBLISH_FILES; do cp "$APP_DIR/$f" "$SCHED_DIR.new/"; done' "$WF")" -ne 2 ] \
+   || grep -nE 'cp .*run-job\.sh' "$WF"; then
+  echo "FAIL: publish and rollback must both copy \$PUBLISH_FILES (no literal list)" >&2
+  fail=1
+fi
+step_line() { grep -nE "^      - name: $1\s*$" "$WF" | head -n 1 | cut -d: -f1 || true; }
+prev=0
+for n in preflight release envdir secrets deploy publish rollback agent notify; do
+  l="$(step_line "$n")"
+  if [ -z "$l" ] || [ "$l" -le "$prev" ]; then
+    echo "FAIL: workflow step '$n' missing or out of order (preflight, release, envdir, secrets, deploy, publish, rollback, agent, notify)" >&2
+    fail=1
+  fi
+  prev="${l:-$prev}"
+done
+if awk '/^      - (name|uses):/{ if (blk ~ /secrets\./ && blk ~ /tmutil|launchctl|plutil|xattr/) bad=1; blk="" } { blk = blk $0 "\n" } END { if (blk ~ /secrets\./ && blk ~ /tmutil|launchctl|plutil|xattr/) bad=1; exit !bad }' "$WF"; then
+  echo "FAIL: a step that uses secrets also does Mac setup (tmutil/launchctl/plutil/xattr)" >&2
+  fail=1
+fi
+if ! grep -qF 'launchctl bootstrap "$dom"' "$WF" || ! grep -qF 'dom="gui/$(id -u)"' "$WF" \
+   || grep -n 'system/' "$WF" | grep -vF 'launchctl print system/'; then
+  echo "FAIL: agent must use the gui domain; system/ only in the read-only preflight print" >&2
   fail=1
 fi
 
