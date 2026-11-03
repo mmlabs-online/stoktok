@@ -153,5 +153,57 @@ if command -v plutil >/dev/null 2>&1 && ! plutil -lint "$PLIST" >/dev/null; then
   fail=1
 fi
 
+# STK-045: Mac-side setup in the workflow: no root, no system settings, one publish list, ordered steps, secrets confined.
+if grep -nwE 'sudo' "$WF"; then
+  echo "FAIL: sudo in workflow" >&2
+  fail=1
+fi
+if grep -nE 'fdesetup|pmset|systemsetup|sysadminctl|defaults write|osascript|orb start|addexclusion -p' "$WF"; then
+  echo "FAIL: system-setting command in workflow" >&2
+  fail=1
+fi
+agent_label="$(sed -n 's/^  AGENT_LABEL: //p' "$WF")"
+plist_label="$(sed -n 's#.*<key>Label</key><string>\(.*\)</string>.*#\1#p' "$PLIST")"
+doc_label="$(sed -n 's#.*/Library/LaunchDaemons/\([A-Za-z0-9._-]*\)\.plist.*#\1#p' "$DOC" | sort -u)"
+if [ -z "$agent_label" ] || [ "$(basename "$PLIST" .plist)" != "$agent_label" ] || [ "$plist_label" != "$agent_label" ] || [ "$doc_label" != "$agent_label" ]; then
+  echo "FAIL: plist label differs (workflow '$agent_label', plist '$plist_label', file '$(basename "$PLIST")', doc '$doc_label')" >&2
+  fail=1
+fi
+publish_files="$(sed -n 's/^  PUBLISH_FILES: //p' "$WF")"
+case " $publish_files " in *" launchd/$agent_label.plist "*) ;; *)
+  echo "FAIL: PUBLISH_FILES lacks launchd/$agent_label.plist" >&2
+  fail=1 ;;
+esac
+for f in $publish_files; do
+  if [ "$f" != release.env ] && [ ! -f "$DRAFTS/apps/stoktok/$f" ]; then
+    echo "FAIL: PUBLISH_FILES lists missing file $f" >&2
+    fail=1
+  fi
+done
+if [ "$(grep -cF 'for f in $PUBLISH_FILES; do cp "$APP_DIR/$f" "$SCHED_DIR.new/"; done' "$WF")" -ne 2 ] \
+   || grep -nE 'cp .*run-job\.sh' "$WF"; then
+  echo "FAIL: publish and rollback must both copy \$PUBLISH_FILES (no literal list)" >&2
+  fail=1
+fi
+step_line() { grep -nE "^      - name: $1\s*$" "$WF" | head -n 1 | cut -d: -f1 || true; }
+prev=0
+for n in preflight release envdir secrets deploy publish rollback agent notify; do
+  l="$(step_line "$n")"
+  if [ -z "$l" ] || [ "$l" -le "$prev" ]; then
+    echo "FAIL: workflow step '$n' missing or out of order (preflight, release, envdir, secrets, deploy, publish, rollback, agent, notify)" >&2
+    fail=1
+  fi
+  prev="${l:-$prev}"
+done
+if awk '/^      - (name|uses):/{ if (blk ~ /secrets\./ && blk ~ /tmutil|launchctl|plutil|xattr/) bad=1; blk="" } { blk = blk $0 "\n" } END { if (blk ~ /secrets\./ && blk ~ /tmutil|launchctl|plutil|xattr/) bad=1; exit !bad }' "$WF"; then
+  echo "FAIL: a step that uses secrets also does Mac setup (tmutil/launchctl/plutil/xattr)" >&2
+  fail=1
+fi
+if ! grep -qF 'launchctl bootstrap "$dom"' "$WF" || ! grep -qF 'dom="gui/$(id -u)"' "$WF" \
+   || grep -n 'system/' "$WF" | grep -vF 'launchctl print system/'; then
+  echo "FAIL: agent must use the gui domain; system/ only in the read-only preflight print" >&2
+  fail=1
+fi
+
 if [ "$fail" -ne 0 ]; then exit 1; fi
 echo "OK: deploy env lists consistent"

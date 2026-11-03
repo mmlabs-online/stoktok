@@ -8,6 +8,10 @@ name: deploy-stoktok
 # are copied to a stable directory that the launchd jobs read, never the runner's _work checkout.
 # workflow_dispatch from main redeploys what main pins and rewrites the env file from the `stoktok`
 # environment secrets (e.g. after a rotation). Runs from any other branch are skipped.
+# STK-045: the workflow also does the Mac-side setup that needs no root, on every run and idempotently:
+# `preflight` reports (read-only) the login session, docker and any old LaunchDaemon; `envdir` creates the
+# env dir (mode 700) and excludes it from Time Machine before `secrets` writes the file; `agent` installs
+# or updates the stoktok LaunchAgent from the published plist. Nothing here uses root or changes system settings.
 # Secrets STOKTOK_SUPABASE_URL and STOKTOK_SUPABASE_SERVICE_ROLE_KEY (prefixed: this repo is shared by
 # every mmlabs app) come from the `stoktok` environment (main only); the `secrets` step writes them to
 # $ENV_FILE as SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY, the names the app reads, on every run. Values are never printed.
@@ -34,6 +38,8 @@ env:
   PROJECT: stoktok
   ENV_FILE: /Users/mingming/.config/stoktok/stoktok.env
   SCHED_DIR: /Users/mingming/stoktok/current
+  AGENT_LABEL: online.mmlabs.stoktok.jobs
+  PUBLISH_FILES: compose.yml release.env run-job.sh run-schedule.sh launchd/online.mmlabs.stoktok.jobs.plist
 
 jobs:
   deploy:
@@ -45,6 +51,30 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      # Read-only report; never fails. Writes only to the step summary.
+      - name: preflight
+        id: preflight
+        run: |
+          set +e
+          {
+            echo "### preflight (read-only)"
+            echo "- user: $(id -un), session: $(launchctl managername 2>&1 || true) (expected Aqua)"
+            if [ -S "$HOME/.orbstack/run/docker.sock" ]; then echo "- OrbStack socket: present"; else echo "- OrbStack socket: missing"; fi
+            echo "- docker context: $(docker context show 2>&1 || true)"
+            echo "- docker engine: $(docker info --format '{{.OperatingSystem}}' 2>&1 || true)"
+            if command -v orb >/dev/null 2>&1; then echo "- orb status: $(orb status 2>&1 || true)"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          old="/Library/LaunchDaemons/$AGENT_LABEL.plist"
+          if test -e "$old"; then
+            loaded="not loaded or not visible"
+            if launchctl print system/$AGENT_LABEL >/dev/null 2>&1; then loaded="loaded"; fi
+            echo "- old LaunchDaemon: $old exists ($loaded)" >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::Old LaunchDaemon $old is still installed; jobs may run twice. Ming must remove it at the Mac: see docs/deploy.md, Still needs Ming."
+          else
+            echo "- old LaunchDaemon: none" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit 0
 
       - name: release
         id: release
@@ -91,11 +121,38 @@ jobs:
             echo "previous=$previous"
           } >> "$GITHUB_OUTPUT"
 
+      # Env dir (mode 700) and Time Machine exclusion, before the env file is written. No secrets here.
+      # Only a bad owner or mode fails the step; a failed exclusion is a warning (output tm=not-excluded).
+      - name: envdir
+        id: envdir
+        if: steps.release.outcome == 'success'
+        run: |
+          [[ "$ENV_FILE" == "$HOME/"* ]] || { echo "::error::ENV_FILE $ENV_FILE is not under the runner user's home $HOME ($(id -un)). Nothing was started."; exit 1; }
+          dir="$(dirname "$ENV_FILE")"
+          install -d -m 700 "$dir"
+          chmod 700 "$dir"
+          if [ "$(stat -f '%Su %Lp' "$dir")" != "$(id -un) 700" ]; then
+            echo "::error::$dir is not owned by $(id -un) with mode 700. Nothing was started."
+            exit 1
+          fi
+          excluded() { local out; out="$(tmutil isexcluded "$dir" 2>&1 || true)"; [[ "$out" == *"[Excluded]"* ]]; }
+          tmutil addexclusion "$dir" || true
+          if ! excluded; then
+            xattr -w com.apple.metadata:com_apple_backup_excludeItem com.apple.backupd "$dir" || true
+          fi
+          if excluded; then
+            echo "tm=excluded" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::$dir is not excluded from Time Machine (tmutil isexcluded did not report [Excluded]). Exclude it at the Mac, or the key may be backed up."
+            echo "- Time Machine: $dir NOT excluded" >> "$GITHUB_STEP_SUMMARY"
+            echo "tm=not-excluded" >> "$GITHUB_OUTPUT"
+          fi
+
       # Writes the host env file from the environment secrets; only bash builtins touch the values
       # (no heredoc, no argv, no echo). If it fails, the old file stays and nothing is started.
       - name: secrets
         id: secrets
-        if: steps.release.outcome == 'success'
+        if: steps.release.outcome == 'success' && steps.envdir.outcome == 'success'
         env:
           SUPABASE_URL: ${{ secrets.STOKTOK_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STOKTOK_SUPABASE_SERVICE_ROLE_KEY }}
@@ -155,7 +212,7 @@ jobs:
         run: |
           rm -rf "$SCHED_DIR.new"
           mkdir -p "$SCHED_DIR.new"
-          cp "$APP_DIR/compose.yml" "$APP_DIR/release.env" "$APP_DIR/run-job.sh" "$APP_DIR/run-schedule.sh" "$SCHED_DIR.new/"
+          for f in $PUBLISH_FILES; do cp "$APP_DIR/$f" "$SCHED_DIR.new/"; done
           rm -rf "$SCHED_DIR.old"
           if [ -d "$SCHED_DIR" ]; then mv "$SCHED_DIR" "$SCHED_DIR.old"; fi
           mv "$SCHED_DIR.new" "$SCHED_DIR"
@@ -187,7 +244,7 @@ jobs:
           fi
           rm -rf "$SCHED_DIR.new"
           mkdir -p "$SCHED_DIR.new"
-          cp "$APP_DIR/compose.yml" "$APP_DIR/release.env" "$APP_DIR/run-job.sh" "$APP_DIR/run-schedule.sh" "$SCHED_DIR.new/"
+          for f in $PUBLISH_FILES; do cp "$APP_DIR/$f" "$SCHED_DIR.new/"; done
           rm -rf "$SCHED_DIR.old"
           if [ -d "$SCHED_DIR" ]; then mv "$SCHED_DIR" "$SCHED_DIR.old"; fi
           mv "$SCHED_DIR.new" "$SCHED_DIR"
@@ -205,22 +262,76 @@ jobs:
           echo "::error::$FAILED failed its health check. Restored $PREVIOUS and pushed the revert."
           exit 1
 
+      # Installs or updates the LaunchAgent from the published copy; a no-op when nothing changed.
+      - name: agent
+        id: agent
+        if: always() && (steps.publish.outcome == 'success' || steps.rollback.outputs.result == 'restored' || steps.rollback.outputs.result == 'restore-unpushed')
+        run: |
+          src="$SCHED_DIR/$AGENT_LABEL.plist"
+          dst="$HOME/Library/LaunchAgents/$AGENT_LABEL.plist"
+          dom="gui/$(id -u)"
+          tgt="$dom/$AGENT_LABEL"
+          session="$(launchctl managername 2>&1 || true)"
+          if [ "$session" != "Aqua" ]; then
+            echo "::error::Not in a GUI login session (launchctl managername is '$session', expected Aqua). The LaunchAgent was not installed."
+            exit 1
+          fi
+          install -d -m 755 "$HOME/stoktok/logs" "$HOME/Library/LaunchAgents"
+          plutil -lint "$src"
+          loaded=no
+          info="$(launchctl print "$tgt" 2>/dev/null)" && loaded=yes || true
+          if cmp -s "$src" "$dst" && [ "$loaded" = yes ] && [[ "$info" == *"path = $dst"* ]]; then
+            echo "scheduler unchanged"
+            echo "agent=unchanged" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          install -m 644 "$src" "$dst.tmp"
+          mv -f "$dst.tmp" "$dst"
+          disabled="$(launchctl print-disabled "$dom" 2>/dev/null || true)"
+          if [[ "$disabled" =~ \"$AGENT_LABEL\"[[:space:]]*=>[[:space:]]*(true|disabled) ]]; then
+            launchctl enable "$tgt"
+          fi
+          if [ "$loaded" = yes ]; then
+            if [[ "$info" == *"state = running"* ]]; then
+              echo "::warning::A stoktok job is running and is stopped by the scheduler reload; it is idempotent and runs again on the next slot."
+            fi
+            launchctl bootout "$tgt" || true
+            for _ in 1 2 3 4 5 6 7 8 9 10; do
+              launchctl print "$tgt" >/dev/null 2>&1 || break
+              sleep 1
+            done
+          fi
+          launchctl bootstrap "$dom" "$dst" || { sleep 2; launchctl bootstrap "$dom" "$dst"; }
+          if ! launchctl print "$tgt" >/dev/null 2>&1; then
+            echo "::error::$AGENT_LABEL is not loaded after bootstrap. The scheduler is NOT installed."
+            exit 1
+          fi
+          echo "agent=installed" >> "$GITHUB_OUTPUT"
+
       - name: notify
         if: always() && steps.release.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           SECRETS: ${{ steps.secrets.outcome }}
+          ENVDIR: ${{ steps.envdir.outcome }}
+          TM: ${{ steps.envdir.outputs.tm }}
+          AGENT: ${{ steps.agent.outcome }}
           DEPLOY: ${{ steps.deploy.outcome }}
           RESULT: ${{ steps.rollback.outputs.result }}
           IMAGE: ${{ steps.release.outputs.image }}
           PREVIOUS: ${{ steps.release.outputs.previous }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
+          if [ "$ENVDIR" = "failure" ]; then
+            DEPLOY="envdir"
+            RESULT="invalid"
+          fi
           if [ "$SECRETS" = "failure" ]; then
             DEPLOY="secrets"
             RESULT="invalid"
           fi
           case "$DEPLOY:$RESULT" in
+            envdir:invalid)            msg="env dir \`~/.config/stoktok\` could not be created as mode 700; nothing was started." ;;
             secrets:invalid)           msg="secrets missing or invalid in environment \`stoktok\`: nothing was started; see the run for the secret name." ;;
             failure:env-missing)       msg="env-missing: \`$IMAGE\` failed its health check and $ENV_FILE is missing or has the wrong owner or mode; nothing was restored." ;;
             success:)                  msg="deployed: \`$IMAGE\` is running and healthy." ;;
@@ -230,6 +341,8 @@ jobs:
             failure:restore-failed)    msg="restore-failed: \`$IMAGE\` failed its health check and so did \`$PREVIOUS\`. Stoktok needs a hand." ;;
             *)                         msg="did-not-complete: the deploy did not run to the end (deploy: ${DEPLOY:-not run}, restore: ${RESULT:-not run})." ;;
           esac
+          if [ "$AGENT" = "failure" ]; then msg="$msg Scheduler NOT installed: see the run."; fi
+          if [ "$TM" = "not-excluded" ]; then msg="$msg Env dir not excluded from Time Machine."; fi
           {
             echo "### deploy-stoktok"
             echo ""

@@ -7,7 +7,7 @@ on `mmlabs-online/deployment` (not a `release/*` branch, so `pr-scope` does not 
 |---|---|
 | `apps/stoktok/compose.yml` | `apps/stoktok/compose.yml` |
 | `apps/stoktok/run-job.sh`, `run-schedule.sh` | `apps/stoktok/` (deploy-stoktok publishes them to `/Users/mingming/stoktok/current`) |
-| `apps/stoktok/launchd/online.mmlabs.stoktok.jobs.plist` | `apps/stoktok/launchd/` (installed by hand, see `docs/deploy.md`) |
+| `apps/stoktok/launchd/online.mmlabs.stoktok.jobs.plist` | `apps/stoktok/launchd/` (published to `$SCHED_DIR` and installed by deploy-stoktok) |
 | `.github/workflows/deploy-stoktok.yml` | `.github/workflows/deploy-stoktok.yml` |
 | `.github/workflows/runner-check.yml` | `.github/workflows/runner-check.yml` (shared by every app; STK-044 only changes the expected runner user to `mingming`) |
 

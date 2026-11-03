@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- STK-037/STK-044: scheduled stoktok worker jobs (Mon-Fri 18:30 and 21:00, Mac time zone UTC+7).
      LaunchAgent of the runner user (mingming): OrbStack and the runner only exist in that login session.
-     Install: see docs/deploy.md, One-time setup. run-schedule.sh refuses to run if the zone is not +0700.
+     Installed by deploy-stoktok (agent step), see docs/deploy.md. run-schedule.sh refuses to run if the zone is not +0700.
      The Docker engine is OrbStack. If the runner service needs a DOCKER_HOST to reach it (for example
      unix:///Users/mingming/.orbstack/run/docker.sock), add the same value to EnvironmentVariables. -->
 <plist version="1.0">

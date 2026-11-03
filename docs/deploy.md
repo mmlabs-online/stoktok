@@ -18,7 +18,7 @@ Every push to branch `release` (its commit must already be on main) runs `releas
 - **D1:** the runner, the Docker engine (OrbStack, set to start at login) and the scheduler all run as `mingming`, in that user's login session. `mingming` must be logged in (auto-login after a reboot). Check: reboot, let it auto-login, run the `runner-check` workflow and see it green. No deploys or jobs run without the session.
 - **D2:** time zone is Asia/Ho_Chi_Minh (`sudo systemsetup -gettimezone`; `run-schedule.sh` refuses to run if `date +%z` is not `+0700`). Sleep is off (`sudo pmset -a sleep 0 disablesleep 1`, or lid open on power), otherwise deploys queue and jobs coalesce on wake.
 - **D3:** the Mac is Intel, so the `linux/amd64` images run natively.
-- **D4:** secrets file `/Users/mingming/.config/stoktok/stoktok.env`, mode 600, owner `mingming`, outside git and the runner checkout. It holds only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. It is written by `deploy-stoktok` on every run from the `stoktok` environment secrets. Do not edit it by hand: the next deploy overwrites it. It sits in a personal home directory: exclude it from Time Machine (`tmutil addexclusion ~/.config/stoktok`) and keep the backup destination encrypted.
+- **D4:** secrets file `/Users/mingming/.config/stoktok/stoktok.env`, mode 600, owner `mingming`, outside git and the runner checkout. It holds only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. It is written by `deploy-stoktok` on every run from the `stoktok` environment secrets. Do not edit it by hand: the next deploy overwrites it. It sits in a personal home directory: `deploy-stoktok` creates the directory with mode 700 and excludes it from Time Machine; keep the backup destination encrypted.
 - **D5:** deployment `main` is protected: PR required, code-owner review, `pr-scope` required, no admin bypass. The `stoktok` secrets reach a job on the self-hosted runner, so this protection is what stands between a push and the key. Side effect: without a `github-actions` bypass, an automatic rollback ends in `restore-unpushed` (the server is restored, the run is red, and Ming reverts the release PR by hand).
 
 ## Repository secrets
@@ -36,11 +36,20 @@ Create it **before** merging the setup PR. Otherwise GitHub creates the environm
 
 If either secret is empty or malformed, `deploy-stoktok` stops at the `secrets` step, names the secret, starts nothing and leaves the old file in place.
 
-## One-time setup
-1. Create the `stoktok` environment and its secrets (section above), then Ming merges the deployment-repo setup PR (drafts in `deploy/deployment-repo/`, plus the CODEOWNERS line). Merging runs `deploy-stoktok` because `compose.yml` changed under `apps/stoktok/`. With no `release.env` it skips the deploy but still writes the env file. Check: the run is green, and `ls -l ~/.config/stoktok/stoktok.env` shows `-rw------- mingming`.
-2. `install -d -m 755 ~/stoktok/logs`.
-3. Install the scheduler as a LaunchAgent of `mingming`. If an earlier LaunchDaemon was installed, remove it first: `sudo launchctl bootout system/online.mmlabs.stoktok.jobs` and `sudo rm /Library/LaunchDaemons/online.mmlabs.stoktok.jobs.plist`. Then `cp apps/stoktok/launchd/online.mmlabs.stoktok.jobs.plist ~/Library/LaunchAgents/` and `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/online.mmlabs.stoktok.jobs.plist`. Verify with `launchctl print gui/$(id -u)/online.mmlabs.stoktok.jobs`.
-4. Optional log rotation: a line for `/Users/mingming/stoktok/logs/*.log` in `/etc/newsyslog.d/stoktok.conf` (owner `mingming:staff`).
+## Setup
+Create the `stoktok` environment and its secrets (section above), then Ming merges the deployment-repo setup PR (drafts in `deploy/deployment-repo/`, plus the CODEOWNERS line). Merging runs `deploy-stoktok` because `compose.yml` changed under `apps/stoktok/`. With no `release.env` it skips the deploy and the publish, but still runs `preflight` and `envdir`; the LaunchAgent is installed by the first release deploy (nothing is published before that, so a scheduler would have nothing to run).
+
+### Done by the workflow (no root, every run, idempotent)
+- **Env dir and Time Machine (D4):** `envdir` creates `~/.config/stoktok` with mode 700, checks owner and mode, runs `tmutil addexclusion` and verifies it with `tmutil isexcluded` (falling back to the `xattr` exclusion). It runs before the env file is written. If the exclusion cannot be verified, the run stays green with a warning and a suffix on the PR comment. Check: the run is green, and `ls -l ~/.config/stoktok/stoktok.env` shows `-rw------- mingming`.
+- **Log dir and LaunchAgent (old steps 2 and 3):** after a successful publish, `agent` creates `~/stoktok/logs`, copies the published plist (`$SCHED_DIR/online.mmlabs.stoktok.jobs.plist`) to `~/Library/LaunchAgents`, and loads it with `launchctl bootstrap gui/$(id -u)` only when it is new or changed. It then verifies with `launchctl print`. A re-run with no change prints `scheduler unchanged`. A plist change while a job runs stops that job (jobs are idempotent). If `agent` fails the run is red and the PR comment says "Scheduler NOT installed"; the web deploy is not rolled back.
+- **Read-only report:** `preflight` writes the login session, OrbStack socket, docker engine and any old LaunchDaemon to the run summary.
+
+### Still needs Ming at the Mac
+- D1: auto-login for `mingming` and OrbStack set to start at login.
+- D2: time zone and sleep settings.
+- Remove an old LaunchDaemon if `preflight` reports one: `sudo launchctl bootout system/online.mmlabs.stoktok.jobs` and `sudo rm /Library/LaunchDaemons/online.mmlabs.stoktok.jobs.plist`.
+- FileVault, and an encrypted Time Machine backup destination.
+- Optional log rotation: a line for `/Users/mingming/stoktok/logs/*.log` in `/etc/newsyslog.d/stoktok.conf` (owner `mingming:staff`).
 
 ## Rotate the Supabase key
 1. Create the new key in Supabase. For an `sb_secret_...` key, create it next to the old one. For the legacy JWT `service_role` key, rotating means rotating the JWT secret: the old key dies at once and the anon key and sessions are invalidated too (stoktok uses neither yet). Then do steps 2 and 3 right away. Verify which applies in the Supabase dashboard.
