@@ -7,7 +7,7 @@
 | Areas | architecture, security |
 | Attempts | 1 |
 | Created | 2026-11-03 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/29 (deployment: https://github.com/mmlabs-online/deployment/pull/17) |
 
 ## Goal
 `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are stored as GitHub Actions secrets of `mmlabs-online/deployment`, and `deploy-stoktok` writes the runner-side env file on each deploy, so Ming no longer creates or edits it by hand on the Mac and rotation is "update the secret, redeploy".
