@@ -24,3 +24,4 @@ docs/spec-v1.md §2.2, §3 F4, §4.3. CLAUDE.md R1, R2, R4, R5. ADR 0002, ADR 00
 
 ## Notes / answers from Ming
 - Follow-up from STK-039 decision 5 (Ming, 2026-11-01).
+- **Q1 answer (Ming, 2026-11-04):** Option A — Ming runs the recording script from plan.md Q1 on his machine and commits the samples to `work/tickets/STK-042/live-samples/`.
