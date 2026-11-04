@@ -41,3 +41,45 @@ No violations found. R1: auth is delivery code in `apps/web/server/auth`; the cl
 ### Follow-ups (out of scope)
 - Plan follow-ups stand: spec §1.2/§4.2/§9 wording, ADR 0004, login rate limiting before Access is removed, CaleChip `enable_signup`, CaleChip asymmetric keys (D1), `serverActions.allowedOrigins` if forms fail behind the tunnel, worker `AUTHEN_` grep test.
 - Worker receives `AUTHEN_*` and `ALLOWLIST_USER_IDS` through the shared `env_file`. Harmless; scope to web if the compose file ever splits env files.
+
+## Attempt 2 — 2026-11-04
+Verdict: PASS
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck`, exit 0 in all packages.
+- lint: `pnpm lint`, exit 0 in all packages. The char-code loop instead of a `\x00-\x1f` regex is there because of `no-control-regex`, as impl-log says.
+- test: `pnpm test`, exit 0. core 539 (43 files), db 121 + 1 todo (14), worker 236 (15), web 265 (35). This matches impl-log. Web went from 264 to 265 because of the one new `login-path.test.ts` case.
+- Attempt-2 diff (`HEAD~1..HEAD`): `login-path.ts`, `login-path.test.ts`, `actions.test.ts`, `test/entrypoints.test.ts`, plus work files. Nothing outside the rework scope.
+- Probe: I ran `safeNext` against these extra payloads in a throwaway vitest file, which I deleted afterwards:
+  - `'/\t/evil.com'`, `'/ /evil.com'`, `'/ /evil.com'`, `'/\\evil'` and `'/login'` all return `/`.
+  - `'/%09/evil.com'`, `'/%2F/evil.com'`, `'/.//evil.com'`, `'/／/evil.com'` and `'/x/../..//evil.com'` come back unchanged, but each one resolves to host `h.test` against `https://h.test` (same origin).
+  - `'/transactions?page=2'` and `'/a#b'` are kept.
+
+### Acceptance criteria
+- [x] AC1–AC6, R6 restore, signOut scope: same as attempt 1. Attempt 2 did not touch those files, and the suites are green again.
+- [x] Open-redirect guard on `next` (attempt-1 Issue 1 and security-review F1). Evidence:
+  - `apps/web/server/auth/login-path.ts:4` rejects `//`, backslash, `\s`, and every char below 0x20 or equal to 0x7f.
+  - `login-path.ts:5-9` adds a `new URL(raw, 'http://sentinel.invalid')` origin check that fails closed.
+  - `login-path.test.ts` › "rejects control chars, whitespace and backslash anywhere" covers tab, `\x0b`, space, `\n`, `\r`, `\x00` and an embedded backslash, using `toBe('/')`. It passes.
+  - Both sinks use this guard: `app/login/page.tsx` through `safeNext`, and `actions.ts` through `safeNext`.
+- [x] F4 nit: the `test/entrypoints.test.ts:30` split now also matches `export const x = async`.
+
+### Issues
+None blocking.
+
+#### Issue 1 — 🟡 should-fix — test strength (does not block; can go in a follow-up)
+- **Where**: `apps/web/app/login/actions.test.ts:39-40`.
+- **Expected**: the assertion fails if `safeNext` lets `/\t/evil.com` through.
+- **Actual**: `toThrow('REDIRECT:/')` matches a substring, so `'REDIRECT:/\t/evil.com'` also satisfies it. I checked this in the probe. The existing `'//evil.com'` case has the same weakness. The real regression guard is `login-path.test.ts`, which compares exactly, so the fix is still covered.
+- **Fix instruction**: use an exact matcher, `rejects.toThrow(/^REDIRECT:\/$/)`, for both evil cases. Do the same for `'REDIRECT:/transactions'`, using `/^REDIRECT:\/transactions$/`.
+
+### Rules R1–R10
+No violations found. R7: the attempt-2 changes are exactly the attempt-1 fix instructions plus the F4 nit.
+
+### Nits (do not block)
+- 💭 Rejecting all `\s` also rejects a raw space in `next`. That is fine: `x-stoktok-path` and browser-submitted values are percent-encoded.
+- 💭 `claims.ts` and `login-path.ts` still have no `'server-only'` import (attempt-1 nit).
+- 💭 `entrypoints.test.ts` still misses inline `'use server'` functions and `'use server'` files outside `app/` (security-review F4).
+
+### Follow-ups (out of scope)
+- Attempt-1 follow-ups still stand. Also the security-review items: F2/F3 (session refresh on `/login`, keeping clearing cookies on the proxy redirect), F6 rate limiting as a go-live blocker before Cloudflare Access is removed, and the real end-to-end CaleChip sign-in, including the 403 path, before go-live.
