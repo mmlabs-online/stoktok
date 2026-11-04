@@ -58,3 +58,43 @@
 
 ### Open questions
 - None blocking.
+
+---
+
+# STK-047 security review, attempt 2
+
+**Verdict: 🟡1 from attempt 1 is resolved. I found no new 🔴 or 🟡 issues.** The workspace isn't a git repo, so I read the current files rather than a diff. I did not open any .env files. I did not run the tests, so a PASS still depends on green `typecheck`, `lint` and `test` (R8).
+
+### Findings
+**✅ 🟡1 (hidden input carried seeded dates) is fixed**
+- `/home/user/stoktok/apps/web/components/settings/holiday-calendar-card.tsx:39`: state now starts from `userHolidayDates(splitHolidayList(initialHolidays))`.
+- The hidden input at `:148` renders `current`, so seeded dates are removed before render. That covers the case where a crafted or failed POST is echoed back.
+- `/home/user/stoktok/apps/web/components/settings/holiday-calendar-card.test.tsx:41-46` now checks two things:
+  - The input is exactly `value="2026-10-20"`.
+  - The seeded date 2026-11-24 does not appear in it.
+- The test name matches its assertion now, so the test evidence for AC3 is valid.
+- The server still removes seeded dates as well (`holiday-editor.ts:82`, `mappers.ts:229`), so there are two layers of protection.
+
+**🟢 No regression in how invalid values are handled**
+- `userHolidayDates` (`/home/user/stoktok/packages/core/src/market/holiday-editor.ts:53-55`) only removes seeded dates. Invalid strings are kept on purpose, so the editor can still list them with "Không hợp lệ" and a remove button. The test at `holiday-calendar-card.test.tsx:61-65` covers this.
+- Invalid strings are still React text nodes and attribute values (`:65,67`), which React escapes. There is no XSS path.
+- The server still rejects invalid values before anything is saved.
+
+**🟢 Doc comment updated (old 🟢7)**
+- `/home/user/stoktok/packages/db/src/repos/settings.ts:130-133` now says holidays come from the input, and withholding, cost method and the other rule_configs keys are kept. It matches the code.
+
+**🟢 R3 unchanged**
+- The card is still a client component. It imports only pure functions from `@stoktok/core`. It has no new data access and no reference to env or the service role key.
+
+### Recommendations
+- No blocking items from security.
+- The optional hardenings from attempt-1 🟢3 are still open and can go on the follow-ups list (R7):
+  - Cap the raw string length and exit early on the count cap in `parseHolidayList`.
+  - Truncate the echoed `HOLIDAY_DATE_INVALID` value.
+
+### Risks (carried over, accepted by the plan)
+- A browser tab opened before this deploy posts without a `holidays` field, and saving from it stores `[]`. Note this in the PR.
+- Read-modify-write without a lock. This is negligible for a single user.
+
+### Open questions
+- None.
