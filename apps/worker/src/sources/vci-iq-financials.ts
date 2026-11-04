@@ -29,19 +29,41 @@ export const VCI_IQ_FINANCIALS_SOURCE_NAME = 'vci-iq';
 /** ADR 0005 decision 2: stays 'unverified' (P/E suppressed) until the live dry-run shows derived EPS within 3% of VietCap's own. */
 export const VCI_IQ_FINANCIALS_EPS_BASIS: EpsBasis = 'unverified';
 
-/** Field codes (from /financial-statement/metrics). A renamed code makes periods rejected, never wrong. */
-export const VCI_IQ_FIELDS = {
-  netSales: 'isa3',
-  parentNetIncome: 'isa22',
-  ownersEquity: 'bsa78',
-  minorityInterests: 'bsa210',
+/** Per-type statement line codes. A renamed code makes periods rejected, never wrong. `minorityInterests: null` means the layout has no such line (treated as 0). */
+export interface VciIqTypeFields {
+  revenue: string;
+  parentNetIncome: string;
+  ownersEquity: string;
+  minorityInterests: string | null;
+}
+
+/**
+ * Field codes per `comTypeCode` (from /financial-statement/metrics, recorded 2026-11-04, work/tickets/STK-042/live-samples).
+ * The only place these codes live; ADR 0005 carries the same table.
+ */
+export const VCI_IQ_FIELDS_BY_COMPANY_TYPE: Readonly<Record<string, VciIqTypeFields>> = {
+  // Industrial/commercial (STK-039). isa3 "Doanh thu thuần", isa22 parent net income, bsa78 equity incl. minority, bsa210 minority.
+  CT: { revenue: 'isa3', parentNetIncome: 'isa22', ownersEquity: 'bsa78', minorityInterests: 'bsa210' },
+  // Banks. isb38 "Tổng thu nhập hoạt động", isa22 "Cổ đông của Công ty mẹ", bsa78 "VỐN CHỦ SỞ HỮU" (includes minority), bsa210 "Lợi ích của cổ đông thiểu số".
+  NH: { revenue: 'isb38', parentNetIncome: 'isa22', ownersEquity: 'bsa78', minorityInterests: 'bsa210' },
+  // Securities firms. isa1 "DOANH THU HOẠT ĐỘNG", isa22 "Lợi nhuận sau thuế phân bổ cho chủ sở hữu", bsa78 "Vốn chủ sở hữu", bsa210 "Lợi ích cổ đông không kiểm soát" (0 in samples).
+  CK: { revenue: 'isa1', parentNetIncome: 'isa22', ownersEquity: 'bsa78', minorityInterests: 'bsa210' },
+  // Insurers. isi64 "Doanh thu thuần từ hoạt động kinh doanh bảo hiểm", isa22 "Lợi nhuận sau thuế của chủ sở hữu, tập đoàn", bsa78 "Vốn chủ sở hữu", bsa210 "Lợi ích cổ đông thiểu số" (0 in samples).
+  BH: { revenue: 'isi64', parentNetIncome: 'isa22', ownersEquity: 'bsa78', minorityInterests: 'bsa210' },
+};
+
+/** Codes shared by every company type. */
+export const VCI_IQ_COMMON_FIELDS = {
   shares: 'numberOfSharesMktCap',
   companyType: 'comTypeCode',
   sector: 'sectorVn',
 } as const;
 
-/** Only industrial/commercial companies are supported; banks, brokers and insurers use other line items. */
-const SUPPORTED_COMPANY_TYPE = 'CT';
+/** The field set for a company type, or null when the type is unknown, not mapped, or not in `supported` (R5). */
+export function resolveVciIqFields(comTypeCode: unknown, supported: readonly string[]): VciIqTypeFields | null {
+  if (typeof comTypeCode !== 'string' || !supported.includes(comTypeCode)) return null;
+  return Object.hasOwn(VCI_IQ_FIELDS_BY_COMPANY_TYPE, comTypeCode) ? (VCI_IQ_FIELDS_BY_COMPANY_TYPE[comTypeCode] ?? null) : null;
+}
 
 export interface VciIqFinancialsOptions {
   fetchImpl: typeof fetch;
@@ -49,6 +71,8 @@ export interface VciIqFinancialsOptions {
   baseUrl?: string;
   userAgent?: string;
   sanity?: FinancialsSanity;
+  /** Overrides `VCI_IQ_CONFIG.supportedCompanyTypes`. */
+  supportedCompanyTypes?: readonly string[];
   maxPeriodsPerResponse?: number;
   /** Latest quarters emitted (older history is dropped silently). */
   maxQuarters?: number;
@@ -139,21 +163,22 @@ export class VciIqFinancialsSource implements FinancialsSource {
 
     await this.pause();
     const details = await this.loadDetails(sym);
-    if (details?.[VCI_IQ_FIELDS.companyType] !== SUPPORTED_COMPANY_TYPE) {
+    const f = resolveVciIqFields(details?.[VCI_IQ_COMMON_FIELDS.companyType], this.o.supportedCompanyTypes ?? VCI_IQ_CONFIG.supportedCompanyTypes);
+    if (f === null) {
       for (const period of keys) rejected.push({ period, reason: 'unsupported_company_type' });
       return { periods, rejected };
     }
 
     const netIncomeByPeriod = new Map<string, number>();
     for (const [period, row] of income.rows) {
-      const n = toVndAmount(row[VCI_IQ_FIELDS.parentNetIncome], VCI_IQ_FINANCIALS_UNITS.totals);
+      const n = toVndAmount(row[f.parentNetIncome], VCI_IQ_FINANCIALS_UNITS.totals);
       if (n !== null) netIncomeByPeriod.set(period, n);
     }
     const amount = (row: Row | undefined, field: string): number | undefined => {
       const n = toVndAmount(row?.[field], VCI_IQ_FINANCIALS_UNITS.totals);
       return n === null ? undefined : n;
     };
-    const sanity = this.o.sanity ?? DEFAULT_FINANCIALS_SANITY;
+    const sanity = { ...(this.o.sanity ?? DEFAULT_FINANCIALS_SANITY), rejectZeroRevenue: true };
     for (const period of keys) {
       const year = Number(period.slice(0, 4));
       const quarter = Number(period.slice(5));
@@ -162,9 +187,9 @@ export class VciIqFinancialsSource implements FinancialsSource {
       const d = deriveVciIqQuarter({
         period,
         netIncomeByPeriod,
-        equity: amount(b, VCI_IQ_FIELDS.ownersEquity),
-        minority: amount(b, VCI_IQ_FIELDS.minorityInterests),
-        shares: stats.rows.get(period)?.[VCI_IQ_FIELDS.shares],
+        equity: amount(b, f.ownersEquity),
+        minority: f.minorityInterests === null ? 0 : amount(b, f.minorityInterests),
+        shares: stats.rows.get(period)?.[VCI_IQ_COMMON_FIELDS.shares],
       });
       if (d.reason !== undefined) {
         rejected.push({ period, reason: d.reason });
@@ -172,7 +197,7 @@ export class VciIqFinancialsSource implements FinancialsSource {
       }
       const res = normalizeQuarterlyFinancials(
         sym,
-        { year, quarter, eps: d.eps, bvps: d.bvps, revenue: i?.[VCI_IQ_FIELDS.netSales], netIncome: i?.[VCI_IQ_FIELDS.parentNetIncome] },
+        { year, quarter, eps: d.eps, bvps: d.bvps, revenue: i?.[f.revenue], netIncome: i?.[f.parentNetIncome] },
         VCI_IQ_FINANCIALS_UNITS,
         sanity,
       );
@@ -236,6 +261,6 @@ export class VciIqFinancialsSource implements FinancialsSource {
     const sym = normalizeSymbol(symbol);
     if (!sym) throw new SourceError('invalid symbol', false);
     const details = await this.loadDetails(sym);
-    return normalizeSectorLabel(details?.[VCI_IQ_FIELDS.sector]);
+    return normalizeSectorLabel(details?.[VCI_IQ_COMMON_FIELDS.sector]);
   }
 }

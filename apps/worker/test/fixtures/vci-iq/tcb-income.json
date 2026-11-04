@@ -1,0 +1,240 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": {
+  "years": [
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2022,
+    "lengthReport": 5,
+    "isb38": 40527191000000.0,
+    "isa20": 20436426000000.0,
+    "isa21": -286049000000.0,
+    "isa22": 20150377000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2023,
+    "lengthReport": 5,
+    "isb38": 40061092000000.0,
+    "isa20": 18190866000000.0,
+    "isa21": -187064000000.0,
+    "isa22": 18003802000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2024,
+    "lengthReport": 5,
+    "isb38": 46990397000000.0,
+    "isa20": 21760104000000.0,
+    "isa21": -237176000000.0,
+    "isa22": 21522928000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2025,
+    "lengthReport": 5,
+    "isb38": 53391125000000.0,
+    "isa20": 25954472000000.0,
+    "isa21": -664242000000.0,
+    "isa22": 25290230000000.0
+   }
+  ],
+  "quarters": [
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2022,
+    "lengthReport": 1,
+    "isb38": 10006380000000.0,
+    "isa20": 5614544000000.0,
+    "isa21": -109930000000.0,
+    "isa22": 5504614000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2022,
+    "lengthReport": 2,
+    "isb38": 10934380000000.0,
+    "isa20": 5882255000000.0,
+    "isa21": -78730000000.0,
+    "isa22": 5803525000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2022,
+    "lengthReport": 3,
+    "isb38": 10338368000000.0,
+    "isa20": 5367540000000.0,
+    "isa21": -69574000000.0,
+    "isa22": 5297966000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2022,
+    "lengthReport": 4,
+    "isb38": 9427322000000.0,
+    "isa20": 3572087000000.0,
+    "isa21": -27815000000.0,
+    "isa22": 3544272000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2023,
+    "lengthReport": 1,
+    "isb38": 9299974000000.0,
+    "isa20": 4537097000000.0,
+    "isa21": -40202000000.0,
+    "isa22": 4496895000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2023,
+    "lengthReport": 2,
+    "isb38": 9325171000000.0,
+    "isa20": 4503449000000.0,
+    "isa21": -48394000000.0,
+    "isa22": 4455055000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2023,
+    "lengthReport": 3,
+    "isb38": 10418493000000.0,
+    "isa20": 4668705000000.0,
+    "isa21": -55762000000.0,
+    "isa22": 4612943000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2023,
+    "lengthReport": 4,
+    "isb38": 11017454000000.0,
+    "isa20": 4481615000000.0,
+    "isa21": -42706000000.0,
+    "isa22": 4438909000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2024,
+    "lengthReport": 1,
+    "isb38": 12261767000000.0,
+    "isa20": 6277003000000.0,
+    "isa21": -56006000000.0,
+    "isa22": 6220997000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2024,
+    "lengthReport": 2,
+    "isb38": 13419696000000.0,
+    "isa20": 6269968000000.0,
+    "isa21": -76607000000.0,
+    "isa22": 6193361000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2024,
+    "lengthReport": 3,
+    "isb38": 11754335000000.0,
+    "isa20": 5793022000000.0,
+    "isa21": -55517000000.0,
+    "isa22": 5737505000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2024,
+    "lengthReport": 4,
+    "isb38": 9554599000000.0,
+    "isa20": 3420111000000.0,
+    "isa21": -49046000000.0,
+    "isa22": 3371065000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2025,
+    "lengthReport": 1,
+    "isb38": 11611198000000.0,
+    "isa20": 6013511000000.0,
+    "isa21": -65551000000.0,
+    "isa22": 5947960000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2025,
+    "lengthReport": 2,
+    "isb38": 12743031000000.0,
+    "isa20": 6347610000000.0,
+    "isa21": -100246000000.0,
+    "isa22": 6247364000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2025,
+    "lengthReport": 3,
+    "isb38": 14242123000000.0,
+    "isa20": 6613525000000.0,
+    "isa21": -194181000000.0,
+    "isa22": 6419344000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2025,
+    "lengthReport": 4,
+    "isb38": 14794773000000.0,
+    "isa20": 6979826000000.0,
+    "isa21": -304264000000.0,
+    "isa22": 6675562000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2026,
+    "lengthReport": 1,
+    "isb38": 13674274000000.0,
+    "isa20": 6950280000000.0,
+    "isa21": -279199000000.0,
+    "isa22": 6671081000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2026,
+    "lengthReport": 2,
+    "isb38": 14941781000000.0,
+    "isa20": 7726642000000.0,
+    "isa21": -376583000000.0,
+    "isa22": 7350059000000.0
+   },
+   {
+    "organCode": "TCB",
+    "ticker": "TCB",
+    "yearReport": 2026,
+    "lengthReport": 3,
+    "isb38": 16587715000000.0,
+    "isa20": 8337286000000.0,
+    "isa21": -394354000000.0,
+    "isa22": 7942932000000.0
+   }
+  ]
+ }
+}

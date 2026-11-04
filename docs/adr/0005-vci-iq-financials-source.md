@@ -21,7 +21,7 @@ On 2026-11-01 the TCBS public API used by ADR 0002 is behind a Cloudflare bot ch
 3. The `vci-iq` EPS basis stays `'unverified'` (P/E suppressed) until the live dry-run shows derived EPS within 3% of VietCap's own figures on at least 3 symbols; then a one-line change flips `VCI_IQ_FINANCIALS_EPS_BASIS` to `'ttm'`.
 4. Terms risk accepted by Ming on 2026-11-01, same posture as ADR 0004: unofficial internal API, personal low volume, honest headers only.
 5. Existing TCBS financials rows are kept; nothing is deleted. Overlapping periods are overwritten by the existing policy and appear in `restated`.
-6. Banks, brokers and insurers (`comTypeCode` other than `CT`) are rejected as `unsupported_company_type` and recorded as gaps. A follow-up ticket maps their layouts.
+6. Banks, brokers and insurers (`comTypeCode` other than `CT`) were rejected as `unsupported_company_type` and recorded as gaps. STK-042 (2026-11-04) maps `NH`, `CK` and `BH` (see **Company types**); any other type is still rejected.
 7. Sector label: `sectorVn` (Vietnamese ICB level 2).
 8. Run health: the run fails only for in-window rejects whose reason is not in `FINANCIALS_SYNC_CONFIG.nonFailingRejectReasons` (default `['unsupported_company_type']`). Out-of-window rejects (before `windowStart`, or after `windowEnd` when the ratio endpoint lags the statements) are listed in `rejectedOutOfWindowBySymbol` and do not fail the run. Unsupported symbols are listed in `unsupportedSymbols`; their in-window quarters stay recorded as open gaps (R4), so no signal is produced from them.
 
@@ -30,7 +30,47 @@ Base `https://iq.vietcap.com.vn/api/iq-insight-service/v1/company`. Requests car
 - `GET {base}/{SYMBOL}/statistics-financial`: `data[]` rows with `yearReport` (number), `quarter` (1-4, 5 = year), `numberOfSharesMktCap` (share count per period). `year` is a string and `ticker` is null; both are ignored. No EPS or BVPS fields.
 - `GET {base}/{SYMBOL}/financial-statement?section=INCOME_STATEMENT` and `...BALANCE_SHEET`: `data.quarters[]` (used) and `data.years[]` (ignored); period = `yearReport` + `lengthReport` (1-4; 5 = year). Rows carry `ticker`.
 - `GET {base}/details?ticker={SYMBOL}`: `comTypeCode`, `sectorVn`.
-- Field codes (from `/financial-statement/metrics`), in one constant `VCI_IQ_FIELDS`: `isa3` net sales, `isa22` net profit attributable to the parent, `bsa78` owner's equity (total, including minority interests), `bsa210` minority interests. `isa23` (EPS) is 0 in Q1 and Q3 and is not used.
+- Field codes (from `/financial-statement/metrics`), per company type in one constant `VCI_IQ_FIELDS_BY_COMPANY_TYPE` (see **Company types**). For `CT`: `isa3` net sales, `isa22` net profit attributable to the parent, `bsa78` owner's equity (total, including minority interests), `bsa210` minority interests. `isa23` (EPS) is 0 in Q1 and Q3 and is not used.
+
+## Company types (STK-042, recorded 2026-11-04)
+Samples: VCB and TCB (`NH`), VND (`CK`), BMI (`BH`) in `work/tickets/STK-042/live-samples/`. Each `titleVi` below appears in that symbol's `*_metrics.json`. The constant is `VCI_IQ_FIELDS_BY_COMPANY_TYPE` in `vci-iq-financials.ts`; the enabled list is `VCI_IQ_CONFIG.supportedCompanyTypes` (R5).
+
+| comTypeCode | Role | Code | `titleVi` | `titleEn` |
+|---|---|---|---|---|
+| CT | revenue / parent NI / equity / minority | `isa3` `isa22` `bsa78` `bsa210` | unchanged (STK-039) | |
+| NH | revenue | `isb38` | Tổng thu nhập hoạt động | Total Operating Income |
+| NH | parent net income | `isa22` | Cổ đông của Công ty mẹ | Attributable to parent company |
+| NH | owners' equity (incl. minority) | `bsa78` | VỐN CHỦ SỞ HỮU | OWNER'S EQUITY |
+| NH | minority interests | `bsa210` | Lợi ích của cổ đông thiểu số | Minority interest |
+| CK | revenue | `isa1` | DOANH THU HOẠT ĐỘNG | OPERATING SALES |
+| CK | parent net income | `isa22` | Lợi nhuận sau thuế phân bổ cho chủ sở hữu | Attributable to parent company |
+| CK | owners' equity | `bsa78` | Vốn chủ sở hữu | Owner's Equity |
+| CK | minority interests | `bsa210` | Lợi ích cổ đông không kiểm soát | Minority interests |
+| BH | revenue | `isi64` | Doanh thu thuần từ hoạt động kinh doanh bảo hiểm | Net sales from insurance business |
+| BH | parent net income | `isa22` | Lợi nhuận sau thuế của chủ sở hữu, tập đoàn | Net profit attributable to shareholders of the group |
+| BH | owners' equity | `bsa78` | Vốn chủ sở hữu | Owners' equity |
+| BH | minority interests | `bsa210` | Lợi ích cổ đông thiểu số | Minority Interests |
+
+- **Bank equity.** The `NH` dictionary lists `bsa210` as a level-1 sibling of `bsa78`, but the values show `bsa78` includes minority interests: `bsb118+bsb121+bsa84+bsa85+bsa90 = bsa78 - bsa210` in every fixture quarter (VCB 2026Q3: 253,668,704,000,000). So BVPS = (`bsa78` - `bsa210`) / shares needs no extra adjustment. A test locks this in.
+- **`isa21` sign.** `NH`: stored negative, `isa22 = isa20 + isa21`. `CT`: stored positive, `isa22 = isa20 - isa21`. `CK` and `BH`: `isa21 = 0` and `isa22 = isa20` in every quarter checked, so the identity is trivial there (no minority) and cannot tell parent NI from total NI. The sign rule lives only in tests; production never reads `isa20` or `isa21`.
+- **Minority 0.** `CK` and `BH` report `bsa210 = 0.0`. The line exists in the dictionary, so 0 is a real value and the code is kept. The mapping type allows `minorityInterests: null` (treated as 0); no shipped type uses it. A null *value* for a mapped code is still `missing_bvps`.
+- **Revenue.** `NH` uses Total Operating Income, `CK` gross operating revenue (equal to `isa3` in every sample), `BH` net insurance revenue. Revenue 0 is rejected as `zero_revenue` for every `vci-iq` type (`rejectZeroRevenue`), so a "not applicable" column is never stored as 0.
+- **1% growth gate.** The base is TOI for `NH`, gross operating revenue for `CK` and net insurance revenue for `BH`. The gate only screens out near-zero bases, so the per-type base is accepted.
+- **Dictionary quirks (none affects the chosen codes).** The `CK` dictionary gives `isa21` a wrong `titleEn` ("Business income tax - deferred"; its `titleVi` is correct) and lists `isa16` twice. Key order of `fullTitleEn` / `fullTitleVi` differs per symbol.
+- **Sanity bounds.** Every sampled value fits `DEFAULT_FINANCIALS_SANITY` (largest |revenue| about 2.6e13, BVPS 14k-30k, EPS 1.3k-5k), so the bounds are unchanged.
+- **Gating.** A type is used only if it has a mapping and is in `VCI_IQ_CONFIG.supportedCompanyTypes` (`CT`, `NH`, `CK`, `BH`); otherwise every emitted period is rejected as `unsupported_company_type`. `NH` also covers consumer-finance and asset-manager companies, which are unverified.
+
+### Cross-check (AC3), offline on the recorded fixtures
+Statement period P is paired with the `statistics-financial` row for P. Vendor amounts are `marketCap / pe` and `marketCap / pb`. `pe` and `pb` carry 10 decimals, so precision uses about 0% of the 3% budget. Tolerance 3%, not tuned. Test: `vci-iq-financials.crosscheck.test.ts`.
+
+| Symbol (type) | P | TTM parent NI (derived) | marketCap / pe | Δ | Parent equity (derived) | marketCap / pb | Δ | EPS / BVPS (derived, VND) | Vendor EPS / BVPS |
+|---|---|---|---|---|---|---|---|---|---|
+| VCB (NH) | 2026Q3 | 41,661,194,000,000 | 41,661,193,969,891 | +0.000007% | 253,668,704,000,000 | 253,668,704,002,129 | -0.0000001% | 4,986 / 30,359 | 4,985.98 / 30,358.85 |
+| TCB (NH) | 2026Q2 | 27,116,046,000,000 | 27,136,067,578,864 | -0.0738% | 179,162,267,000,000 | 179,162,266,999,889 | 0.0000% | 3,827 / 25,283 | 3,829.40 / 25,283.12 |
+| VND (CK) | 2026Q3 | 2,099,341,876,358 | 2,099,341,876,362 | -0.00000002% | 21,761,582,798,518 | 21,761,582,798,393 | +0.0000001% | 1,379 / 14,295 | 1,379.06 / 14,295.20 |
+| BMI (BH) | 2026Q3 | 260,493,093,057 | 260,493,093,056 | +0.00000002% | 3,076,644,073,949 | 3,076,644,074,131 | -0.0000006% | 1,730 / 20,436 | 1,730.30 / 20,436.35 |
+
+All four pass; the worst case is TCB at -0.07%. TCB uses 2026Q2 because 2026Q3 contains a bonus issue (7,086,240,414 to 10,629,360,621 shares); the share count is asserted stable over P-3..P. TCB 2026Q3 amounts also agree (+0.002%; EPS 2,694 / BVPS 17,601 on the new share count). The EPS basis stays `'unverified'`: this is evidence for the flip, not the flip.
 
 ## Units and rounding (R2)
 | Field | Source | Unit | Stored |
@@ -59,7 +99,7 @@ Four sequential GETs per symbol (statistics, income statement, balance sheet, de
 ## UNVERIFIED
 - Whether `numberOfSharesMktCap` excludes treasury shares (covered by the BVPS check below).
 - Throttling and stability of an unofficial API.
-- Bank, broker and insurer layouts (not probed).
+- Bank, broker and insurer layouts: verified on 2026-11-04 for VCB, TCB, VND and BMI only. `NH` also covers consumer-finance and asset-manager companies (unverified). The `CK`/`BH` parent-NI identity is trivial because minority is 0.
 
 ## First dry-run checklist (go/no-go)
 Run `pnpm worker:financials --dry-run` on the home server and check:
@@ -72,4 +112,6 @@ Run `pnpm worker:financials --dry-run` on the home server and check:
 7. One non-`CT` symbol shows `unsupported_company_type`.
 
 ## Follow-ups
-EPS lower-bound sanity check; a `financials_source_mixed` check for P/B and growth; peers restricted to the same `sector_source`; bank/broker/insurer mapping; KBS/VNDirect fallback; the `'unverified'` to `'ttm'` flip after the dry-run.
+EPS lower-bound sanity check; a `financials_source_mixed` check for P/B and growth; peers restricted to the same `sector_source`; KBS/VNDirect fallback; the `'unverified'` to `'ttm'` flip after the dry-run.
+
+STK-042 follow-ups: peer key `sectorVn` + `comTypeCode`; ROE-adjusted bank P/B or a "structural premium/discount" caveat; tracked-universe size (4 banks, 3 brokers: `peers_insufficient` for P/E and P/B); the `financials_source_mixed` check; a distinct `missing_company_type` reason; the `'ttm'` EPS-basis flip (separate gate); per-type `minBasePpmOfRevenue` if the gate is ever raised; verify `NH` on a consumer-finance or asset-manager symbol.

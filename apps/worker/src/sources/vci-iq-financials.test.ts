@@ -2,11 +2,26 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, test } from 'vitest';
 import { VCI_IQ_CONFIG } from '../config';
 import { SourceError } from './price-source';
-import { VCI_IQ_FINANCIALS_SOURCE_NAME, VciIqFinancialsSource } from './vci-iq-financials';
+import { toVndAmount } from '@stoktok/core';
+import {
+  resolveVciIqFields,
+  VCI_IQ_FIELDS_BY_COMPANY_TYPE,
+  VCI_IQ_FINANCIALS_SOURCE_NAME,
+  VCI_IQ_FINANCIALS_UNITS,
+  VciIqFinancialsSource,
+} from './vci-iq-financials';
 
 const fixture = (name: string) => JSON.parse(readFileSync(new URL(`../../test/fixtures/vci-iq/${name}`, import.meta.url), 'utf8'));
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const clone = (name: string): any => fixture(name);
+
+/** An in-memory copy of a recorded details response with another comTypeCode (undefined removes it). */
+function withType(name: string, comTypeCode: string | undefined) {
+  const d = clone(name);
+  if (comTypeCode === undefined) delete d.data.comTypeCode;
+  else d.data.comTypeCode = comTypeCode;
+  return d;
+}
 
 type Reply = unknown | { status: number };
 interface Replies {
@@ -15,7 +30,7 @@ interface Replies {
   balance?: Reply;
   details?: Reply;
 }
-function build(r: Replies = {}, opts: { maxPeriodsPerResponse?: number; maxQuarters?: number } = {}) {
+function build(r: Replies = {}, opts: { maxPeriodsPerResponse?: number; maxQuarters?: number; supportedCompanyTypes?: readonly string[] } = {}) {
   const replies: Replies = {
     statistics: fixture('statistics-ok.json'),
     income: fixture('income-ok.json'),
@@ -88,7 +103,7 @@ describe('VciIqFinancialsSource.fetchQuarterly', () => {
     expect(out.rejected).toContainEqual({ period: '2025Q2', reason: 'missing_shares' });
   });
   test('unsupported_company_type reports only the emitted range', async () => {
-    const out = await build({ details: fixture('details-bank.json') }, { maxQuarters: 12 }).src.fetchQuarterly('HPG');
+    const out = await build({ details: withType('details-ok.json', 'XX') }, { maxQuarters: 12 }).src.fetchQuarterly('HPG');
     expect(out.periods).toEqual([]);
     expect(out.rejected).toHaveLength(12);
     expect(out.rejected.every((r) => r.reason === 'unsupported_company_type')).toBe(true);
@@ -155,7 +170,7 @@ describe('VciIqFinancialsSource.fetchQuarterly', () => {
     expect(out.rejected).toContainEqual({ period: '2025Q2', reason: 'missing_bvps' });
   });
   test('comTypeCode other than CT -> every period rejected unsupported_company_type', async () => {
-    const out = await build({ details: fixture('details-bank.json') }).src.fetchQuarterly('HPG');
+    const out = await build({ details: withType('details-ok.json', 'XX') }).src.fetchQuarterly('HPG');
     expect(out.periods).toEqual([]);
     expect(out.rejected.length).toBeGreaterThan(12);
     expect(out.rejected.every((r) => r.reason === 'unsupported_company_type' && r.period !== undefined)).toBe(true);
@@ -208,5 +223,150 @@ describe('VciIqFinancialsSource.fetchSector', () => {
     expect(calls.filter((c) => c.url.includes('/details?')).length).toBe(1);
     await expect(build({ details: { data: { comTypeCode: 'CT' } } }).src.fetchSector('HPG')).resolves.toBeNull();
     await expect(build({ details: { status: 404 } }).src.fetchSector('HPG')).resolves.toBeNull();
+  });
+});
+
+// STK-042: bank, securities and insurer mappings, on trimmed copies of the 2026-11-04 recordings.
+type Q = Record<string, unknown> & { yearReport: number; lengthReport: number };
+const WINDOW = Array.from({ length: 16 }, (_, k) => `${2022 + Math.floor((k + 3) / 4)}Q${((k + 3) % 4) + 1}`);
+const inWindow = (r: Q) => WINDOW.includes(`${r.yearReport}Q${r.lengthReport}`);
+const rows = (sym: string, kind: 'income' | 'balance') => (clone(`${sym}-${kind}.json`).data.quarters as Q[]);
+const num = (v: unknown) => toVndAmount(v, VCI_IQ_FINANCIALS_UNITS.totals);
+function symbolReplies(sym: string): Replies {
+  return {
+    statistics: fixture(`${sym}-statistics.json`),
+    income: fixture(`${sym}-income.json`),
+    balance: fixture(`${sym}-balance.json`),
+    details: fixture(`${sym}-details.json`),
+  };
+}
+
+const TYPES = [
+  { type: 'NH', sym: 'vcb', ticker: 'VCB', revenue: 25_431_117_000_000, netIncome: 9_033_302_000_000, eps: 4986, bvps: 30_359 },
+  { type: 'NH', sym: 'tcb', ticker: 'TCB', revenue: 16_587_715_000_000, netIncome: 7_942_932_000_000, eps: 2694, bvps: 17_601 },
+  { type: 'CK', sym: 'vnd', ticker: 'VND', revenue: 1_714_820_453_789, netIncome: 329_458_120_320, eps: 1379, bvps: 14_295 },
+  { type: 'BH', sym: 'bmi', ticker: 'BMI', revenue: 1_563_314_122_394, netIncome: 75_776_567_450, eps: 1730, bvps: 20_436 },
+] as const;
+
+describe.each(TYPES)('$type ($ticker) mapping', ({ type, sym, ticker, revenue, netIncome, eps, bvps }) => {
+  const F = VCI_IQ_FIELDS_BY_COMPANY_TYPE[type];
+  if (F === undefined) throw new Error(`no mapping for ${type}`);
+
+  test('derives EPS/BVPS/revenue/netIncome for 2026Q3', async () => {
+    const out = await build(symbolReplies(sym)).src.fetchQuarterly(ticker);
+    expect(out.rejected).toEqual([]);
+    expect(out.periods).toHaveLength(16);
+    expect(out.periods.at(-1)).toEqual({ symbol: ticker, period: '2026Q3', eps, bvps, revenue, netIncome });
+  });
+
+  test('mapped revenue, parent NI and equity are non-zero in every fixture quarter', () => {
+    for (const r of rows(sym, 'income').filter(inWindow)) {
+      expect(num(r[F.revenue]), `${r.yearReport}Q${r.lengthReport} revenue`).not.toBe(0);
+      expect(num(r[F.parentNetIncome]), `${r.yearReport}Q${r.lengthReport} parent NI`).not.toBe(0);
+    }
+    for (const r of rows(sym, 'balance').filter(inWindow)) {
+      expect(num(r[F.ownersEquity]), `${r.yearReport}Q${r.lengthReport} equity`).not.toBe(0);
+    }
+  });
+
+  test('parent NI identity holds in every fixture quarter', () => {
+    for (const r of rows(sym, 'income').filter(inWindow)) {
+      const label = `${r.yearReport}Q${r.lengthReport}`;
+      if (type === 'NH') expect(num(r[F.parentNetIncome]), label).toBe((num(r.isa20) as number) + (num(r.isa21) as number));
+      else {
+        expect(num(r.isa21), label).toBe(0);
+        expect(num(r[F.parentNetIncome]), label).toBe(num(r.isa20));
+      }
+    }
+  });
+
+  test.each([
+    ['revenue', 'income', F.revenue, 'missing_revenue'],
+    ['parent NI', 'income', F.parentNetIncome, 'missing_eps'],
+    ['equity', 'balance', F.ownersEquity, 'missing_bvps'],
+    ['minority', 'balance', F.minorityInterests ?? '', 'missing_bvps'],
+  ] as const)('removing the mapped %s code rejects every affected period (no zero-fill)', async (_n, kind, code, reason) => {
+    const r = symbolReplies(sym);
+    const body = r[kind] as { data: { quarters: Q[] } };
+    for (const q of body.data.quarters) delete q[code];
+    const out = await build(r).src.fetchQuarterly(ticker);
+    expect(out.periods).toEqual([]);
+    expect(out.rejected).toHaveLength(16);
+    expect(out.rejected.every((x) => x.reason === reason)).toBe(true);
+  });
+
+  test('mapped revenue 0 in one quarter -> that period zero_revenue', async () => {
+    const r = symbolReplies(sym);
+    const row = (r.income as { data: { quarters: Q[] } }).data.quarters.find((q) => q.yearReport === 2026 && q.lengthReport === 2) as Q;
+    row[F.revenue] = 0;
+    const out = await build(r).src.fetchQuarterly(ticker);
+    expect(out.rejected).toEqual([{ period: '2026Q2', reason: 'zero_revenue' }]);
+    expect(out.periods).toHaveLength(15);
+  });
+});
+
+describe('NH mapping equity', () => {
+  test.each(['vcb', 'tcb'])('%s: bsa78 - bsa210 equals bsb118+bsb121+bsa84+bsa85+bsa90 in every fixture quarter', (sym) => {
+    const F = VCI_IQ_FIELDS_BY_COMPANY_TYPE.NH;
+    if (F === undefined) throw new Error('no NH mapping');
+    for (const r of rows(sym, 'balance').filter(inWindow)) {
+      const parts = ['bsb118', 'bsb121', 'bsa84', 'bsa85', 'bsa90'].reduce((t, k) => t + (num(r[k]) as number), 0);
+      expect(num(r[F.ownersEquity]) as number - (num(r[F.minorityInterests ?? '']) as number), `${r.yearReport}Q${r.lengthReport}`).toBe(parts);
+    }
+  });
+});
+
+describe('company type gating', () => {
+  test("rejects an unlisted comTypeCode ('XX') as unsupported_company_type for every emitted period", async () => {
+    const out = await build({ ...symbolReplies('vcb'), details: withType('vcb-details.json', 'XX') }).src.fetchQuarterly('VCB');
+    expect(out.periods).toEqual([]);
+    expect(out.rejected).toHaveLength(16);
+    expect(out.rejected.every((r) => r.reason === 'unsupported_company_type')).toBe(true);
+  });
+  test('rejects a mapped type that is not in supportedCompanyTypes', async () => {
+    const out = await build(symbolReplies('vcb'), { supportedCompanyTypes: ['CT'] }).src.fetchQuarterly('VCB');
+    expect(out.periods).toEqual([]);
+    expect(out.rejected).toHaveLength(16);
+    expect(out.rejected.every((r) => r.reason === 'unsupported_company_type')).toBe(true);
+  });
+  test('missing details / missing comTypeCode stays unsupported_company_type', async () => {
+    for (const details of [{ status: 404 }, withType('vcb-details.json', undefined)]) {
+      const out = await build({ ...symbolReplies('vcb'), details }).src.fetchQuarterly('VCB');
+      expect(out.periods).toEqual([]);
+      expect(out.rejected).toHaveLength(16);
+      expect(out.rejected.every((r) => r.reason === 'unsupported_company_type')).toBe(true);
+    }
+  });
+  test('resolveVciIqFields: null for unknown, unsupported and non-string types; inherited keys are not types', () => {
+    expect(resolveVciIqFields('NH', ['CT', 'NH'])).toBe(VCI_IQ_FIELDS_BY_COMPANY_TYPE.NH);
+    expect(resolveVciIqFields('NH', ['CT'])).toBeNull();
+    expect(resolveVciIqFields('XX', ['XX'])).toBeNull();
+    expect(resolveVciIqFields(undefined, ['CT'])).toBeNull();
+    expect(resolveVciIqFields('toString', ['toString'])).toBeNull();
+  });
+  test('CT (HPG) is unchanged by the type table', async () => {
+    const out = await build().src.fetchQuarterly('HPG');
+    expect(out.periods.at(-1)).toMatchObject({ period: '2026Q3', bvps: 17_624 });
+  });
+});
+
+describe('minorityInterests null / null value', () => {
+  test('null in the mapping -> minority treated as 0', async () => {
+    const table = VCI_IQ_FIELDS_BY_COMPANY_TYPE as Record<string, unknown>;
+    table.ZZ = { ...VCI_IQ_FIELDS_BY_COMPANY_TYPE.NH, minorityInterests: null };
+    try {
+      const out = await build({ ...symbolReplies('vcb'), details: withType('vcb-details.json', 'ZZ') }, { supportedCompanyTypes: ['ZZ'] }).src.fetchQuarterly('VCB');
+      // 253,761,146,000,000 / 8,355,675,094 = 30369.9 -> 30370 (minority not subtracted)
+      expect(out.periods.at(-1)).toMatchObject({ period: '2026Q3', bvps: 30_370 });
+    } finally {
+      delete table.ZZ;
+    }
+  });
+  test('minority code present but value null -> missing_bvps', async () => {
+    const r = symbolReplies('vcb');
+    const row = (r.balance as { data: { quarters: Q[] } }).data.quarters.find((q) => q.yearReport === 2026 && q.lengthReport === 3) as Q;
+    row.bsa210 = null;
+    const out = await build(r).src.fetchQuarterly('VCB');
+    expect(out.rejected).toEqual([{ period: '2026Q3', reason: 'missing_bvps' }]);
   });
 });

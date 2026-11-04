@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P2 |
 | Areas | data, finance |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-11-01 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/32 |
 
 ## Goal
 Extend the `vci-iq` financials source to companies whose `comTypeCode` is not `CT` (banks `NH`, securities firms `CK`, insurers `BH`), which STK-039 rejects as `unsupported_company_type`. Today 7 of Ming's 11 watched symbols (SHB, TCB, TPB, VCB; AGR, BSI, VND) fall in this group.
@@ -24,3 +24,7 @@ docs/spec-v1.md §2.2, §3 F4, §4.3. CLAUDE.md R1, R2, R4, R5. ADR 0002, ADR 00
 
 ## Notes / answers from Ming
 - Follow-up from STK-039 decision 5 (Ming, 2026-11-01).
+- **Q1 answer (Ming, 2026-11-04):** Option A — Ming runs the recording script from plan.md Q1 on his machine and commits the samples to `work/tickets/STK-042/live-samples/`.
+- **Samples recorded (Ming, 2026-11-04T03:45Z, commit f17643d):** VCB, TCB (`NH`), VND (`CK`), BMI (`BH`) — 20 files, all valid JSON, `comTypeCode` confirmed from `details`.
+- **Q2 answer (default, 2026-11-04):** BMI is used only as the insurer sample; it is not added to the watchlist.
+- Q3–Q5: planner defaults stand.

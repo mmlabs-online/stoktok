@@ -2,8 +2,8 @@
  "status": 200,
  "successful": true,
  "data": {
-  "organCode": "TST",
-  "ticker": "TST",
+  "organCode": "VCB",
+  "ticker": "VCB",
   "comTypeCode": "NH",
   "sector": "Banks",
   "sectorVn": "Ngân hàng",

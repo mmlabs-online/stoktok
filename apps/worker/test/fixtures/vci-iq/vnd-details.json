@@ -1,0 +1,12 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": {
+  "organCode": "VND",
+  "ticker": "VND",
+  "comTypeCode": "CK",
+  "sector": "Financial Services",
+  "sectorVn": "Dịch vụ tài chính",
+  "isBank": false
+ }
+}

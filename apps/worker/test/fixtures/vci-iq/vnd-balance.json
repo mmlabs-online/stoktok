@@ -1,0 +1,194 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": {
+  "years": [
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2022,
+    "lengthReport": 5,
+    "bsa78": 14514668928729.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2023,
+    "lengthReport": 5,
+    "bsa78": 16507819526994.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2024,
+    "lengthReport": 5,
+    "bsa78": 19715068693211.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2025,
+    "lengthReport": 5,
+    "bsa78": 20902908538364.0,
+    "bsa210": 0.0
+   }
+  ],
+  "quarters": [
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2022,
+    "lengthReport": 1,
+    "bsa78": 10357053955260.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2022,
+    "lengthReport": 2,
+    "bsa78": 14553016694118.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2022,
+    "lengthReport": 3,
+    "bsa78": 14595059263700.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2022,
+    "lengthReport": 4,
+    "bsa78": 14514668928729.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2023,
+    "lengthReport": 1,
+    "bsa78": 14650345330781.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2023,
+    "lengthReport": 2,
+    "bsa78": 15079667081307.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2023,
+    "lengthReport": 3,
+    "bsa78": 15718863196317.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2023,
+    "lengthReport": 4,
+    "bsa78": 16503094184349.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2024,
+    "lengthReport": 1,
+    "bsa78": 17124889560058.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2024,
+    "lengthReport": 2,
+    "bsa78": 17284150298185.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2024,
+    "lengthReport": 3,
+    "bsa78": 19463749405460.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2024,
+    "lengthReport": 4,
+    "bsa78": 19715068693211.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2025,
+    "lengthReport": 1,
+    "bsa78": 20097598677846.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2025,
+    "lengthReport": 2,
+    "bsa78": 19631863066934.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2025,
+    "lengthReport": 3,
+    "bsa78": 20560912132981.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2025,
+    "lengthReport": 4,
+    "bsa78": 20902908538364.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2026,
+    "lengthReport": 1,
+    "bsa78": 21448244006539.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2026,
+    "lengthReport": 2,
+    "bsa78": 21432124678198.0,
+    "bsa210": 0.0
+   },
+   {
+    "organCode": "VND",
+    "ticker": "VND",
+    "yearReport": 2026,
+    "lengthReport": 3,
+    "bsa78": 21761582798518.0,
+    "bsa210": 0.0
+   }
+  ]
+ }
+}

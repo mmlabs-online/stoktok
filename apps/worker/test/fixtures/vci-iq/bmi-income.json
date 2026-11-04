@@ -1,0 +1,240 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": {
+  "years": [
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2022,
+    "lengthReport": 5,
+    "isi64": 4510394614092.0,
+    "isa20": 290869393051.0,
+    "isa21": 0.0,
+    "isa22": 290869393051.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2023,
+    "lengthReport": 5,
+    "isi64": 4720461657562.0,
+    "isa20": 328992884771.0,
+    "isa21": 0.0,
+    "isa22": 328992884771.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2024,
+    "lengthReport": 5,
+    "isi64": 5122748106255.0,
+    "isa20": 237674042229.0,
+    "isa21": 0.0,
+    "isa22": 237674042229.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2025,
+    "lengthReport": 5,
+    "isi64": 5360408954536.0,
+    "isa20": 257194601364.0,
+    "isa21": 0.0,
+    "isa22": 257194601364.0
+   }
+  ],
+  "quarters": [
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2022,
+    "lengthReport": 1,
+    "isi64": 942956048997.0,
+    "isa20": 71179070780.0,
+    "isa21": 0.0,
+    "isa22": 71179070780.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2022,
+    "lengthReport": 2,
+    "isi64": 1125210318059.0,
+    "isa20": 68508315616.0,
+    "isa21": 0.0,
+    "isa22": 68508315616.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2022,
+    "lengthReport": 3,
+    "isi64": 1172614834682.0,
+    "isa20": 83737998633.0,
+    "isa21": 0.0,
+    "isa22": 83737998633.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2022,
+    "lengthReport": 4,
+    "isi64": 1254405037209.0,
+    "isa20": 68896872029.0,
+    "isa21": 0.0,
+    "isa22": 68896872029.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2023,
+    "lengthReport": 1,
+    "isi64": 1125470368395.0,
+    "isa20": 73492775032.0,
+    "isa21": 0.0,
+    "isa22": 73492775032.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2023,
+    "lengthReport": 2,
+    "isi64": 1191334810443.0,
+    "isa20": 74428008466.0,
+    "isa21": 0.0,
+    "isa22": 74428008466.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2023,
+    "lengthReport": 3,
+    "isi64": 1156897688204.0,
+    "isa20": 106400213564.0,
+    "isa21": 0.0,
+    "isa22": 106400213564.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2023,
+    "lengthReport": 4,
+    "isi64": 1246983837233.0,
+    "isa20": 74849167597.0,
+    "isa21": 0.0,
+    "isa22": 74849167597.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2024,
+    "lengthReport": 1,
+    "isi64": 1274319102954.0,
+    "isa20": 72723951668.0,
+    "isa21": 0.0,
+    "isa22": 72723951668.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2024,
+    "lengthReport": 2,
+    "isi64": 1278362337536.0,
+    "isa20": 70694000582.0,
+    "isa21": 0.0,
+    "isa22": 70694000582.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2024,
+    "lengthReport": 3,
+    "isi64": 1284431816427.0,
+    "isa20": 51168094654.0,
+    "isa21": 0.0,
+    "isa22": 51168094654.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2024,
+    "lengthReport": 4,
+    "isi64": 1285634849338.0,
+    "isa20": 43087995325.0,
+    "isa21": 0.0,
+    "isa22": 43087995325.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2025,
+    "lengthReport": 1,
+    "isi64": 1340438820817.0,
+    "isa20": 63059823482.0,
+    "isa21": 0.0,
+    "isa22": 63059823482.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2025,
+    "lengthReport": 2,
+    "isi64": 1349781084472.0,
+    "isa20": 80431469454.0,
+    "isa21": 0.0,
+    "isa22": 80431469454.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2025,
+    "lengthReport": 3,
+    "isi64": 1330844174779.0,
+    "isa20": 112712232202.0,
+    "isa21": 0.0,
+    "isa22": 112712232202.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2025,
+    "lengthReport": 4,
+    "isi64": 1340101826964.0,
+    "isa20": 3583116939.0,
+    "isa21": 0.0,
+    "isa22": 3583116939.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2026,
+    "lengthReport": 1,
+    "isi64": 1360420068969.0,
+    "isa20": 55556275286.0,
+    "isa21": 0.0,
+    "isa22": 55556275286.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2026,
+    "lengthReport": 2,
+    "isi64": 1484483159634.0,
+    "isa20": 125577133382.0,
+    "isa21": 0.0,
+    "isa22": 125577133382.0
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2026,
+    "lengthReport": 3,
+    "isi64": 1563314122394.0,
+    "isa20": 75776567450.0,
+    "isa21": 0.0,
+    "isa22": 75776567450.0
+   }
+  ]
+ }
+}
