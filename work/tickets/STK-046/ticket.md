@@ -7,7 +7,7 @@
 | Areas | data, finance, db |
 | Attempts | 0 |
 | Created | 2026-11-05 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/33 |
 
 ## Goal
 Market non-trading days (Tết, Hùng Kings, 30/4–1/5, 2/9 and announced bridge days) are known to the app, so the EOD job, gap detection, signals, the chart and the STK-032 backfill stop treating them as missing trading days; false gaps already recorded on those dates are resolved.
