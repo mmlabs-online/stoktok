@@ -41,3 +41,34 @@ No violations found.
 - From the plan: seed exclusion list, `reopen-holiday-gaps [--dry-run]` job, names for user-added dates, jsdom/testing-library so the Hủy reset can be tested interactively.
 - Optional raw-length cap and early exit in `parseHolidayList` (security review 🟢 3).
 - PR note: a browser tab opened before this deploy posts without `holidays`, so saving from it stores `[]`.
+
+## Attempt 2 — 2026-11-04
+Verdict: PASS
+
+Reviewed commit a3066f4 (HEAD~1..HEAD) against the attempt-1 findings. The full ticket diff (`git diff origin/main...HEAD`) is 21 code files plus ticket docs. Each one is in the plan's file list, except `packages/db/src/repos/settings.ts`, which is logged in impl-log as an out-of-plan, comment-only change.
+
+### Checks (run by reviewer)
+- typecheck: pass, all workspaces (exit 0)
+- lint: pass, all workspaces (exit 0)
+- test: core 539/539 (43 files); db 121 passed + 1 todo (14 files); worker 236/236 (15 files); web 226/226 (26 files). These match impl-log attempt 2.
+- Manual dev-server check (add / remove / Hủy / save): still not run, because the sandbox has no browser. The Hủy reset was judged by reading the code in attempt 1 and is unchanged.
+
+### Acceptance criteria
+- [x] AC1: the card lists effective holidays by year, shows provisional dates, and supports add/remove. Evidence is unchanged from attempt 1 and still green: `holiday-calendar-card.test.tsx` and `holiday-editor.test.ts › holidayCalendarView`.
+- [x] AC2: validation is in core, errors are in Vietnamese, and nothing is written on invalid input. Evidence is unchanged and green: `holiday-editor.test.ts`, `validate-settings.test.ts`, and `handlers.test.ts › invalid holiday list … does not save`.
+- [x] AC3: holidays are written in the same save, other settings are untouched, and the seed is never written. Issue 1 is fixed. `holiday-calendar-card.tsx:39` now initialises state with `userHolidayDates(splitHolidayList(initialHolidays))`. The test `holiday-calendar-card.test.tsx:41-46` ("hidden input holds user dates only") asserts `value="2026-10-20"` and that the value does not contain `2026-11-24`. It passes. The handler, mapper and db upsert evidence is unchanged and green.
+- [x] AC4: unit and handler tests exist, and there is no auth code. The only `requireUser` match is still the pre-existing comment.
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found. The fix calls a core function (`userHolidayDates`), so R1 holds, and no date math was added to the UI.
+
+### Nits (do not block)
+- 💭 The client state now dedupes. Take a failed save with a `HOLIDAY_DUPLICATE` error, for example from a hand-crafted post. The echoed error names a date that the card now shows once. The UI add path cannot create duplicates, so this is cosmetic.
+- 💭 `HOLIDAY_DATE_INVALID` still echoes the raw item without truncation. This was carried over from attempt 1 and is cosmetic.
+
+### Follow-ups (out of scope)
+- These are unchanged from attempt 1: a seed exclusion list, a `reopen-holiday-gaps [--dry-run]` job, names for user-added dates, jsdom for an interactive Hủy test, and an optional raw-length cap in `parseHolidayList`.
+- For the PR: Ming should do the manual browser check (add, remove, Hủy, save). Also note that a browser tab opened before the deploy saves `holidays: []`.
