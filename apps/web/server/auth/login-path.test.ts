@@ -13,4 +13,10 @@ describe('safeNext / loginPath', () => {
       expect(safeNext(bad)).toBe('/');
     }
   });
+
+  it('rejects control chars, whitespace and backslash anywhere', () => {
+    for (const bad of ['/\t/evil.com', '/\x0b/evil.com', '/ /evil.com', '/\n/evil.com', '/\r/evil.com', '/\x00/evil.com', '/a\\b']) {
+      expect(safeNext(bad)).toBe('/');
+    }
+  });
 });

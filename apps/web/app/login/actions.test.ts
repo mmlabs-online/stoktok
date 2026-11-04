@@ -37,6 +37,7 @@ describe('signInAction', () => {
       'REDIRECT:/transactions',
     );
     await expect(signInAction(form({ email: 'a@b.c', password: 'pw', next: '//evil.com' }))).rejects.toThrow('REDIRECT:/');
+    await expect(signInAction(form({ email: 'a@b.c', password: 'pw', next: '/\t/evil.com' }))).rejects.toThrow('REDIRECT:/');
   });
 
   it('redirects to /login?error=1 for any auth error and for empty fields', async () => {

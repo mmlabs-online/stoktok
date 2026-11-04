@@ -47,3 +47,14 @@ No deviation from the plan; no stop needed.
 ### Scope self-check
 - Could the diff be smaller? No; the page/action edits are one line each.
 - Diff size: not measured (no git commit made; working tree only).
+
+## Attempt 2 (REWORK)
+
+Fixes from review.md attempt 1 (open redirect; security-review F1; nit F4):
+- `apps/web/server/auth/login-path.ts`: `safeNext` now rejects backslash, any whitespace and any control char (<0x20, 0x7f) via char-code check (the `no-control-regex` lint rule forbids a regex), and parses with `new URL(raw, 'http://sentinel.invalid')`, rejecting any result whose origin differs.
+- `apps/web/server/auth/login-path.test.ts`: added tab, `\x0b`, space, `\n`, `\r`, `\x00`, embedded-backslash cases.
+- `apps/web/app/login/actions.test.ts`: added `next: '/\t/evil.com'` -> `REDIRECT:/`.
+- `apps/web/test/entrypoints.test.ts`: action split regex now also matches `export const x = async`.
+
+Checks: typecheck 0 errors; lint clean; test all pass (core 539, db 121, worker 236, web 265). Not committed, as instructed.
+Follow-ups: other nits/robustness items left as follow-ups.

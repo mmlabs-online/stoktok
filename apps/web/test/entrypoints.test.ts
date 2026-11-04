@@ -27,7 +27,7 @@ describe('R6 entry points', () => {
     expect(files.length).toBeGreaterThan(0);
     for (const f of files) {
       const src = fs.readFileSync(f, 'utf8');
-      const parts = src.split(/^export (?:async )?function /m).slice(1);
+      const parts = src.split(/^export (?:async function |function |const \w+ = async )/m).slice(1);
       expect(parts.length, rel(f)).toBeGreaterThan(0);
       for (const body of parts) {
         const auth = body.indexOf('await requireUser()');
