@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { DataFreshnessBadge } from '../data-freshness-badge';
 import { DisclaimerNote } from '../disclaimer-note';
+import { LogoutButton } from './logout-button';
 import { NavLinks } from './nav-links';
 import { ThemeToggle } from './theme-toggle';
 
@@ -20,6 +21,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <DataFreshnessBadge fresh={null} />
             </div>
             <ThemeToggle />
+            <LogoutButton />
           </div>
         </header>
         <main className="min-w-0 flex-1 p-4 pb-[calc(4rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-6">

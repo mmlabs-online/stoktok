@@ -30,7 +30,7 @@ export type DashboardResult =
 
 /**
  * Reads stored data and delegates every calculation to core (R1).
- * R6 is suspended: when it is restored, call requireUser() at the top of this entry point.
+ * Callers must call requireUser() first (R6).
  * Uses getEntrySettings, not getSettings/loadLedger, so an unset fee rate never throws.
  */
 export async function loadDashboard(db: Db, now: Date): Promise<DashboardResult> {

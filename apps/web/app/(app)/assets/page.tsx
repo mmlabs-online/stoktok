@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import { AssetList } from '../../../components/assets/asset-list';
 import { getDb, listAssets } from '../../../server/db';
+import { requireUser } from '../../../server/auth/require-user';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
+  await requireUser();
   const assets = await listAssets(getDb());
   return (
     <div className="space-y-6">

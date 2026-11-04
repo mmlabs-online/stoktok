@@ -12,9 +12,11 @@ name: deploy-stoktok
 # `preflight` reports (read-only) the login session, docker and any old LaunchDaemon; `envdir` creates the
 # env dir (mode 700) and excludes it from Time Machine before `secrets` writes the file; `agent` installs
 # or updates the stoktok LaunchAgent from the published plist. Nothing here uses root or changes system settings.
-# Secrets STOKTOK_SUPABASE_URL and STOKTOK_SUPABASE_SERVICE_ROLE_KEY (prefixed: this repo is shared by
+# Secrets STOKTOK_SUPABASE_URL, STOKTOK_SUPABASE_SERVICE_ROLE_KEY, STOKTOK_AUTHEN_SUPABASE_URL,
+# STOKTOK_AUTHEN_SUPABASE_ANON_KEY and STOKTOK_ALLOWLIST_USER_IDS (prefixed: this repo is shared by
 # every mmlabs app) come from the `stoktok` environment (main only); the `secrets` step writes them to
-# $ENV_FILE as SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY, the names the app reads, on every run. Values are never printed.
+# $ENV_FILE as SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY / AUTHEN_SUPABASE_URL / AUTHEN_SUPABASE_ANON_KEY /
+# ALLOWLIST_USER_IDS, the names the app reads, on every run. Values are never printed.
 #
 # No migrate step: schema changes are human. Every migration must stay compatible with the
 # previous release's images, because a restore never touches the database.
@@ -156,12 +158,18 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.STOKTOK_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STOKTOK_SUPABASE_SERVICE_ROLE_KEY }}
+          AUTHEN_SUPABASE_URL: ${{ secrets.STOKTOK_AUTHEN_SUPABASE_URL }}
+          AUTHEN_SUPABASE_ANON_KEY: ${{ secrets.STOKTOK_AUTHEN_SUPABASE_ANON_KEY }}
+          ALLOWLIST_USER_IDS: ${{ secrets.STOKTOK_ALLOWLIST_USER_IDS }}
         run: |
           umask 077
           [[ "$ENV_FILE" == "$HOME/"* ]] || { echo "::error::ENV_FILE $ENV_FILE is not under the runner user's home $HOME ($(id -un)). Nothing was started; $ENV_FILE was not changed."; exit 1; }
           missing=""
           [ -n "$SUPABASE_URL" ] || missing="$missing STOKTOK_SUPABASE_URL"
           [ -n "$SUPABASE_SERVICE_ROLE_KEY" ] || missing="$missing STOKTOK_SUPABASE_SERVICE_ROLE_KEY"
+          [ -n "$AUTHEN_SUPABASE_URL" ] || missing="$missing STOKTOK_AUTHEN_SUPABASE_URL"
+          [ -n "$AUTHEN_SUPABASE_ANON_KEY" ] || missing="$missing STOKTOK_AUTHEN_SUPABASE_ANON_KEY"
+          [ -n "$ALLOWLIST_USER_IDS" ] || missing="$missing STOKTOK_ALLOWLIST_USER_IDS"
           if [ -n "$missing" ]; then
             echo "::error::Missing secret(s) in environment stoktok:$missing. Nothing was started; $ENV_FILE was not changed."
             exit 1
@@ -174,12 +182,25 @@ jobs:
             echo "::error::Secret STOKTOK_SUPABASE_SERVICE_ROLE_KEY has unexpected characters. Nothing was started; $ENV_FILE was not changed."
             exit 1
           fi
+          if ! [[ "$AUTHEN_SUPABASE_URL" =~ ^https://[A-Za-z0-9.-]+$ ]]; then
+            echo "::error::Secret STOKTOK_AUTHEN_SUPABASE_URL is not https://<host>. Nothing was started; $ENV_FILE was not changed."
+            exit 1
+          fi
+          if ! [[ "$AUTHEN_SUPABASE_ANON_KEY" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::Secret STOKTOK_AUTHEN_SUPABASE_ANON_KEY has unexpected characters. Nothing was started; $ENV_FILE was not changed."
+            exit 1
+          fi
+          uuid='[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}'
+          if ! [[ "$ALLOWLIST_USER_IDS" =~ ^$uuid(,$uuid)*$ ]]; then
+            echo "::error::Secret STOKTOK_ALLOWLIST_USER_IDS is not a comma-separated list of UUIDs. Nothing was started; $ENV_FILE was not changed."
+            exit 1
+          fi
           dir="$(dirname "$ENV_FILE")"
           mkdir -p "$dir"
           chmod 700 "$dir"
           tmp="$(mktemp "$dir/.stoktok.env.XXXXXX")"
           trap 'rm -f "$tmp"' EXIT
-          printf 'SUPABASE_URL=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\n' "$SUPABASE_URL" "$SUPABASE_SERVICE_ROLE_KEY" > "$tmp"
+          printf 'SUPABASE_URL=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\nAUTHEN_SUPABASE_URL=%s\nAUTHEN_SUPABASE_ANON_KEY=%s\nALLOWLIST_USER_IDS=%s\n' "$SUPABASE_URL" "$SUPABASE_SERVICE_ROLE_KEY" "$AUTHEN_SUPABASE_URL" "$AUTHEN_SUPABASE_ANON_KEY" "$ALLOWLIST_USER_IDS" > "$tmp"
           chmod 600 "$tmp"
           if cmp -s "$tmp" "$ENV_FILE"; then changed=false; else changed=true; fi
           mv -f "$tmp" "$ENV_FILE"

@@ -240,4 +240,4 @@ describe('handleCreateCorporateAction', () => {
   });
 });
 
-// Reject-without-auth tests are waived: R6 is suspended (CLAUDE.md, 2026-10-23).
+// Auth is covered by test/entrypoints.test.ts (every entry point calls requireUser()).

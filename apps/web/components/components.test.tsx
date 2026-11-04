@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/' }));
+vi.mock('server-only', () => ({}));
 
 import { DataFreshnessBadge } from './data-freshness-badge';
 import { DISCLAIMER_TEXT, DisclaimerNote } from './disclaimer-note';

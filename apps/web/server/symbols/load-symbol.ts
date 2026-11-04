@@ -70,7 +70,7 @@ export interface SymbolView {
 
 /**
  * Reads stored data and delegates every calculation to core (R1).
- * R6 is suspended: when it is restored, call requireUser() at the top of this entry point.
+ * Callers must call requireUser() first (R6).
  * Returns null when the symbol is unknown everywhere (symbols, watchlist, ledger, corporate actions, prices).
  */
 export async function loadSymbol(

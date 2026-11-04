@@ -5,8 +5,10 @@ import { todayVn } from '../../../../../server/clock';
 import { DataError, getDb, getEntrySettings, getMarketRules, getTransaction } from '../../../../../server/db';
 import { isUuid } from '../../../../../server/is-uuid';
 import { updateTransactionAction } from '../../actions';
+import { requireUser } from '../../../../../server/auth/require-user';
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  await requireUser();
   const { id } = await params;
   if (!isUuid(id)) notFound();
   const db = getDb();

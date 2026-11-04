@@ -35,7 +35,7 @@ export interface WatchlistView {
 
 /**
  * Reads stored data and delegates every calculation to core (R1).
- * R6 is suspended: when it is restored, call requireUser() at the top of this entry point.
+ * Callers must call requireUser() first (R6).
  * Holdings are derived from the ledger and never stored.
  */
 export async function loadWatchlist(db: Db, now: Date): Promise<WatchlistView> {

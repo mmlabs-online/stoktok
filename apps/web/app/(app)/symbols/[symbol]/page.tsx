@@ -12,6 +12,7 @@ import { TransactionList } from '../../../../components/transactions/transaction
 import { nowInstant } from '../../../../server/clock';
 import { getDb } from '../../../../server/db';
 import { loadSymbol } from '../../../../server/symbols/load-symbol';
+import { requireUser } from '../../../../server/auth/require-user';
 
 // Reads the database per request; never prerendered at build time.
 export const dynamic = 'force-dynamic';
@@ -23,6 +24,7 @@ export default async function Page({
   params: Promise<{ symbol: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireUser();
   const { symbol } = await params;
   const range = parseChartRange(await searchParams);
   let normalized: string | null;

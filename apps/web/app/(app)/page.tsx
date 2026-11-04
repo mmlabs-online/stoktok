@@ -6,11 +6,13 @@ import { loadDashboard } from '../../server/dashboard/load-dashboard';
 import { nowInstant } from '../../server/clock';
 import { formatVnd } from '@stoktok/core';
 import { getDb } from '../../server/db';
+import { requireUser } from '../../server/auth/require-user';
 
 // Reads the database per request; never prerendered at build time.
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
+  await requireUser();
   const result = await loadDashboard(getDb(), nowInstant());
 
   if (result.kind === 'ledgerError') {

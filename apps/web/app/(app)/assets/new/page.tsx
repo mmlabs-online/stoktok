@@ -1,10 +1,12 @@
 import { AssetForm } from '../../../../components/assets/asset-form';
 import { todayVn } from '../../../../server/clock';
 import { createAssetAction } from '../actions';
+import { requireUser } from '../../../../server/auth/require-user';
 
 export const dynamic = 'force-dynamic';
 
-export default function Page() {
+export default async function Page() {
+  await requireUser();
   const today = todayVn();
   return (
     <div className="space-y-4">

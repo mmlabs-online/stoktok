@@ -1,0 +1,16 @@
+import { describe, expect, it } from 'vitest';
+import { loginPath, safeNext } from './login-path';
+
+describe('safeNext / loginPath', () => {
+  it('keeps a relative path with query', () => {
+    expect(safeNext('/transactions?page=2')).toBe('/transactions?page=2');
+    expect(loginPath('/transactions?page=2')).toBe('/login?next=%2Ftransactions%3Fpage%3D2');
+    expect(loginPath('/')).toBe('/login');
+  });
+
+  it('replaces //evil, /\\evil, https://evil, javascript:, empty and /login with /', () => {
+    for (const bad of ['//evil.com', '/\\evil.com', 'https://evil.com', 'javascript:alert(1)', '', '/login', '/login?next=/x', null, undefined, 5]) {
+      expect(safeNext(bad)).toBe('/');
+    }
+  });
+});
