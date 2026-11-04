@@ -2,6 +2,7 @@ import {
   DEFAULT_MARKET_SETTINGS,
   RowMappingError,
   appSettingsFromRow,
+  effectiveHolidays,
   parseMarketRules,
   parseSignalRules,
   settingsFromRow,
@@ -36,6 +37,11 @@ function toSettings(row: SettingsRow, ctx: { table: string; op: string }): Ledge
   }
 }
 
+/** The seeded exchange calendar plus the stored dates (STK-046). Only read paths use it; saves stay raw. */
+function withEffectiveHolidays(s: LedgerSettings): LedgerSettings {
+  return { ...s, holidays: effectiveHolidays(s.holidays) };
+}
+
 export async function getSettings(db: Db): Promise<LedgerSettings> {
   const ctx = { table: 'settings', op: 'get' };
   let row: SettingsRow;
@@ -47,7 +53,7 @@ export async function getSettings(db: Db): Promise<LedgerSettings> {
     }
     throw e;
   }
-  return toSettings(row, ctx);
+  return withEffectiveHolidays(toSettings(row, ctx));
 }
 
 /**
@@ -61,14 +67,14 @@ export async function getEntrySettings(db: Db): Promise<{ settings: LedgerSettin
     row = unwrapFound<SettingsRow>(await db.from('settings').select(COLS).eq('id', 1).maybeSingle(), ctx);
   } catch (e) {
     if (e instanceof DataError && e.code === 'NOT_FOUND') {
-      return { settings: { ...DEFAULT_MARKET_SETTINGS, feeRatePpm: 0 }, feeRateConfigured: false };
+      return { settings: withEffectiveHolidays({ ...DEFAULT_MARKET_SETTINGS, feeRatePpm: 0 }), feeRateConfigured: false };
     }
     throw e;
   }
   if (row.fee_rate_ppm === null) {
-    return { settings: mapRow(settingsFromRow, { ...row, fee_rate_ppm: 0 }, ctx), feeRateConfigured: false };
+    return { settings: withEffectiveHolidays(mapRow(settingsFromRow, { ...row, fee_rate_ppm: 0 }, ctx)), feeRateConfigured: false };
   }
-  return { settings: mapRow(settingsFromRow, row, ctx), feeRateConfigured: true };
+  return { settings: withEffectiveHolidays(mapRow(settingsFromRow, row, ctx)), feeRateConfigured: true };
 }
 
 export async function saveSettings(

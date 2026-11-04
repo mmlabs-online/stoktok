@@ -1,5 +1,6 @@
+import type { GapResolvedReason } from '@stoktok/core';
 import type { Db } from '../client';
-import { mapRow, unwrap } from '../errors';
+import { fetchAll, mapRow, unwrap } from '../errors';
 import { openGapFromRow } from '../mappers';
 import type { OpenGapRecord } from '../mappers';
 import type { DataGapInsert, OpenGapRow } from '../rows';
@@ -30,6 +31,24 @@ export async function listOpenMarketGaps(db: Db, dataType: string): Promise<Open
   return rows.map((r) => mapRow(openGapFromRow, r, ctx));
 }
 
+/** Every unresolved gap of one data type, any symbol (including NULL), paged past the PostgREST row cap. */
+export async function listAllOpenGaps(db: Db, dataType: string, opts: { pageSize?: number } = {}): Promise<OpenGapRecord[]> {
+  const ctx = { table: 'data_gaps', op: 'list_all_open' };
+  const rows = await fetchAll<OpenGapRow>(
+    (from, to) =>
+      db
+        .from('data_gaps')
+        .select('id,symbol,from_ts,to_ts')
+        .eq('data_type', dataType)
+        .is('resolved_at', null)
+        .order('id', { ascending: true })
+        .range(from, to),
+    ctx,
+    opts.pageSize,
+  );
+  return rows.map((r) => mapRow(openGapFromRow, r, ctx));
+}
+
 /** No `.select()`: supabase returns data: null on success. */
 export async function insertGaps(db: Db, rows: readonly DataGapInsert[]): Promise<void> {
   if (rows.length === 0) return;
@@ -37,9 +56,10 @@ export async function insertGaps(db: Db, rows: readonly DataGapInsert[]): Promis
   if (res.error) unwrap(res, { table: 'data_gaps', op: 'insert' });
 }
 
-/** Only unresolved rows: a rerun never overwrites an earlier resolved_at. */
-export async function resolveGaps(db: Db, ids: readonly number[], resolvedAt: string): Promise<void> {
+/** Only unresolved rows: a rerun never overwrites an earlier resolved_at. `reason` is written only when given. */
+export async function resolveGaps(db: Db, ids: readonly number[], resolvedAt: string, reason?: GapResolvedReason): Promise<void> {
   if (ids.length === 0) return;
-  const res = await db.from('data_gaps').update({ resolved_at: resolvedAt }).in('id', [...ids]).is('resolved_at', null);
+  const patch = reason === undefined ? { resolved_at: resolvedAt } : { resolved_at: resolvedAt, resolved_reason: reason };
+  const res = await db.from('data_gaps').update(patch).in('id', [...ids]).is('resolved_at', null);
   if (res.error) unwrap(res, { table: 'data_gaps', op: 'resolve' });
 }

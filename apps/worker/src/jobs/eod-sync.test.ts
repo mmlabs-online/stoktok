@@ -12,7 +12,7 @@ import type { EodStore } from './eod-sync';
 const AFTER_CUTOFF = new Date('2026-10-23T12:00:00Z'); // Fri 19:00 VN
 const BEFORE_CUTOFF = new Date('2026-10-23T08:00:00Z'); // Fri 15:00 VN
 
-type GapState = OpenGapRecord & { row?: DataGapInsert; resolvedAt?: string };
+type GapState = OpenGapRecord & { row?: DataGapInsert; resolvedAt?: string; reason?: string };
 
 function memoryStore(
   opts: { watchlist?: string[]; held?: Result<string[]>; holidays?: string[]; closes?: Record<string, number>; prior?: Record<string, string[]>; gaps?: GapState[] } = {},
@@ -47,9 +47,13 @@ function memoryStore(
       order.push('insertGaps');
       for (const row of rows) gaps.push({ id: gaps.length + 1, symbol: row.symbol, fromTs: row.from_ts, toTs: row.to_ts, row });
     },
-    resolveGaps: async (ids, resolvedAt) => {
+    resolveGaps: async (ids, resolvedAt, reason) => {
       order.push('resolveGaps');
-      for (const g of gaps) if (ids.includes(g.id) && g.resolvedAt === undefined) g.resolvedAt = resolvedAt;
+      for (const g of gaps) {
+        if (!ids.includes(g.id) || g.resolvedAt !== undefined) continue;
+        g.resolvedAt = resolvedAt;
+        if (reason !== undefined) g.reason = reason;
+      }
     },
   };
   return { store, table, gaps, order, closesAsked, upserts: () => upsertCalls };
@@ -339,7 +343,7 @@ describe('runEodSync', () => {
       expect(out.missingDates).toEqual({ VNM: ['2026-10-20', '2026-10-21', '2026-10-22'] });
       expect(out).toMatchObject({ gapsRecorded: 3, gapsResolved: 0, ok: true });
       expect(m.gaps[0]?.row).toEqual({ symbol: 'VNM', data_type: 'prices_daily', from_ts: vnDayBoundsUtc('2026-10-20').fromTs, to_ts: vnDayBoundsUtc('2026-10-20').toTs, source: 'fake-src', fetched_at: AFTER_CUTOFF.toISOString() });
-      expect(m.order).toEqual(['upsert', 'insertGaps', 'resolveGaps']);
+      expect(m.order).toEqual(['upsert', 'insertGaps', 'resolveGaps', 'resolveGaps']);
     });
 
     test('configured holiday inside the window is not a gap', async () => {
@@ -376,6 +380,22 @@ describe('runEodSync', () => {
       expect(out.gapsResolved).toBe(1);
       expect(m.gaps).toHaveLength(1);
       expect(m.gaps[0]?.resolvedAt).toBe(AFTER_CUTOFF.toISOString());
+      expect(m.gaps[0]?.reason).toBe('data_stored');
+    });
+
+    test('an open gap on a holiday is resolved with reason non_trading_day, not deleted', async () => {
+      const b = vnDayBoundsUtc('2026-10-21');
+      const m = memoryStore({
+        watchlist: ['VNM'],
+        holidays: ['2026-10-21'],
+        prior: { VNM: ['2026-10-19', '2026-10-20', '2026-10-22', '2026-10-23'] },
+        gaps: [{ id: 8, symbol: 'VNM', ...b }],
+      });
+      const { source } = fakeSource('s', only('VNM', ['2026-10-23']));
+      const out = await runEodSync(deps({ store: m.store, source, config }).d);
+      expect(out.gapsResolved).toBe(1);
+      expect(m.gaps).toHaveLength(1);
+      expect(m.gaps[0]).toMatchObject({ resolvedAt: AFTER_CUTOFF.toISOString(), reason: 'non_trading_day' });
     });
 
     test('symbol first stored mid-window gets no earlier gaps; symbol with no stored rows gets none', async () => {

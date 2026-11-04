@@ -87,3 +87,12 @@ export const SIGNALS_JOB_CONFIG = {
   /** Symbols per financials read (each symbol has up to ~12 quarters; keeps a response under the 1000-row cap). */
   financialsSymbolChunk: 50,
 };
+
+/** One-off cleanup of price gaps that only cover exchange holidays (STK-046). */
+export const HOLIDAY_GAPS_CONFIG = {
+  /** Rows per read page (PostgREST caps a response at 1000). */
+  pageSize: 1000,
+  /** Gap ids per update, to keep the request URL short. */
+  resolveChunkSize: 200,
+};
+export type HolidayGapsConfig = typeof HOLIDAY_GAPS_CONFIG;

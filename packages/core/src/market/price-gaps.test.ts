@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { vnDayBoundsUtc } from '../calendar';
-import { planPriceGaps, priceGapReadRange } from './price-gaps';
+import { SEEDED_HOLIDAY_DATES } from './holiday-calendar';
+import { holidayOnlyGapIds, planPriceGaps, priceGapReadRange } from './price-gaps';
 
 const W = { windowStart: '2026-10-19', windowEnd: '2026-10-27' }; // Mon .. next Tue
 const day = (d: string) => ({ id: 1, ...vnDayBoundsUtc(d) });
@@ -75,5 +76,29 @@ describe('priceGapReadRange', () => {
   test('extends to the earliest and latest open gap day', () => {
     const out = priceGapReadRange({ ...W, openGaps: [day('2026-10-05'), day('2026-10-30')] });
     expect(out).toEqual({ from: '2026-10-05', to: '2026-10-30' });
+  });
+});
+
+describe('holidayOnlyGapIds', () => {
+  const range = (id: number, from: string, to: string) => ({ id, fromTs: vnDayBoundsUtc(from).fromTs, toTs: vnDayBoundsUtc(to).toTs });
+  const H = [...SEEDED_HOLIDAY_DATES];
+  test('a Tet gap resolves', () => {
+    expect(holidayOnlyGapIds([range(1, '2026-02-16', '2026-02-20')], H)).toEqual([1]);
+  });
+  test('a single-day holiday gap resolves', () => {
+    expect(holidayOnlyGapIds([range(2, '2026-09-02', '2026-09-02')], H)).toEqual([2]);
+  });
+  test('a gap with a holiday plus real trading days stays open', () => {
+    expect(holidayOnlyGapIds([range(3, '2026-02-13', '2026-02-23')], H)).toEqual([]);
+  });
+  test('a weekend-only gap resolves', () => {
+    expect(holidayOnlyGapIds([range(4, '2026-10-24', '2026-10-25')], [])).toEqual([4]);
+  });
+  test('with no holidays a weekday gap is not returned', () => {
+    expect(holidayOnlyGapIds([range(5, '2026-09-02', '2026-09-02')], [])).toEqual([]);
+  });
+  test('output is sorted and unique', () => {
+    const g = range(7, '2026-09-02', '2026-09-02');
+    expect(holidayOnlyGapIds([g, range(6, '2026-09-01', '2026-09-01'), g], H)).toEqual([6, 7]);
   });
 });

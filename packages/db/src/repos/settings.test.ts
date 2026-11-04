@@ -1,4 +1,4 @@
-import { DEFAULT_SIGNAL_RULES, RowMappingError } from '@stoktok/core';
+import { DEFAULT_SIGNAL_RULES, RowMappingError, SEEDED_HOLIDAY_DATES, effectiveHolidays } from '@stoktok/core';
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
 import { DataError } from '../errors';
@@ -30,7 +30,8 @@ describe('settings repo', () => {
     f.respond({ data: row });
     const s = await getSettings(f.db);
     expect(f.methods('eq')[0]?.args).toEqual(['id', 1]);
-    expect(s).toMatchObject({ feeRatePpm: 1500, settlementDays: 2, holidays: ['2026-01-01'] });
+    expect(s).toMatchObject({ feeRatePpm: 1500, settlementDays: 2, holidays: effectiveHolidays(['2026-01-01']) });
+    expect(s.holidays).toEqual([...SEEDED_HOLIDAY_DATES]); // 2026-01-01 is already seeded
   });
 
   test('get with no row throws NOT_CONFIGURED', async () => {
@@ -79,7 +80,7 @@ describe('settings repo', () => {
     f.respond({ data: { ...row, fee_rate_ppm: null, settlement_days: 3, holidays: ['2026-09-02'] } });
     expect(await getEntrySettings(f.db)).toMatchObject({
       feeRateConfigured: false,
-      settings: { feeRatePpm: 0, settlementDays: 3, holidays: ['2026-09-02'] },
+      settings: { feeRatePpm: 0, settlementDays: 3, holidays: effectiveHolidays(['2026-09-02']) },
     });
   });
 
@@ -88,8 +89,18 @@ describe('settings repo', () => {
     f.respond({ data: null });
     expect(await getEntrySettings(f.db)).toMatchObject({
       feeRateConfigured: false,
-      settings: { feeRatePpm: 0, settlementDays: 2 },
+      settings: { feeRatePpm: 0, settlementDays: 2, holidays: [...SEEDED_HOLIDAY_DATES] },
     });
+  });
+
+  test('getEntrySettings: row with empty holidays gives the seed; stored dates are unioned', async () => {
+    const f = createFake();
+    f.respond({ data: { ...row, holidays: [] } });
+    expect((await getEntrySettings(f.db)).settings.holidays).toEqual([...SEEDED_HOLIDAY_DATES]);
+    f.respond({ data: { ...row, holidays: ['2026-10-20'] } });
+    const h = (await getEntrySettings(f.db)).settings.holidays;
+    expect(h).toEqual(effectiveHolidays(['2026-10-20']));
+    expect(h).toContain('2026-10-20');
   });
 });
 
@@ -128,6 +139,13 @@ const input = {
 };
 
 describe('getAppSettings', () => {
+  test('returns the raw stored holidays, not the seed', async () => {
+    const f = createFake();
+    f.respond({ data: { ...fullRow, holidays: ['2026-10-20'] } });
+    expect((await getAppSettings(f.db)).settings.holidays).toEqual(['2026-10-20']);
+    f.respond({ data: { ...fullRow, holidays: [] } });
+    expect((await getAppSettings(f.db)).settings.holidays).toEqual([]);
+  });
   test('no row gives defaults with source default', async () => {
     const f = createFake();
     f.respond({ data: null });

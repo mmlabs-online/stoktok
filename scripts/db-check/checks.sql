@@ -99,6 +99,14 @@ begin
   perform pg_temp.assert_col('data_gaps', 'fetched_at', 'timestamp with time zone', true);
 end $$;
 
+do $$ -- data_gaps_resolved_reason
+begin
+  perform pg_temp.assert_col('data_gaps', 'resolved_reason', 'text', false);
+  if not exists (select 1 from pg_constraint where conrelid = 'public.data_gaps'::regclass and conname = 'data_gaps_resolved_reason_check') then
+    raise exception 'data_gaps_resolved_reason_check missing';
+  end if;
+end $$;
+
 do $$ -- settings_columns
 declare n int;
 begin
@@ -266,6 +274,12 @@ begin
   perform pg_temp.expect_fail('cost_method FIFO', st || '(1,1000,50000,2,''reduceCost'',''FIFO'')', array['23514']);
   perform pg_temp.expect_fail('gap to<from',
     'insert into public.data_gaps (data_type, from_ts, to_ts, source, fetched_at) values (''prices'', ''2026-01-02'', ''2026-01-01'', ''x'', now())',
+    array['23514']);
+  perform pg_temp.expect_fail('gap bad resolved_reason',
+    'insert into public.data_gaps (data_type, from_ts, to_ts, source, fetched_at, resolved_at, resolved_reason) values (''prices'', ''2026-01-01'', ''2026-01-02'', ''x'', now(), now(), ''bogus'')',
+    array['23514']);
+  perform pg_temp.expect_fail('gap reason without resolved_at',
+    'insert into public.data_gaps (data_type, from_ts, to_ts, source, fetched_at, resolved_reason) values (''prices'', ''2026-01-01'', ''2026-01-02'', ''x'', now(), ''non_trading_day'')',
     array['23514']);
   perform pg_temp.expect_fail('symbols lowercase symbol', 'insert into public.symbols (symbol) values (''vnm'')', array['23514']);
   perform pg_temp.expect_fail('symbols exchange HSX', 'insert into public.symbols (symbol, exchange) values (''VNM'', ''HSX'')', array['23514']);

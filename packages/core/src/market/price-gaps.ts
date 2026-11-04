@@ -12,6 +12,9 @@ export interface PriceGapPlan {
   toResolve: number[];
 }
 
+/** Why a data gap was resolved (`data_gaps.resolved_reason`). */
+export type GapResolvedReason = 'data_stored' | 'non_trading_day';
+
 function gapDays(g: OpenGap, holidays: readonly string[]): string[] {
   return tradingDaysBetween(vnDateOf(new Date(g.fromTs)), vnDateOf(new Date(g.toTs)), holidays);
 }
@@ -64,4 +67,13 @@ export function planPriceGaps(input: {
     }
   }
   return { toRecord, toResolve };
+}
+
+/**
+ * Ids of open gaps whose days are all non-trading (holidays or weekends). Never looks at stored prices,
+ * so a gap that covers any real trading day is never returned (R4).
+ */
+export function holidayOnlyGapIds(openGaps: readonly OpenGap[], holidays: readonly string[]): number[] {
+  const ids = openGaps.filter((g) => gapDays(g, holidays).length === 0).map((g) => g.id);
+  return [...new Set(ids)].sort((a, b) => a - b);
 }
