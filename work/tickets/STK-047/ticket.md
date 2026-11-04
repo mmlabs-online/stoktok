@@ -7,7 +7,7 @@
 | Areas | ui |
 | Attempts | 1 |
 | Created | 2026-11-05 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/34 |
 
 ## Goal
 Ming can see and edit the market holiday calendar on `/settings`, so new or changed exchange holidays can be added without a code change.
