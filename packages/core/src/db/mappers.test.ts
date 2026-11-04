@@ -245,8 +245,9 @@ describe('settingsInputToRow', () => {
     concentrationThresholdPpm: null,
     cashDividendTreatment: 'reduceCost',
     signalRules: DEFAULT_SIGNAL_RULES,
+    holidays: ['2026-10-20'],
   };
-  it('keeps withholding, holidays, cost method and other rule_configs keys from the existing row', () => {
+  it('takes holidays from the input; keeps withholding, cost method and other rule_configs keys from the existing row', () => {
     const existing: SettingsFullRow = {
       id: 1,
       fee_rate_ppm: 1500,
@@ -262,7 +263,7 @@ describe('settingsInputToRow', () => {
     const row = settingsInputToRow(input, existing);
     expect(row).toMatchObject({
       dividend_withholding_rate_ppm: 40000,
-      holidays: ['2026-01-01'],
+      holidays: ['2026-10-20'],
       cost_method: 'WAC',
       settlement_days: 3,
       fee_rate_ppm: null,
@@ -284,8 +285,12 @@ describe('settingsInputToRow', () => {
     });
     expect(appSettingsFromRow(row).signalRules).toEqual(rules);
   });
+  it('strips seeded dates from input holidays; empty input gives []', () => {
+    expect(settingsInputToRow({ ...input, holidays: ['2026-11-24', '2026-10-20'] }, null).holidays).toEqual(['2026-10-20']);
+    expect(settingsInputToRow({ ...input, holidays: [] }, null).holidays).toEqual([]);
+  });
   it('without an existing row uses the defaults', () => {
-    expect(settingsInputToRow(input, null)).toMatchObject({
+    expect(settingsInputToRow({ ...input, holidays: [] }, null)).toMatchObject({
       dividend_withholding_rate_ppm: 50000,
       holidays: [],
       cost_method: 'WAC',

@@ -4,6 +4,7 @@ export function describeCore(): string {
 
 export {
   addTradingDays,
+  dayOfWeek,
   isTradingDay,
   isValidDate,
   previousTradingDay,
@@ -17,6 +18,20 @@ export { planBackfillChunks } from './market/backfill';
 export { PRICES_GAP_TYPE, holidayOnlyGapIds, planPriceGaps, priceGapReadRange } from './market/price-gaps';
 export { SEEDED_HOLIDAY_DATES, SEEDED_HOLIDAY_YEARS, VN_MARKET_HOLIDAYS, effectiveHolidays } from './market/holiday-calendar';
 export type { SeededHoliday } from './market/holiday-calendar';
+export {
+  HOLIDAY_EDITOR_BOUNDS,
+  HOLIDAY_NAMES_VI,
+  addUserHoliday,
+  checkNewHoliday,
+  holidayCalendarView,
+  holidayNameVi,
+  parseHolidayList,
+  removeUserHoliday,
+  splitHolidayList,
+  userHolidayDates,
+  vnWeekdayLabel,
+} from './market/holiday-editor';
+export type { HolidayCalendarView, HolidayRow } from './market/holiday-editor';
 export {
   CHART_GEOMETRY,
   CHART_RANGES,

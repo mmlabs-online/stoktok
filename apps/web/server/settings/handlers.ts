@@ -25,6 +25,7 @@ export function readSettingsForm(fd: FormData): SettingsFormRaw {
     lotSize: str(fd, 'lotSize'),
     concentrationThreshold: str(fd, 'concentrationThreshold'),
     cashDividendTreatment: str(fd, 'cashDividendTreatment'),
+    holidays: str(fd, 'holidays'),
     peEnabled: str(fd, 'peEnabled'),
     peMinPeers: str(fd, 'peMinPeers'),
     peDiscount: str(fd, 'peDiscount'),

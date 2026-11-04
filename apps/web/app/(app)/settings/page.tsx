@@ -1,6 +1,7 @@
-import { concentrationDefaultText, settingsToFormValues } from '@stoktok/core';
+import { concentrationDefaultText, settingsToFormValues, userHolidayDates } from '@stoktok/core';
 import { SettingsForm } from '../../../components/settings/settings-form';
 import { getAppSettings, getDb } from '../../../server/db';
+import { todayVn } from '../../../server/clock';
 import { saveSettingsAction } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -18,6 +19,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
         isDefault={source === 'default'}
         saved={saved === '1'}
         concentrationDefault={concentrationDefaultText()}
+        savedHolidays={userHolidayDates(settings.holidays)}
+        currentYear={Number(todayVn().slice(0, 4))}
       />
     </div>
   );

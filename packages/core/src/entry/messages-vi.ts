@@ -37,6 +37,12 @@ export type EntryErrorCode =
   | 'MA_LONG_NOT_ABOVE_SHORT'
   | 'EXCHANGE_INVALID'
   | 'WATCHLIST_DUPLICATE'
+  | 'HOLIDAY_DATE_INVALID'
+  | 'HOLIDAY_WEEKEND'
+  | 'HOLIDAY_DUPLICATE'
+  | 'HOLIDAY_SEEDED'
+  | 'HOLIDAY_YEAR_RANGE'
+  | 'HOLIDAY_TOO_MANY'
   | 'SAVE_FAILED';
 
 export type EntryParams = Record<string, string | number>;
@@ -122,6 +128,18 @@ export function entryMessage(code: EntryErrorCode, params: EntryParams = {}): st
       return 'Chọn sàn HOSE, HNX, UPCoM hoặc để trống.';
     case 'WATCHLIST_DUPLICATE':
       return 'Mã đã có trong danh sách theo dõi.';
+    case 'HOLIDAY_DATE_INVALID':
+      return `Ngày nghỉ không hợp lệ: ${p('value')}.`;
+    case 'HOLIDAY_WEEKEND':
+      return `Ngày ${day()} là Thứ Bảy hoặc Chủ Nhật, vốn không giao dịch.`;
+    case 'HOLIDAY_DUPLICATE':
+      return `Ngày ${day()} đã có trong danh sách.`;
+    case 'HOLIDAY_SEEDED':
+      return `Ngày ${day()} đã có trong lịch có sẵn.`;
+    case 'HOLIDAY_YEAR_RANGE':
+      return `Năm phải từ ${p('min')} đến ${p('max')}.`;
+    case 'HOLIDAY_TOO_MANY':
+      return `Tối đa ${p('max')} ngày do bạn thêm.`;
     case 'SAVE_FAILED':
       return 'Không lưu được, vui lòng thử lại.';
   }

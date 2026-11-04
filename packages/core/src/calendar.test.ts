@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addTradingDays, subtractTradingDays, previousTradingDay, tradingDaysBetween, vnDateOf, vnDayBoundsUtc, vnMinutesOf } from './calendar';
+import { addTradingDays, dayOfWeek, subtractTradingDays, previousTradingDay, tradingDaysBetween, vnDateOf, vnDayBoundsUtc, vnMinutesOf } from './calendar';
 
 describe('addTradingDays', () => {
   it('Mon+2 = Wed; Thu+2 = Mon; Fri+2 = Tue', () => {
@@ -88,5 +88,13 @@ describe('vnDayBoundsUtc', () => {
   });
   it('rejects an invalid date', () => {
     expect(() => vnDayBoundsUtc('2026-02-30')).toThrow(RangeError);
+  });
+});
+
+describe('dayOfWeek', () => {
+  it('0 = Sunday, 6 = Saturday; throws on invalid', () => {
+    expect(dayOfWeek('2026-10-25')).toBe(0);
+    expect(dayOfWeek('2026-10-24')).toBe(6);
+    expect(() => dayOfWeek('2026-02-30')).toThrow(RangeError);
   });
 });
