@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P2 |
 | Areas | data, finance |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-11-01 |
 | PR | — |
 
