@@ -81,3 +81,63 @@
 ### Open questions
 - Does CaleChip have anonymous sign-in or open sign-up enabled? It is safe either way because of the allowlist, but it widens who can hold a valid session.
 - Which signing mode does CaleChip use (the plan's D1)? It decides whether F7 applies.
+
+---
+
+# STK-004 security review, attempt 2
+
+**Verdict: F1 as I reported it is fixed, but there is one remaining 🟡 bypass of the same open-redirect class (CWE-601): dot-segments that normalise to `//host`.** I think it should be fixed before PASS. It is a two-line change with a test. I read code only and ran nothing. I opened no `.env` files. I also read Next 16.4.2's client router and action handler on disk.
+
+### F1 (tab and control characters): fixed
+`/home/user/stoktok/apps/web/server/auth/login-path.ts:4` now rejects these, so the WHATWG parser has nothing left to strip:
+- C0 control characters and DEL, by char code.
+- `\s`. In JS this includes U+00A0, U+1680, U+2000–200A, U+2028/2029, U+202F, U+205F, U+3000 and U+FEFF.
+- Backslash.
+
+The bypass forms I tried and why each fails:
+- **`/%09/evil.com`:** the searchParams arrive decoded as `"/\t/evil.com"`, which is rejected.
+- **Double-encoded `/%2509/...`:** it stays a literal `%09`, which browsers do not decode in Location.
+- **`/%2F/evil.com`:** the pathname stays `/%2F/evil.com`, so the redirect stays on the same origin.
+- **Unicode whitespace:** rejected. Other non-ASCII characters (U+200B, U+FF0F fullwidth solidus) are only percent-encoded in a path; they never affect the host.
+- **`//`, `/\`, `https:`, `javascript:`:** rejected.
+
+The new tests at `login-path.test.ts:17-21` and `actions.test.ts:40` cover these cases.
+
+### 🟡 F9 Open redirect through a dot-segment that collapses to `//evil.com` (CWE-601). Confidence medium.
+- **Where:** `/home/user/stoktok/apps/web/server/auth/login-path.ts:6,11`.
+- **Problem:** The sentinel check only compares the origin. For `/.//evil.com`, `/%2e//evil.com` or `/a/..//evil.com`, the origin is the sentinel, so the check passes, yet `new URL(...).pathname === '//evil.com'`. `safeNext` returns the raw string.
+- **A full-page 303/307 is safe:** the browser resolves the Location to `https://stoktok//evil.com`, which is the same origin.
+- **The client-side server-action path in Next is not safe in its fallback branches:**
+  - `server-action-reducer.js:131` resolves `x-action-redirect` into a same-origin URL.
+  - It then calls `completeHardNavigation` on two paths: when there is no flight data (`:269-274`, i.e. the internal RSC prefetch failed or returned non-RSC), and when the build ID does not match (`:170-173`, e.g. during a deploy).
+  - `app-router-state.js:322` then sets `canonicalUrl = createHrefFromUrl(url)`, which is `pathname + search + hash`, i.e. `"//evil.com"`.
+  - `app-router.js:259/261` runs `location.assign("//evil.com")`, a protocol-relative navigation to evil.com.
+  - The soft-navigation branch calls `history.pushState("//evil.com")` and throws SecurityError. That is broken, but it is not a redirect.
+- **Attack:** send Ming `/login?next=/.//evil.com`. He signs in, and whenever the fallback branch fires he lands off-site. The attacker cannot force that branch on demand; it is easiest to hit during deploys or on errors. That is why confidence is medium.
+- **Fix (one commit):**
+  ```ts
+  const u = new URL(raw, 'http://sentinel.invalid');
+  if (u.origin !== 'http://sentinel.invalid' || u.pathname.startsWith('//')) return '/';
+  ```
+  Simpler alternative: reject when `raw.split(/[?#]/)[0]` contains `//`, or any `.`/`%2e` segment.
+  - Do **not** switch to returning `u.pathname + u.search + u.hash` unless the `//` check is in place first. My attempt-1 suggestion would have made this worse.
+  - Add `'/.//evil.com'`, `'/%2e//evil.com'`, `'/%2E%2E//evil.com'` and `'/a/..//evil.com'` to `login-path.test.ts:18`.
+
+### 🟢 New and minor items
+- **N1 Entry-point test still misses some forms** (`/home/user/stoktok/apps/web/test/entrypoints.test.ts:5,30`):
+  - The split regex now matches `export const x = async `. It still misses `export const x = async(` (no space), `export const x: T = async`, `export default async function` and `export { x }`.
+  - The walk still covers only `app/`. Inline `'use server'` and `'use server'` files outside `app/` are not checked (the rest of F4).
+  - Not exploitable today. Follow-up.
+- **N2 Login-path variants are not excluded** (`login-path.ts:10`). `safeNext` allows `/./login`, `/%6Cogin` and `/login#x`. They are harmless: the login page redirects a signed-in user to `safeNext(next)` and there is no loop. No action needed.
+- **N3 Posting `next` directly.** `actions.ts:17` re-runs `safeNext` on the posted form value, so an attacker who posts a custom `next` only affects their own session. Next's Origin check covers CSRF. OK.
+- **Still open from attempt 1:** F2, F3 and F5–F8 are unchanged and remain follow-ups as recommended.
+
+### Recommendations
+1. Fix F9 and add the dot-segment tests. This belongs to AC3, the open-redirect guard, and is the condition for PASS.
+2. Track N1 (the entry-point test gaps) with F4 as an R6 follow-up.
+
+### Risks
+- My F9 trace is static. Nobody has run a real sign-in with `next=/.//evil.com` and a forced RSC-fallback to confirm it. The fix is cheap whatever the result.
+
+### Open questions
+- None new.
