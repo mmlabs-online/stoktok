@@ -3,6 +3,7 @@ import {
   DEFAULT_PRICE_CUTOFF_MINUTES_VN,
   PRICES_GAP_TYPE,
   expectedPriceDate,
+  holidayOnlyGapIds,
   normalizeSymbol,
   planBackfillChunks,
   planPriceGaps,
@@ -11,7 +12,7 @@ import {
   vnDateOf,
   vnDayBoundsUtc,
 } from '@stoktok/core';
-import type { Result } from '@stoktok/core';
+import type { GapResolvedReason, Result } from '@stoktok/core';
 import type { DataGapInsert, OpenGapRecord, PriceDailyInsert } from '@stoktok/db';
 import type { EodSyncConfig } from '../config';
 import type { PriceSource } from '../sources/price-source';
@@ -31,7 +32,7 @@ export interface EodStore {
   getFirstPriceDates(symbols: readonly string[]): Promise<Record<string, string>>;
   listOpenGaps(symbols: readonly string[]): Promise<OpenGapRecord[]>;
   insertGaps(rows: DataGapInsert[]): Promise<void>;
-  resolveGaps(ids: number[], resolvedAt: string): Promise<void>;
+  resolveGaps(ids: number[], resolvedAt: string, reason?: GapResolvedReason): Promise<void>;
 }
 
 export interface EodDeps {
@@ -217,7 +218,8 @@ export async function runEodSync(deps: EodDeps): Promise<EodSummary> {
   const openGaps = await store.listOpenGaps(symbols);
   const firstDates = await store.getFirstPriceDates(symbols);
   const gapRows: DataGapInsert[] = [];
-  const resolveIds: number[] = [];
+  const resolveData: number[] = [];
+  const resolveHoliday: number[] = [];
   const missingDates: Record<string, string[]> = {};
   for (const symbol of symbols) {
     const own = openGaps.filter((g) => g.symbol === symbol);
@@ -227,7 +229,8 @@ export async function runEodSync(deps: EodDeps): Promise<EodSummary> {
     const stored = firstDates[symbol];
     const firstStoredDate = [stored, ...fetched].filter((d): d is string => d !== undefined).sort()[0] ?? null;
     const plan = planPriceGaps({ windowStart: fromDate, windowEnd: targetDate, firstStoredDate, storedDates, openGaps: own, holidays });
-    resolveIds.push(...plan.toResolve);
+    const holidayOnly = new Set(holidayOnlyGapIds(own, holidays));
+    for (const id of plan.toResolve) (holidayOnly.has(id) ? resolveHoliday : resolveData).push(id);
     if (plan.toRecord.length > 0) {
       missingDates[symbol] = plan.toRecord;
       log(`missing ${symbol}: ${plan.toRecord.join(',')}`);
@@ -239,7 +242,8 @@ export async function runEodSync(deps: EodDeps): Promise<EodSummary> {
   }
   if (!deps.dryRun) {
     await store.insertGaps(gapRows);
-    await store.resolveGaps(resolveIds, fetchedAt);
+    await store.resolveGaps(resolveData, fetchedAt, 'data_stored');
+    await store.resolveGaps(resolveHoliday, fetchedAt, 'non_trading_day');
   }
 
   return {
@@ -264,7 +268,7 @@ export async function runEodSync(deps: EodDeps): Promise<EodSummary> {
     symbolsWithoutBars,
     missingDates,
     gapsRecorded: deps.dryRun ? 0 : gapRows.length,
-    gapsResolved: deps.dryRun ? 0 : resolveIds.length,
+    gapsResolved: deps.dryRun ? 0 : resolveData.length + resolveHoliday.length,
     requestsPlanned,
     requestsMade,
     ...(ledgerError !== undefined ? { ledgerError } : {}),

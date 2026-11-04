@@ -39,3 +39,5 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-043 | Deploy secrets from the deployment repo's GitHub Secrets | DONE | P1 | architecture, security | 1 | 2026-11-03 |
 | STK-044 | Run deploy and worker jobs as the runner's real user (mingming) | DONE | P1 | architecture, security | 1 | 2026-11-03 |
 | STK-045 | Self-install the Mac-side setup from deploy-stoktok | DONE | P1 | architecture, security | 1 | 2026-11-03 |
+| STK-046 | Seed the Vietnamese exchange holiday calendar and resolve false price gaps | DONE | P1 | data, finance, db | 0 | 2026-11-05 |
+| STK-047 | Holiday calendar editor on the Settings screen | BACKLOG | P2 | ui | 0 | 2026-11-05 |

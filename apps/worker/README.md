@@ -35,7 +35,27 @@ A run on a non-trading day or before the cutoff re-syncs up to the previous trad
 
 ### Holidays
 
-Holidays come from `settings.holidays`. They only shift the target date and the fetch window; an incomplete list cannot corrupt prices. Keep it current.
+The effective calendar is the seeded HOSE/HNX/UPCoM calendar (`VN_MARKET_HOLIDAYS` in `packages/core/src/market/holiday-calendar.ts`, 2025-2027) united with the dates in `settings.holidays`. Empty or unset `settings.holidays` therefore means the seed; dates stored there are kept and added. The seed is never written to the DB.
+
+- **Dates to be verified against the original notices on hsx.vn / hnx.vn before go-live.** The seed comes from secondary sources (news outlets and legal aggregators quoting the exchange notices).
+- Entries with `provisional: true` (every 2027 date and 2026-11-24, Culture Day) are not yet announced by the exchanges. The app uses them like official dates; fix the seed in code if one turns out wrong.
+- No 2024 dates are seeded: a `--backfill` reaching before 2025-01-02 (beyond about 455 trading days; the default 260 stays inside 2025) records false gaps on 2024 holidays.
+- Holidays only shift the target date and the fetch window; an incomplete list cannot corrupt prices.
+
+#### Resolving false holiday gaps (`resolve-holiday-gaps`)
+
+Open `prices_daily` gaps whose days are all weekends or holidays are resolved (never deleted) with `data_gaps.resolved_reason = 'non_trading_day'`. A gap that also covers a real trading day stays open (R4). The EOD gap step applies the same rule for synced symbols; this job also covers symbols no longer watched and market-wide gaps, needs no network and no price source.
+
+**Apply the migration `20261105000100_data_gaps_resolved_reason.sql` before the image with this code runs**, otherwise the EOD gap step's update fails with an unknown-column error (prices are already upserted before that step).
+
+First run: apply the migration, deploy, then
+
+```
+run-job.sh resolve-holiday-gaps --dry-run   # review the list of gaps
+run-job.sh resolve-holiday-gaps             # resolve them
+```
+
+(`pnpm worker:holiday-gaps [--dry-run]` from the repo root.) The job is idempotent.
 
 ### Backfill (one-off, manual, not scheduled)
 
@@ -46,7 +66,7 @@ pnpm worker:eod --backfill --dry-run    # default window (260 trading days), wri
 pnpm worker:eod --backfill 260          # real run
 ```
 
-Run `--dry-run` first and check in the summary: `requestsPlanned` (symbols x chunks; the run aborts with `abortReason: request_cap_exceeded` above `maxBackfillRequests`), the closes in VND, and `missingDates`. If the same date is missing for every symbol, the holiday list is incomplete: fix `settings.holidays` before the real run. Requests go newest chunk first, with the usual delay, retries and circuit breaker. Re-running is idempotent (upsert on `symbol,trade_date`; nothing is deleted; rejected bars are not written and the stored row is kept). Window, chunk size and caps are in `src/config.ts`.
+Run `--dry-run` first and check in the summary: `requestsPlanned` (symbols x chunks; the run aborts with `abortReason: request_cap_exceeded` above `maxBackfillRequests`), the closes in VND, and `missingDates`. If the same date is missing for every symbol, the calendar is incomplete: add it to `settings.holidays` (STK-047) or fix the seed before the real run. Requests go newest chunk first, with the usual delay, retries and circuit breaker. Re-running is idempotent (upsert on `symbol,trade_date`; nothing is deleted; rejected bars are not written and the stored row is kept). Window, chunk size and caps are in `src/config.ts`.
 
 After a backfill, MA rows whose window crosses a stored stock dividend or a beyond-limit move are suppressed by the STK-036 guards (`corporate_action_in_window`, `price_jump_beyond_limit`). That is expected, not a bug.
 

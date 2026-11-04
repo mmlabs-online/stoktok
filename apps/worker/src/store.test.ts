@@ -10,6 +10,7 @@ vi.mock('@stoktok/db', () => ({
   listCorporateActions: vi.fn(async () => []),
   listPriceDates: vi.fn(async () => []),
   getRecentCloses: vi.fn(async () => ({})),
+  listAllOpenGaps: vi.fn(async () => []),
   getSignalRules: vi.fn(),
   listOpenMarketGaps: vi.fn(async () => []),
   listSymbolSectors: vi.fn(async () => ({})),
@@ -29,7 +30,7 @@ vi.mock('@stoktok/db', () => ({
 }));
 
 import * as dbMock from '@stoktok/db';
-import { createDbEodStore, createDbFinancialsStore, createDbSignalsStore } from './store';
+import { createDbEodStore, createDbFinancialsStore, createDbHolidayGapsStore, createDbSignalsStore } from './store';
 
 describe('createDbEodStore', () => {
   test('listWatchlistSymbols reads listWatchlist', async () => {
@@ -43,8 +44,8 @@ describe('createDbEodStore', () => {
     expect(dbMock.listOpenGaps).toHaveBeenCalledWith(db, 'prices_daily', ['VNM']);
     await store.insertGaps([]);
     expect(dbMock.insertGaps).toHaveBeenCalledWith(db, []);
-    await store.resolveGaps([1], 'T');
-    expect(dbMock.resolveGaps).toHaveBeenCalledWith(db, [1], 'T');
+    await store.resolveGaps([1], 'T', 'non_trading_day');
+    expect(dbMock.resolveGaps).toHaveBeenCalledWith(db, [1], 'T', 'non_trading_day');
     await store.listPriceDates('VNM', 'a', 'b');
     expect(dbMock.listPriceDates).toHaveBeenCalledWith(db, 'VNM', 'a', 'b');
     await store.getFirstPriceDates(['VNM']);
@@ -108,5 +109,18 @@ describe('createDbSignalsStore', () => {
     expect(dbMock.listSymbolSectors).toHaveBeenCalledWith(db, ['A']);
     expect(await store.upsertSignals([])).toBe(7);
     expect(dbMock.upsertSignals).toHaveBeenCalledWith(db, [], { chunkSize: 3 });
+  });
+});
+
+describe('createDbHolidayGapsStore', () => {
+  test('reads effective holidays, all open prices_daily gaps, and passes the reason', async () => {
+    const db = {} as Db;
+    vi.mocked(dbMock.getEntrySettings).mockResolvedValueOnce({ settings: { holidays: ['2026-09-02'] }, feeRateConfigured: true } as never);
+    const store = createDbHolidayGapsStore(db, { pageSize: 50, resolveChunkSize: 10 });
+    expect(await store.getHolidays()).toEqual(['2026-09-02']);
+    await store.listAllOpenGaps();
+    expect(dbMock.listAllOpenGaps).toHaveBeenCalledWith(db, 'prices_daily', { pageSize: 50 });
+    await store.resolveGaps([1], 'T', 'non_trading_day');
+    expect(dbMock.resolveGaps).toHaveBeenCalledWith(db, [1], 'T', 'non_trading_day');
   });
 });

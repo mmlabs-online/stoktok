@@ -14,7 +14,9 @@ export {
   vnMinutesOf,
 } from './calendar';
 export { planBackfillChunks } from './market/backfill';
-export { PRICES_GAP_TYPE, planPriceGaps, priceGapReadRange } from './market/price-gaps';
+export { PRICES_GAP_TYPE, holidayOnlyGapIds, planPriceGaps, priceGapReadRange } from './market/price-gaps';
+export { SEEDED_HOLIDAY_DATES, SEEDED_HOLIDAY_YEARS, VN_MARKET_HOLIDAYS, effectiveHolidays } from './market/holiday-calendar';
+export type { SeededHoliday } from './market/holiday-calendar';
 export {
   CHART_GEOMETRY,
   CHART_RANGES,
@@ -37,7 +39,7 @@ export type {
   ChartXLabel,
   SlotKind,
 } from './market/chart-series';
-export type { PriceGapPlan } from './market/price-gaps';
+export type { GapResolvedReason, PriceGapPlan } from './market/price-gaps';
 export {
   DEFAULT_FINANCIALS_PUBLISH_LAG_DAYS,
   DEFAULT_FINANCIALS_SANITY,

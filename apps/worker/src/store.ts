@@ -7,6 +7,7 @@ import {
   getSignalRules,
   getSymbolExchanges,
   insertGaps,
+  listAllOpenGaps,
   listCorporateActions,
   listFinancials,
   listHeldSymbols,
@@ -22,10 +23,12 @@ import {
   upsertSignals,
 } from '@stoktok/db';
 import type { Db } from '@stoktok/db';
+import type { HolidayGapsConfig } from './config';
 import { PRICES_GAP_TYPE } from './jobs/eod-sync';
 import type { EodStore } from './jobs/eod-sync';
 import { FINANCIALS_GAP_TYPE } from './jobs/financials-sync';
 import type { FinancialsStore } from './jobs/financials-sync';
+import type { HolidayGapsStore } from './jobs/resolve-holiday-gaps';
 import type { SignalsStore } from './jobs/medium-signals';
 
 /** Wiring only: all reads and writes go through @stoktok/db. */
@@ -43,7 +46,16 @@ export function createDbEodStore(db: Db, opts: { upsertChunkSize: number }): Eod
     getFirstPriceDates: (symbols) => getFirstPriceDates(db, symbols),
     listOpenGaps: (symbols) => listOpenGaps(db, PRICES_GAP_TYPE, symbols),
     insertGaps: (rows) => insertGaps(db, rows),
-    resolveGaps: (ids, resolvedAt) => resolveGaps(db, ids, resolvedAt),
+    resolveGaps: (ids, resolvedAt, reason) => resolveGaps(db, ids, resolvedAt, reason),
+  };
+}
+
+/** Wiring only. Holidays are the effective list (seed plus stored). */
+export function createDbHolidayGapsStore(db: Db, cfg: HolidayGapsConfig): HolidayGapsStore {
+  return {
+    getHolidays: async () => (await getEntrySettings(db)).settings.holidays,
+    listAllOpenGaps: () => listAllOpenGaps(db, PRICES_GAP_TYPE, { pageSize: cfg.pageSize }),
+    resolveGaps: (ids, resolvedAt, reason) => resolveGaps(db, ids, resolvedAt, reason),
   };
 }
 

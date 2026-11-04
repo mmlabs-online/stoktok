@@ -17,6 +17,12 @@ describe('parseArgs', () => {
     expect(parseArgs(['signals'])).toEqual({ ok: true, job: 'signals', dryRun: false });
     expect(parseArgs(['signals', '--dry-run'])).toEqual({ ok: true, job: 'signals', dryRun: true });
   });
+  test('resolve-holiday-gaps parses with and without --dry-run; --backfill and --source give usage', () => {
+    expect(parseArgs(['resolve-holiday-gaps'])).toEqual({ ok: true, job: 'resolve-holiday-gaps', dryRun: false });
+    expect(parseArgs(['resolve-holiday-gaps', '--dry-run'])).toEqual({ ok: true, job: 'resolve-holiday-gaps', dryRun: true });
+    expect(parseArgs(['resolve-holiday-gaps', '--backfill'])).toMatchObject({ ok: false });
+    expect(parseArgs(['resolve-holiday-gaps', '--source', 'vci-public'])).toMatchObject({ ok: false });
+  });
   test('unknown job, no job or unknown flag -> usage error', () => {
     for (const argv of [['nope'], [], ['eod-prices', '--wat'], ['financials', '--wat'], ['signals', '--wat']]) {
       expect(parseArgs(argv)).toMatchObject({ ok: false });
