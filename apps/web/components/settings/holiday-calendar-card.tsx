@@ -1,6 +1,6 @@
 'use client';
 
-import { addUserHoliday, entryMessage, formatDate, holidayCalendarView, isValidDate, removeUserHoliday, splitHolidayList } from '@stoktok/core';
+import { addUserHoliday, entryMessage, formatDate, holidayCalendarView, isValidDate, removeUserHoliday, splitHolidayList, userHolidayDates } from '@stoktok/core';
 import type { HolidayRow } from '@stoktok/core';
 import { useState } from 'react';
 import type { FormMessage } from '../../server/transactions/handlers';
@@ -36,7 +36,7 @@ export function HolidayCalendarCard({
   currentYear: number;
   error?: FormMessage;
 }) {
-  const [current, setCurrent] = useState(() => splitHolidayList(initialHolidays));
+  const [current, setCurrent] = useState(() => userHolidayDates(splitHolidayList(initialHolidays)));
   const [draft, setDraft] = useState('');
   const [addError, setAddError] = useState<string | null>(null);
   const view = holidayCalendarView(savedHolidays, current);

@@ -44,3 +44,23 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No.
 - Diff size: not measured (directory is not a git repo); roughly +650 lines including tests.
+
+## Attempt 2 (REWORK) — 2026-11-04
+
+### Files touched
+- apps/web/components/settings/holiday-calendar-card.tsx: state now starts from `userHolidayDates(splitHolidayList(initialHolidays))`, so the hidden input never holds the seed (review Issue 1).
+- apps/web/components/settings/holiday-calendar-card.test.tsx: "hidden input holds user dates only" now asserts `value="2026-10-20"` and that no `2026-11-24` is in the value.
+- packages/db/src/repos/settings.ts: fixed the stale doc comment (review nit). Not in the plan's file list; comment-only change, logged here as an out-of-plan file.
+
+### Checks
+- typecheck: pass; lint: pass
+- test: core 539, db 121 (+1 todo), worker 236, web 226, all passed
+
+### Out-of-plan files
+- packages/db/src/repos/settings.ts (comment only, nit from review)
+
+### Follow-ups
+None new. Manual browser check still not run.
+
+### Scope self-check
+Diff is 3 files, about 6 lines.

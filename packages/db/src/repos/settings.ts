@@ -128,8 +128,8 @@ export async function getSignalRules(db: Db): Promise<SignalRules> {
 }
 
 /**
- * Saves the settings form. Read-modify-write so withholding, holidays and other rule_configs keys
- * are kept; not atomic, acceptable for a single user.
+ * Saves the settings form. Read-modify-write so withholding, cost method and other rule_configs keys
+ * are kept (holidays come from the input); not atomic, acceptable for a single user.
  */
 export async function saveAppSettings(db: Db, input: SettingsInput): Promise<AppSettings> {
   const ctx = { table: 'settings', op: 'save' };

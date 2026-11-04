@@ -41,7 +41,8 @@ describe('HolidayCalendarCard', () => {
   it('hidden input holds user dates only', () => {
     const out = render({ savedHolidays: ['2026-10-20'], initialHolidays: '2026-11-24,2026-10-20' });
     expect(out).toContain('name="holidays"');
-    expect(out).toMatch(/<input type="hidden" name="holidays" value="2026-11-24,2026-10-20"/);
+    expect(out).toMatch(/<input type="hidden" name="holidays" value="2026-10-20"/);
+    expect(out).not.toMatch(/name="holidays" value="[^"]*2026-11-24/);
   });
 
   it('server error renders as an alert', () => {
