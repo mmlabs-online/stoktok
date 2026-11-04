@@ -57,6 +57,15 @@ describe('normalizeQuarterlyFinancials', () => {
     expect(norm({ revenue: 0.0001 })).toMatchObject({ ok: false, reason: 'revenue_out_of_band' });
     expect(norm({ revenue: 0 })).toMatchObject({ ok: true, value: { revenue: 0 } });
   });
+  test('rejectZeroRevenue: revenue 0 -> zero_revenue', () => {
+    const raw = { year: 2026, quarter: 3, eps: 1500, bvps: 25300, revenue: 0, netIncome: 98.5 };
+    const units = { perShare: 'VND', totals: 'BILLION_VND' } as const;
+    expect(normalizeQuarterlyFinancials('TSTA', raw, units, { ...S, rejectZeroRevenue: true })).toEqual({ ok: false, reason: 'zero_revenue', period: '2026Q3' });
+  });
+  test('rejectZeroRevenue unset: revenue 0 still accepted (TCBS unchanged)', () => {
+    expect(norm({ revenue: 0 })).toMatchObject({ ok: true, value: { revenue: 0 } });
+    expect(S.rejectZeroRevenue).toBeUndefined();
+  });
   test('wrong unit per-share: bvps 25.3 (thousand VND) -> bvps_out_of_band', () => {
     expect(norm({ bvps: 25.3 })).toMatchObject({ ok: false, reason: 'bvps_out_of_band', period: '2026Q3' });
   });

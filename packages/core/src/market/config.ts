@@ -52,6 +52,8 @@ export interface FinancialsSanity {
   minNonZeroRevenueVnd: number;
   /** Highest plausible |revenue| and |net income|. With the safe-integer check, guards raw VND or millions read as billions. */
   maxAbsTotalVnd: number;
+  /** Reject revenue 0 as `zero_revenue`. Off by default (TCBS unchanged); on for sources whose "not applicable" column reads 0 (STK-042). */
+  rejectZeroRevenue?: boolean;
 }
 
 export const DEFAULT_FINANCIALS_SANITY: FinancialsSanity = {

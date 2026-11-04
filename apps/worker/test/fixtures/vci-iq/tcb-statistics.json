@@ -1,0 +1,226 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": [
+  {
+   "year": "2022",
+   "quarter": 2,
+   "organCode": "TCB",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 3517238514,
+   "pe": 4.3885697734,
+   "pb": 0.8591419325,
+   "marketCap": 88986134404200.0
+  },
+  {
+   "year": "2022",
+   "quarter": 3,
+   "organCode": "TCB",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 3517238514,
+   "pe": 4.6050342182,
+   "pb": 0.8981549631,
+   "marketCap": 97779230689200.0
+  },
+  {
+   "year": "2022",
+   "quarter": 4,
+   "organCode": "TCB",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 3517238514,
+   "pe": 5.0385353485,
+   "pb": 0.9051804774,
+   "marketCap": 101648193054600.0
+  },
+  {
+   "year": "2022",
+   "quarter": 5,
+   "organCode": "TCB",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 3517238514,
+   "pe": 5.5611618806,
+   "pb": 0.9960117324,
+   "marketCap": 101648193054600.0
+  },
+  {
+   "year": "2023",
+   "quarter": 1,
+   "organCode": "TCB",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 3517238514,
+   "pe": 5.8110753933,
+   "pb": 0.9531244902,
+   "marketCap": 111320598968100.0
+  },
+  {
+   "year": "2023",
+   "quarter": 2,
+   "organCode": "TCB",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 3517238514,
+   "pe": 6.4222572428,
+   "pb": 0.9427913607,
+   "marketCap": 114310251705000.0
+  },
+  {
+   "year": "2023",
+   "quarter": 3,
+   "organCode": "TCB",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 3522510811,
+   "pe": 7.1247900953,
+   "pb": 0.9693953468,
+   "marketCap": 122054999601150.0
+  },
+  {
+   "year": "2023",
+   "quarter": 4,
+   "organCode": "TCB",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 3522510811,
+   "pe": 9.2616863103,
+   "pb": 1.2814120995,
+   "marketCap": 166967012441400.0
+  },
+  {
+   "year": "2023",
+   "quarter": 5,
+   "organCode": "TCB",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 3522510811,
+   "pe": 4.8228641495,
+   "pb": 0.6663883577,
+   "marketCap": 166967012441400.0
+  },
+  {
+   "year": "2024",
+   "quarter": 1,
+   "organCode": "TCB",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 7045021622,
+   "pe": 8.1382371231,
+   "pb": 1.1767518385,
+   "marketCap": 160626492981600.0
+  },
+  {
+   "year": "2024",
+   "quarter": 2,
+   "organCode": "TCB",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 7045021622,
+   "pe": 7.9891802171,
+   "pb": 1.2506132202,
+   "marketCap": 171546276495700.0
+  },
+  {
+   "year": "2024",
+   "quarter": 3,
+   "organCode": "TCB",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 7064851739,
+   "pe": 7.3616543745,
+   "pb": 1.1648980259,
+   "marketCap": 166730501040400.0
+  },
+  {
+   "year": "2024",
+   "quarter": 4,
+   "organCode": "TCB",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 7064851739,
+   "pe": 8.512548075,
+   "pb": 1.2631495845,
+   "marketCap": 183686145214000.0
+  },
+  {
+   "year": "2024",
+   "quarter": 5,
+   "organCode": "TCB",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 7064851739,
+   "pe": 11.4750384201,
+   "pb": 1.6955353944,
+   "marketCap": 183686145214000.0
+  },
+  {
+   "year": "2025",
+   "quarter": 1,
+   "organCode": "TCB",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 7064851739,
+   "pe": 11.6477870099,
+   "pb": 1.6382492399,
+   "marketCap": 247976296038900.0
+  },
+  {
+   "year": "2025",
+   "quarter": 2,
+   "organCode": "TCB",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 7086240414,
+   "pe": 13.5226658764,
+   "pb": 1.831859987,
+   "marketCap": 289118608891200.0
+  },
+  {
+   "year": "2025",
+   "quarter": 3,
+   "organCode": "TCB",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 7086240414,
+   "pe": 11.7340730437,
+   "pb": 1.574749298,
+   "marketCap": 258647775111000.0
+  },
+  {
+   "year": "2025",
+   "quarter": 4,
+   "organCode": "TCB",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 7086240414,
+   "pe": 8.9041391191,
+   "pb": 1.327280517,
+   "marketCap": 225696757185900.0
+  },
+  {
+   "year": "2025",
+   "quarter": 5,
+   "organCode": "TCB",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 7086240414,
+   "pe": 5.9962105746,
+   "pb": 0.8917991525,
+   "marketCap": 225696757185900.0
+  },
+  {
+   "year": "2026",
+   "quarter": 1,
+   "organCode": "TCB",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 7086240414,
+   "pe": 8.7583677899,
+   "pb": 1.2898956006,
+   "marketCap": 228176941330800.0
+  },
+  {
+   "year": "2026",
+   "quarter": 2,
+   "organCode": "TCB",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 7086240414,
+   "pe": 8.6175321086,
+   "pb": 1.3052186578,
+   "marketCap": 233845933662000.0
+  },
+  {
+   "year": "2026",
+   "quarter": 3,
+   "organCode": "TCB",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 10629360621,
+   "pe": 7.9426085615,
+   "pb": 1.215842643,
+   "marketCap": 227468317289400.0
+  }
+ ]
+}

@@ -52,4 +52,18 @@ describe('deriveVciIqQuarter', () => {
     const big = ni({ '2025Q4': 2 ** 52, '2026Q1': 2 ** 52, '2026Q2': 2 ** 52, '2026Q3': 2 ** 52 });
     expect(deriveVciIqQuarter({ ...base, netIncomeByPeriod: big, shares: 1 })).toEqual({ reason: 'invalid_amount' });
   });
+  test('bank-scale amounts (VCB 2026Q3) derive EPS 4,986 / BVPS 30,359 through the BigInt path', () => {
+    // TTM 41,661,194,000,000 / 8,355,675,094 = 4985.98 -> 4986; (253,761,146,000,000 - 92,442,000,000) / 8,355,675,094 = 30358.85 -> 30359
+    const out = deriveVciIqQuarter({
+      period: '2026Q3',
+      netIncomeByPeriod: ni({ '2025Q4': 8_629_050_000_000, '2026Q1': 9_456_566_000_000, '2026Q2': 14_542_276_000_000, '2026Q3': 9_033_302_000_000 }),
+      equity: 253_761_146_000_000,
+      minority: 92_442_000_000,
+      shares: 8_355_675_094,
+    });
+    expect(out).toEqual({ eps: 4986, bvps: 30_359 });
+  });
+  test('minority 0 -> BVPS = equity / shares', () => {
+    expect(deriveVciIqQuarter({ ...base, equity: 3_076_644_073_949, minority: 0, shares: 150_547_626 }).bvps).toBe(20_436);
+  });
 });

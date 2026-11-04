@@ -51,6 +51,11 @@ export const VCI_CONFIG = {
 export const VCI_IQ_CONFIG = {
   baseUrl: 'https://iq.vietcap.com.vn/api/iq-insight-service/v1/company',
   userAgent: 'stoktok/0.1 (personal portfolio tracker; low-volume daily financials check)',
+  /**
+   * Company types with a mapping (VCI_IQ_FIELDS_BY_COMPANY_TYPE) that are enabled. NH, CK, BH were enabled after the
+   * STK-042 offline cross-check (derived TTM parent NI and parent equity within 3% of marketCap/pe and marketCap/pb).
+   */
+  supportedCompanyTypes: ['CT', 'NH', 'CK', 'BH'] as readonly string[],
 };
 
 export const FINANCIALS_SYNC_CONFIG = {

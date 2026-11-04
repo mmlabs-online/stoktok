@@ -70,6 +70,7 @@ export function normalizeQuarterlyFinancials(
 
   if (Math.abs(eps) > sanity.maxAbsEpsVnd) return fail('eps_out_of_band');
   if (Math.abs(bvps) < sanity.minAbsBvpsVnd || Math.abs(bvps) > sanity.maxAbsBvpsVnd) return fail('bvps_out_of_band');
+  if (revenue === 0 && sanity.rejectZeroRevenue) return fail('zero_revenue');
   if (revenue < 0) return fail('negative_revenue');
   if (revenue !== 0 && revenue < sanity.minNonZeroRevenueVnd) return fail('revenue_out_of_band');
   if (revenue > sanity.maxAbsTotalVnd) return fail('revenue_out_of_band');

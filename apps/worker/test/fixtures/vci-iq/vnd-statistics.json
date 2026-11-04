@@ -1,0 +1,226 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": [
+  {
+   "year": "2022",
+   "quarter": 2,
+   "organCode": "VND",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 1217821331,
+   "pe": 4.6557990203,
+   "pb": 1.163175777,
+   "marketCap": 16927716500900.0
+  },
+  {
+   "year": "2022",
+   "quarter": 3,
+   "organCode": "VND",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 1217821331,
+   "pe": 7.1217464264,
+   "pb": 1.2432657863,
+   "marketCap": 18145537831900.0
+  },
+  {
+   "year": "2022",
+   "quarter": 4,
+   "organCode": "VND",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 1217821331,
+   "pe": 13.5555003528,
+   "pb": 1.245956546,
+   "marketCap": 18084646765350.0
+  },
+  {
+   "year": "2022",
+   "quarter": 5,
+   "organCode": "VND",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 1217821331,
+   "pe": 22.803576564,
+   "pb": 1.8668720129,
+   "marketCap": 18084646765350.0
+  },
+  {
+   "year": "2023",
+   "quarter": 1,
+   "organCode": "VND",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 1217844009,
+   "pe": 36.1527132537,
+   "pb": 1.4630409096,
+   "marketCap": 21434054558400.0
+  },
+  {
+   "year": "2023",
+   "quarter": 2,
+   "organCode": "VND",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 1217844009,
+   "pe": 47.2249229859,
+   "pb": 1.780772762,
+   "marketCap": 26853460398450.0
+  },
+  {
+   "year": "2023",
+   "quarter": 3,
+   "organCode": "VND",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 1217844009,
+   "pe": 22.7794553791,
+   "pb": 1.6889897866,
+   "marketCap": 26548999396200.0
+  },
+  {
+   "year": "2023",
+   "quarter": 4,
+   "organCode": "VND",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 1217844009,
+   "pe": 13.2186759557,
+   "pb": 1.6193341558,
+   "marketCap": 26731675997550.0
+  },
+  {
+   "year": "2023",
+   "quarter": 5,
+   "organCode": "VND",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 1217844009,
+   "pe": 8.3543360978,
+   "pb": 0.9295494471,
+   "marketCap": 26731675997550.0
+  },
+  {
+   "year": "2024",
+   "quarter": 1,
+   "organCode": "VND",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 1522305010,
+   "pe": 8.5881559558,
+   "pb": 1.2802238239,
+   "marketCap": 25041917414500.0
+  },
+  {
+   "year": "2024",
+   "quarter": 2,
+   "organCode": "VND",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 1522299908,
+   "pe": 8.3927942961,
+   "pb": 1.1695262716,
+   "marketCap": 23062843606200.0
+  },
+  {
+   "year": "2024",
+   "quarter": 3,
+   "organCode": "VND",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 1522299908,
+   "pe": 6.5515467739,
+   "pb": 0.8798856586,
+   "marketCap": 17125873965000.0
+  },
+  {
+   "year": "2024",
+   "quarter": 4,
+   "organCode": "VND",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 1522299908,
+   "pe": 12.1638406346,
+   "pb": 1.1582256687,
+   "marketCap": 22834498620000.0
+  },
+  {
+   "year": "2024",
+   "quarter": 5,
+   "organCode": "VND",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 1522299908,
+   "pe": 17.994580529,
+   "pb": 1.501832617,
+   "marketCap": 22834498620000.0
+  },
+  {
+   "year": "2025",
+   "quarter": 1,
+   "organCode": "VND",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 1522299908,
+   "pe": 17.4853027844,
+   "pb": 1.3520547302,
+   "marketCap": 27173053357800.0
+  },
+  {
+   "year": "2025",
+   "quarter": 2,
+   "organCode": "VND",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 1522299908,
+   "pe": 23.4550962379,
+   "pb": 1.810612815,
+   "marketCap": 35545702851800.0
+  },
+  {
+   "year": "2025",
+   "quarter": 3,
+   "organCode": "VND",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 1522299908,
+   "pe": 16.2365380964,
+   "pb": 1.5251939166,
+   "marketCap": 31359378104800.0
+  },
+  {
+   "year": "2025",
+   "quarter": 4,
+   "organCode": "VND",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 1522299908,
+   "pe": 12.6476572989,
+   "pb": 1.2234966444,
+   "marketCap": 25574638454400.0
+  },
+  {
+   "year": "2025",
+   "quarter": 5,
+   "organCode": "VND",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 1522299908,
+   "pe": 10.5441174425,
+   "pb": 0.9503947148,
+   "marketCap": 25574638454400.0
+  },
+  {
+   "year": "2026",
+   "quarter": 1,
+   "organCode": "VND",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 1522299908,
+   "pe": 12.3322922765,
+   "pb": 1.2562664041,
+   "marketCap": 26944708371600.0
+  },
+  {
+   "year": "2026",
+   "quarter": 2,
+   "organCode": "VND",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 1522299908,
+   "pe": 7.3324903243,
+   "pb": 0.9233754983,
+   "marketCap": 19789898804000.0
+  },
+  {
+   "year": "2026",
+   "quarter": 3,
+   "organCode": "VND",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 1522299908,
+   "pe": 9.4629721929,
+   "pb": 0.9128937901,
+   "marketCap": 19866013799400.0
+  }
+ ]
+}

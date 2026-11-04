@@ -1,0 +1,226 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": [
+  {
+   "year": "2022",
+   "quarter": 2,
+   "organCode": "BMI",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 109623985,
+   "pe": 9.344887209,
+   "pb": 1.0368725626,
+   "marketCap": 2373359275250.0
+  },
+  {
+   "year": "2022",
+   "quarter": 3,
+   "organCode": "BMI",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 109623985,
+   "pe": 7.6786551618,
+   "pb": 1.1132669966,
+   "marketCap": 2630975640000.0
+  },
+  {
+   "year": "2022",
+   "quarter": 4,
+   "organCode": "BMI",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 109623985,
+   "pe": 9.0452130848,
+   "pb": 1.0871129103,
+   "marketCap": 2630975640000.0
+  },
+  {
+   "year": "2022",
+   "quarter": 5,
+   "organCode": "BMI",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 109623985,
+   "pe": 9.3302405223,
+   "pb": 0.9670775265,
+   "marketCap": 2630975640000.0
+  },
+  {
+   "year": "2023",
+   "quarter": 1,
+   "organCode": "BMI",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 109623985,
+   "pe": 9.4876796609,
+   "pb": 1.1252441361,
+   "marketCap": 2795411617500.0
+  },
+  {
+   "year": "2023",
+   "quarter": 2,
+   "organCode": "BMI",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 120586383,
+   "pe": 9.508712405,
+   "pb": 1.1495558039,
+   "marketCap": 2857897277100.0
+  },
+  {
+   "year": "2023",
+   "quarter": 3,
+   "organCode": "BMI",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 120585408,
+   "pe": 8.1330958025,
+   "pb": 1.0193833143,
+   "marketCap": 2628761894400.0
+  },
+  {
+   "year": "2023",
+   "quarter": 4,
+   "organCode": "BMI",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 120585408,
+   "pe": 8.6684090484,
+   "pb": 1.0790712555,
+   "marketCap": 2851844899200.0
+  },
+  {
+   "year": "2023",
+   "quarter": 5,
+   "organCode": "BMI",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 120585408,
+   "pe": 7.6971074002,
+   "pb": 0.9581605228,
+   "marketCap": 2851844899200.0
+  },
+  {
+   "year": "2024",
+   "quarter": 1,
+   "organCode": "BMI",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 120585408,
+   "pe": 9.7488718218,
+   "pb": 1.1813257969,
+   "marketCap": 3201542582400.0
+  },
+  {
+   "year": "2024",
+   "quarter": 2,
+   "organCode": "BMI",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 132642818,
+   "pe": 8.702113618,
+   "pb": 1.0419903463,
+   "marketCap": 2825292023400.0
+  },
+  {
+   "year": "2024",
+   "quarter": 3,
+   "organCode": "BMI",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 132642818,
+   "pe": 9.9198346721,
+   "pb": 0.9706565498,
+   "marketCap": 2672752782700.0
+  },
+  {
+   "year": "2024",
+   "quarter": 4,
+   "organCode": "BMI",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 132642818,
+   "pe": 11.4128812834,
+   "pb": 0.9730953538,
+   "marketCap": 2712545628100.0
+  },
+  {
+   "year": "2024",
+   "quarter": 5,
+   "organCode": "BMI",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 132642818,
+   "pe": 9.6549069048,
+   "pb": 0.8232053605,
+   "marketCap": 2712545628100.0
+  },
+  {
+   "year": "2025",
+   "quarter": 1,
+   "organCode": "BMI",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 132642818,
+   "pe": 12.2165704491,
+   "pb": 0.9769352658,
+   "marketCap": 2785499178000.0
+  },
+  {
+   "year": "2025",
+   "quarter": 2,
+   "organCode": "BMI",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 150549598,
+   "pe": 12.25306746,
+   "pb": 1.0300506621,
+   "marketCap": 2913134721300.0
+  },
+  {
+   "year": "2025",
+   "quarter": 3,
+   "organCode": "BMI",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 150547626,
+   "pe": 9.3560480406,
+   "pb": 0.9563230798,
+   "marketCap": 2800185843600.0
+  },
+  {
+   "year": "2025",
+   "quarter": 4,
+   "organCode": "BMI",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 150547626,
+   "pe": 9.2777214586,
+   "pb": 0.815160739,
+   "marketCap": 2386179872100.0
+  },
+  {
+   "year": "2025",
+   "quarter": 5,
+   "organCode": "BMI",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 150547626,
+   "pe": 7.9606947531,
+   "pb": 0.6994439148,
+   "marketCap": 2386179872100.0
+  },
+  {
+   "year": "2026",
+   "quarter": 1,
+   "organCode": "BMI",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 150547626,
+   "pe": 8.2051865849,
+   "pb": 0.6959796569,
+   "marketCap": 2070029857500.0
+  },
+  {
+   "year": "2026",
+   "quarter": 2,
+   "organCode": "BMI",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 150547626,
+   "pe": 6.9344420203,
+   "pb": 0.6677293106,
+   "marketCap": 2062502476200.0
+  },
+  {
+   "year": "2026",
+   "quarter": 3,
+   "organCode": "BMI",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 150547626,
+   "pe": 7.8598925199,
+   "pb": 0.66548085,
+   "marketCap": 2047447713600.0
+  }
+ ]
+}

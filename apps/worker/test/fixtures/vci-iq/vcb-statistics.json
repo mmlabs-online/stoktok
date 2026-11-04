@@ -1,0 +1,226 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": [
+  {
+   "year": "2022",
+   "quarter": 2,
+   "organCode": "VCB",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 4732516571,
+   "pe": 12.6164990464,
+   "pb": 2.5608871949,
+   "marketCap": 314712351971500.0
+  },
+  {
+   "year": "2022",
+   "quarter": 3,
+   "organCode": "VCB",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 4732516571,
+   "pe": 15.3718009025,
+   "pb": 3.165159651,
+   "marketCap": 406049921791800.0
+  },
+  {
+   "year": "2022",
+   "quarter": 4,
+   "organCode": "VCB",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 4732516571,
+   "pe": 13.9922493977,
+   "pb": 3.0861725944,
+   "marketCap": 418354464876400.0
+  },
+  {
+   "year": "2022",
+   "quarter": 5,
+   "organCode": "VCB",
+   "yearReport": 2022,
+   "numberOfSharesMktCap": 4732516571,
+   "pe": 14.2824498041,
+   "pb": 2.8033898286,
+   "marketCap": 418354464876400.0
+  },
+  {
+   "year": "2023",
+   "quarter": 1,
+   "organCode": "VCB",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 4732516571,
+   "pe": 15.9196918568,
+   "pb": 3.4045795148,
+   "marketCap": 492181723384000.0
+  },
+  {
+   "year": "2023",
+   "quarter": 2,
+   "organCode": "VCB",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 5589091262,
+   "pe": 14.8341412011,
+   "pb": 3.1642722225,
+   "marketCap": 480661848532000.0
+  },
+  {
+   "year": "2023",
+   "quarter": 3,
+   "organCode": "VCB",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 5589091262,
+   "pe": 14.7517020841,
+   "pb": 3.1152190054,
+   "marketCap": 495752394939400.0
+  },
+  {
+   "year": "2023",
+   "quarter": 4,
+   "organCode": "VCB",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 5589091262,
+   "pe": 16.0059572827,
+   "pb": 3.2059924698,
+   "marketCap": 528728033385200.0
+  },
+  {
+   "year": "2023",
+   "quarter": 5,
+   "organCode": "VCB",
+   "yearReport": 2023,
+   "numberOfSharesMktCap": 5589091262,
+   "pe": 16.7480098322,
+   "pb": 3.0907665458,
+   "marketCap": 528728033385200.0
+  },
+  {
+   "year": "2024",
+   "quarter": 1,
+   "organCode": "VCB",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 5589091262,
+   "pe": 15.0062199577,
+   "pb": 2.8217066513,
+   "marketCap": 489604394551200.0
+  },
+  {
+   "year": "2024",
+   "quarter": 2,
+   "organCode": "VCB",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 5589091262,
+   "pe": 15.3298773187,
+   "pb": 2.8130575347,
+   "marketCap": 510842941346800.0
+  },
+  {
+   "year": "2024",
+   "quarter": 3,
+   "organCode": "VCB",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 5589091262,
+   "pe": 14.8037078329,
+   "pb": 2.6948304678,
+   "marketCap": 512519668725400.0
+  },
+  {
+   "year": "2024",
+   "quarter": 4,
+   "organCode": "VCB",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 8355675094,
+   "pe": 14.8187989673,
+   "pb": 2.5563871002,
+   "marketCap": 501340505640000.0
+  },
+  {
+   "year": "2024",
+   "quarter": 5,
+   "organCode": "VCB",
+   "yearReport": 2024,
+   "numberOfSharesMktCap": 8355675094,
+   "pe": 10.3303411404,
+   "pb": 1.6387128959,
+   "marketCap": 501340505640000.0
+  },
+  {
+   "year": "2025",
+   "quarter": 1,
+   "organCode": "VCB",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 8355675094,
+   "pe": 15.3587834315,
+   "pb": 2.5453740784,
+   "marketCap": 521394125865600.0
+  },
+  {
+   "year": "2025",
+   "quarter": 2,
+   "organCode": "VCB",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 8355675094,
+   "pe": 15.2118214589,
+   "pb": 2.467880488,
+   "marketCap": 527243098431400.0
+  },
+  {
+   "year": "2025",
+   "quarter": 3,
+   "organCode": "VCB",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 8355675094,
+   "pe": 18.084851421,
+   "pb": 2.851781189,
+   "marketCap": 635031307144000.0
+  },
+  {
+   "year": "2025",
+   "quarter": 4,
+   "organCode": "VCB",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 8355675094,
+   "pe": 14.227919018,
+   "pb": 2.2295477291,
+   "marketCap": 500504938130600.0
+  },
+  {
+   "year": "2025",
+   "quarter": 5,
+   "organCode": "VCB",
+   "yearReport": 2025,
+   "numberOfSharesMktCap": 8355675094,
+   "pe": 12.7077406435,
+   "pb": 1.9913322804,
+   "marketCap": 500504938130600.0
+  },
+  {
+   "year": "2026",
+   "quarter": 1,
+   "organCode": "VCB",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 8355675094,
+   "pe": 13.7641484201,
+   "pb": 2.1143235586,
+   "marketCap": 494655965564800.0
+  },
+  {
+   "year": "2026",
+   "quarter": 2,
+   "organCode": "VCB",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 8355675094,
+   "pe": 11.2951424253,
+   "pb": 1.8937765608,
+   "marketCap": 470424507792200.0
+  },
+  {
+   "year": "2026",
+   "quarter": 3,
+   "organCode": "VCB",
+   "yearReport": 2026,
+   "numberOfSharesMktCap": 8355675094,
+   "pe": 10.7300961622,
+   "pb": 1.762253721,
+   "marketCap": 447028617529000.0
+  }
+ ]
+}
