@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P1 |
 | Areas | data, finance, db |
 | Attempts | 0 |
