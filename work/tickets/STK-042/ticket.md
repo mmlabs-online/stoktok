@@ -7,7 +7,7 @@
 | Areas | data, finance |
 | Attempts | 1 |
 | Created | 2026-11-01 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/32 |
 
 ## Goal
 Extend the `vci-iq` financials source to companies whose `comTypeCode` is not `CT` (banks `NH`, securities firms `CK`, insurers `BH`), which STK-039 rejects as `unsupported_company_type`. Today 7 of Ming's 11 watched symbols (SHB, TCB, TPB, VCB; AGR, BSI, VND) fall in this group.
