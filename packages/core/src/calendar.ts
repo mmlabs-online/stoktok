@@ -22,6 +22,11 @@ export function isValidDate(date: unknown): date is string {
   }
 }
 
+/** Day of week of a 'YYYY-MM-DD' date, 0 = Sunday .. 6 = Saturday (no time-zone dependence). */
+export function dayOfWeek(date: string): number {
+  return toUtc(date).getUTCDay();
+}
+
 export function isTradingDay(date: string, holidays: readonly string[]): boolean {
   const dow = toUtc(date).getUTCDay();
   return dow !== 0 && dow !== 6 && !holidays.includes(date);

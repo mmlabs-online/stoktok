@@ -29,6 +29,7 @@ const form = (o: Record<string, string> = {}) =>
     lotSize: '100',
     concentrationThreshold: '25',
     cashDividendTreatment: 'income',
+    holidays: '',
     ...signalRulesToFormValues(DEFAULT_SIGNAL_RULES),
     ...o,
   });
@@ -47,7 +48,27 @@ describe('handleSaveSettings', () => {
       concentrationThresholdPpm: 250000,
       cashDividendTreatment: 'income',
       signalRules: DEFAULT_SIGNAL_RULES,
+      holidays: [],
     });
+  });
+
+  it('saves holidays in the same single save as the other fields', async () => {
+    await handleSaveSettings(db, form({ holidays: '2026-10-20' }));
+    expect(saveAppSettings).toHaveBeenCalledTimes(1);
+    expect(saveAppSettings).toHaveBeenCalledWith(db, expect.objectContaining({ holidays: ['2026-10-20'], lotSize: 100, feeRatePpm: 1500 }));
+  });
+
+  it('seeded dates in the submitted list are not saved', async () => {
+    await handleSaveSettings(db, form({ holidays: '2026-11-24,2026-10-20' }));
+    expect(vi.mocked(saveAppSettings).mock.calls[0]?.[1].holidays).toEqual(['2026-10-20']);
+  });
+
+  it('invalid holiday list returns a Vietnamese error, echoes values and does not save', async () => {
+    const r = await handleSaveSettings(db, form({ holidays: '2026-10-24' }));
+    if (r.ok) throw new Error('expected failure');
+    expect(r.fieldErrors.holidays?.message).toContain('Thứ Bảy');
+    expect(r.values.holidays).toBe('2026-10-24');
+    expect(saveAppSettings).not.toHaveBeenCalled();
   });
 
   it('unchecked toggle saves enabled:false', async () => {

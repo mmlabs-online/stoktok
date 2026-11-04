@@ -40,6 +40,8 @@ The effective calendar is the seeded HOSE/HNX/UPCoM calendar (`VN_MARKET_HOLIDAY
 - **Dates to be verified against the original notices on hsx.vn / hnx.vn before go-live.** The seed comes from secondary sources (news outlets and legal aggregators quoting the exchange notices).
 - Entries with `provisional: true` (every 2027 date and 2026-11-24, Culture Day) are not yet announced by the exchanges. The app uses them like official dates; fix the seed in code if one turns out wrong.
 - No 2024 dates are seeded: a `--backfill` reaching before 2025-01-02 (beyond about 455 trading days; the default 260 stays inside 2025) records false gaps on 2024 holidays.
+- Dates are added in Cài đặt → "Lịch nghỉ giao dịch" (only dates you added can be removed there; seeded dates change only in code).
+- Removing a date does not re-open gaps already resolved because of it. To re-open them for date `D` (manual until a `reopen-holiday-gaps` job exists, follow-up): `update public.data_gaps set resolved_at = null, resolved_reason = null where data_type = 'prices_daily' and resolved_reason = 'non_trading_day' and from_ts <= 'D 23:59:59+07:00' and to_ts >= 'D 00:00:00+07:00';`. The next EOD run re-resolves any gap whose bar is stored.
 - Holidays only shift the target date and the fetch window; an incomplete list cannot corrupt prices.
 
 #### Resolving false holiday gaps (`resolve-holiday-gaps`)

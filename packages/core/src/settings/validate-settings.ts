@@ -3,6 +3,7 @@ import type { EntryError } from '../entry/messages-vi';
 import { formatRatePercentInput } from '../entry/parse-input';
 import { DEFAULT_CONCENTRATION_THRESHOLD_PPM } from '../portfolio/config';
 import type { SignalRules } from '../signals/config';
+import { parseHolidayList, userHolidayDates } from '../market/holiday-editor';
 import { readInteger, readPercent } from './read-fields';
 import { EXCHANGES } from './market-rules';
 import type { Exchange, MarketRules } from './market-rules';
@@ -19,6 +20,8 @@ export interface SettingsFormRaw extends SignalRulesFormRaw {
   lotSize: string;
   concentrationThreshold: string;
   cashDividendTreatment: string;
+  /** Comma-separated 'YYYY-MM-DD' dates the user added (never the seeded calendar). */
+  holidays: string;
 }
 
 export type SettingsField = keyof SettingsFormRaw;
@@ -32,6 +35,7 @@ export interface SettingsInput {
   concentrationThresholdPpm: number | null;
   cashDividendTreatment: 'reduceCost' | 'income';
   signalRules: SignalRules;
+  holidays: string[];
 }
 
 /** Stored settings as the settings screen sees them (fee and concentration may be unset). */
@@ -89,10 +93,13 @@ export function validateSettingsInput(raw: SettingsFormRaw): ValidateSettingsRes
   const treatment = CASH_DIVIDEND_TREATMENTS.find((t) => t.value === raw.cashDividendTreatment);
   if (!treatment) errors.cashDividendTreatment = { code: 'TREATMENT_INVALID' };
 
+  const holidays = parseHolidayList(raw.holidays);
+  if (!holidays.ok) errors.holidays = holidays.error;
+
   const signals = validateSignalRulesInput(raw);
   if (!signals.ok) Object.assign(errors, signals.errors);
 
-  if (!signals.ok || Object.keys(errors).length > 0 || 'error' in fee || 'error' in tax || 'error' in concentration || 'error' in days || 'error' in lot || !treatment) {
+  if (!signals.ok || !holidays.ok || Object.keys(errors).length > 0 || 'error' in fee || 'error' in tax || 'error' in concentration || 'error' in days || 'error' in lot || !treatment) {
     return { ok: false, errors };
   }
   return {
@@ -106,6 +113,7 @@ export function validateSettingsInput(raw: SettingsFormRaw): ValidateSettingsRes
       concentrationThresholdPpm: concentration.value,
       cashDividendTreatment: treatment.value,
       signalRules: signals.value,
+      holidays: holidays.value,
     },
   };
 }
@@ -122,6 +130,7 @@ export function settingsToFormValues(s: AppSettings): SettingsFormRaw {
     lotSize: String(s.marketRules.lotSize),
     concentrationThreshold: pct(s.concentrationThresholdPpm),
     cashDividendTreatment: s.cashDividendTreatment,
+    holidays: userHolidayDates(s.holidays).join(','),
     ...signalRulesToFormValues(s.signalRules),
   };
 }

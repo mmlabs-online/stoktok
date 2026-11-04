@@ -93,7 +93,7 @@ describe('runMediumSignals', () => {
   test('rules saved through the settings form drive the job', async () => {
     const raw = {
       feeRate: '', sellTaxRate: '0,1', priceLimitHOSE: '7', priceLimitHNX: '10', priceLimitUPCOM: '15',
-      settlementDays: '2', lotSize: '100', concentrationThreshold: '', cashDividendTreatment: 'reduceCost',
+      settlementDays: '2', lotSize: '100', concentrationThreshold: '', cashDividendTreatment: 'reduceCost', holidays: '',
       ...signalRulesToFormValues(DEFAULT_SIGNAL_RULES),
       peMinPeers: '8', maShortDays: '20', maLongDays: '100', maNeutralBand: '5', growthThreshold: '15',
     };

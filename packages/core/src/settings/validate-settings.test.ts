@@ -21,6 +21,7 @@ const valid: SettingsFormRaw = {
   lotSize: '100',
   concentrationThreshold: '25',
   cashDividendTreatment: 'income',
+  holidays: '',
   ...signalRulesToFormValues(DEFAULT_SIGNAL_RULES),
 };
 const run = (o: Partial<SettingsFormRaw>) => validateSettingsInput({ ...valid, ...o });
@@ -42,8 +43,16 @@ describe('validateSettingsInput', () => {
         concentrationThresholdPpm: 250000,
         cashDividendTreatment: 'income',
         signalRules: DEFAULT_SIGNAL_RULES,
+        holidays: [],
       },
     });
+  });
+
+  it('holidays: weekend gives errors.holidays; seeded dates are stripped', () => {
+    const r = run({ holidays: '2026-10-24' });
+    expect(r.ok).toBe(false);
+    expect(errorOf({ holidays: '2026-10-24' }, 'holidays')?.code).toBe('HOLIDAY_WEEKEND');
+    expect(run({ holidays: '2026-11-24,2026-10-20' })).toMatchObject({ ok: true, value: { holidays: ['2026-10-20'] } });
   });
 
   it('reports market and signal errors together', () => {
@@ -122,6 +131,7 @@ describe('settingsToFormValues', () => {
       lotSize: '100',
       concentrationThreshold: '',
       cashDividendTreatment: 'reduceCost',
+      holidays: '',
       peEnabled: 'on',
       peMinPeers: '5',
       peDiscount: '20',
@@ -141,6 +151,10 @@ describe('settingsToFormValues', () => {
       maNeutralBand: '2',
       financialsMaxFetchAgeDays: '7',
     });
+  });
+
+  it('stored holidays show user dates only', () => {
+    expect(settingsToFormValues({ ...appSettingsFromRow(null), holidays: ['2026-11-24', '2026-10-20'] }).holidays).toBe('2026-10-20');
   });
 
   it('stored settings round-trip through validateSettingsInput', () => {

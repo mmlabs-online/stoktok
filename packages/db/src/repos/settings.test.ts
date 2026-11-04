@@ -136,6 +136,7 @@ const input = {
   concentrationThresholdPpm: 250000,
   cashDividendTreatment: 'reduceCost' as const,
   signalRules: DEFAULT_SIGNAL_RULES,
+  holidays: ['2026-10-20'],
 };
 
 describe('getAppSettings', () => {
@@ -223,7 +224,7 @@ describe('saveAppSettings', () => {
     expect(call?.args[0]).toMatchObject({
       concentration_threshold_ppm: 250000,
       fee_rate_ppm: null,
-      holidays: ['2026-01-01'],
+      holidays: ['2026-10-20'], // from the input, not the existing row's ['2026-01-01']
       dividend_withholding_rate_ppm: 50000,
       rule_configs: { signals: { a: 1 }, market: { lotSize: 10 } },
     });

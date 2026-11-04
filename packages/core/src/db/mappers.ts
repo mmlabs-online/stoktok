@@ -2,6 +2,7 @@
 import { isValidDate } from '../calendar';
 import type { CorporateAction, LedgerSettings, Transaction } from '../ledger/types';
 import { DEFAULT_MARKET_SETTINGS } from '../ledger/settings';
+import { userHolidayDates } from '../market/holiday-editor';
 import { DEFAULT_MARKET_RULES, mergeRuleConfigs, parseMarketRules } from '../settings/market-rules';
 import { DEFAULT_SIGNAL_RULES, parseSignalRules } from '../signals/config';
 import { mergeSignalRules } from '../settings/signal-rules-form';
@@ -213,8 +214,9 @@ export function appSettingsFromRow(row: SettingsFullRow | null): AppSettings {
 }
 
 /**
- * Settings form input -> full row. Withholding, holidays and cost method are not on the form: they are
+ * Settings form input -> full row. Withholding and cost method are not on the form: they are
  * kept from the existing row (or the defaults), and rule_configs is merged so other namespaces survive.
+ * Holidays come from the input with the seeded dates stripped, so the seed is never written to the row.
  */
 export function settingsInputToRow(input: SettingsInput, existing: SettingsFullRow | null): SettingsFullRow {
   return {
@@ -224,7 +226,7 @@ export function settingsInputToRow(input: SettingsInput, existing: SettingsFullR
     dividend_withholding_rate_ppm:
       existing?.dividend_withholding_rate_ppm ?? DEFAULT_MARKET_SETTINGS.dividendWithholdingRatePpm,
     settlement_days: input.settlementDays,
-    holidays: existing ? [...existing.holidays] : [...DEFAULT_MARKET_SETTINGS.holidays],
+    holidays: userHolidayDates(input.holidays),
     cash_dividend_treatment: input.cashDividendTreatment,
     cost_method: existing?.cost_method ?? DEFAULT_MARKET_SETTINGS.costMethod,
     concentration_threshold_ppm: input.concentrationThresholdPpm,

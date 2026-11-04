@@ -10,9 +10,10 @@ import {
 } from '@stoktok/core';
 import type { SettingsField } from '@stoktok/core';
 import type { ReactNode } from 'react';
-import { startTransition, useActionState } from 'react';
+import { startTransition, useActionState, useState } from 'react';
 import type { SettingsFormState } from '../../server/settings/handlers';
 import type { FormMessage } from '../../server/transactions/handlers';
+import { HolidayCalendarCard } from './holiday-calendar-card';
 import { Field, FormBanner, describedBy, inputClass, primaryButtonClass } from '../transactions/form-fields';
 
 export type SettingsAction = (prev: SettingsFormState, formData: FormData) => Promise<SettingsFormState>;
@@ -73,6 +74,8 @@ export function SettingsForm({
   isDefault,
   saved,
   concentrationDefault,
+  savedHolidays,
+  currentYear,
 }: {
   action: SettingsAction;
   initial: SettingsFormState;
@@ -80,8 +83,11 @@ export function SettingsForm({
   isDefault: boolean;
   saved: boolean;
   concentrationDefault: string;
+  savedHolidays: string[];
+  currentYear: number;
 }) {
   const [state, formAction, pending] = useActionState(action, initial);
+  const [resetKey, setResetKey] = useState(0);
   if (state.ok) return null;
   const { fieldErrors: errors, values } = state;
   return (
@@ -92,6 +98,8 @@ export function SettingsForm({
         const fd = new FormData(e.currentTarget);
         startTransition(() => formAction(fd));
       }}
+      // Native reset restores the inputs; the keyed card remounts to drop unsaved holiday edits.
+      onReset={() => setResetKey((k) => k + 1)}
       className="max-w-2xl space-y-4 pb-24"
     >
       {saved && (
@@ -144,6 +152,14 @@ export function SettingsForm({
         />
         <ValueField name="lotSize" label="Lô giao dịch (cổ phiếu)" mode="numeric" defaultValue={values.lotSize} error={errors.lotSize} />
       </Card>
+
+      <HolidayCalendarCard
+        key={`${resetKey}:${values.holidays}`}
+        savedHolidays={savedHolidays}
+        initialHolidays={values.holidays}
+        currentYear={currentYear}
+        error={errors.holidays}
+      />
 
       <Card title="Danh mục">
         <ValueField

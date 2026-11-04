@@ -14,6 +14,8 @@ const render = (o: Partial<React.ComponentProps<typeof SettingsForm>> = {}) =>
       isDefault
       saved={false}
       concentrationDefault="20"
+      savedHolidays={[]}
+      currentYear={2026}
       {...o}
     />,
   );
@@ -65,6 +67,12 @@ describe('SettingsForm', () => {
     ]) {
       expect(out).toContain(label);
     }
+  });
+
+  it('renders the holiday card and its hidden field', () => {
+    const out = render();
+    expect(out).toContain('Lịch nghỉ giao dịch');
+    expect(out).toContain('name="holidays"');
   });
 
   it('renders default values and banner', () => {
