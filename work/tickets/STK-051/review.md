@@ -123,3 +123,47 @@ No violations found.
 - Security re-review observation 1: a floor on `refreshIntervalMs` in config validation.
 - Expired session (a 307 on the server-action POST) shows "failed" instead of redirecting to /login. A UX check for Ming.
 - STK-050 server-side throttle (already noted in STK-050/ticket.md).
+
+## Attempt 3 — 2026-11-05
+Verdict: PASS
+
+Scope: the rework of my attempt-2 issues 1 and 2. I reviewed `git diff HEAD~1..HEAD` (ce58008) for this attempt and re-checked the whole ticket with `git diff origin/main...HEAD`. This attempt changes only the code in apps/web/lib/refresh-scheduler.ts, its test, and the impl-log/backlog/ticket bookkeeping.
+
+### Checks (run by reviewer)
+- typecheck: all workspaces Done, no errors (web route types generated)
+- lint: all workspaces Done, no errors
+- test: core 593/593 (45 files), sources 24 (1 file skipped), db 128 + 1 todo, worker 229/229, web 300/300 (38 files). Matches impl-log (web 300).
+
+### Acceptance criteria
+- [x] Attempt-2 Issue 1 (backoff 30→60→120 s, then stop after 3): fixed.
+  - refresh-scheduler.ts:76 waits `intervalMs * 2 ** failures` (60 s after the 1st failure, 120 s after the 2nd) and stops at `failures < MAX_FAILURES`. The comment at :74 is updated.
+  - Test "backs off 2x, 4x interval on repeated rejection then stops after 3" checks: no call at 60 000 − 1, then call 2 at 60 000; no call at 120 000 − 1, then call 3 at 120 000; then no calls for the stop period. The replan-ignored and button-reset checks are kept (the next call after the reset comes at 60 s).
+  - "a success resets the backoff" runs fail → 60 s → ok → 30 s → fail → 60 s, as I asked.
+- [x] Attempt-2 Issue 2 (a failure while closed stops polling): fixed.
+  - `expectOpen = r.sessionOpen || r.nextInMs > 0` is set in `plan()` (:50) and guards the retry (:75).
+  - A failed lunch press (the closed plan has nextInMs > 0) and a failed 09:00/13:00 wake-up now back off and retry. The next resolved result re-plans through `plan(r)`.
+  - New test "a failed wake-up call while closed still retries after the backoff" passes. It checks no call at 60 s + 60 000 − 1, then the retry at 60 000.
+  - A failure after the session ends for the day (closed, nextInMs 0) correctly sets no retry. Before the failure there was no timer anyway.
+- [x] Original AC1–AC5: the attempt-1 evidence still holds. All the scheduler, bar, core label, loader and action tests pass, and price-refresh-bar.tsx is unchanged since attempt 2.
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found.
+- R1/R5: the backoff is client timing in lib, derived from the configured `intervalMs`. There is no money math.
+- R3/R6: unchanged.
+- R7: the code changes stay in the plan's scheduler files.
+- R8: the tests cover the new branch.
+- The security re-review for attempt 3 reports no blocking findings.
+
+### Nits (do not block)
+- The impl-log has two sections headed "Attempt 3". The earlier one is attempt 2. Both end with "not committed", but commits 4b95114 and ce58008 exist.
+- The test name "backs off 2x, 4x interval" describes multiples of the interval. "60 s, 120 s" would match Ming's wording more closely.
+
+### Follow-ups (out of scope)
+- These carry over from attempt 2:
+  - a distinct "stopped" label in core;
+  - a floor on `refreshIntervalMs` in config validation;
+  - an expired session (a 307 on the action POST) shows "failed" instead of going to /login, which Ming should check by hand;
+  - the server-side throttle in STK-050.
