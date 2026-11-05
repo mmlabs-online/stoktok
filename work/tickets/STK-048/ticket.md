@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P1 |
 | Areas | security |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-11-05 |
 | PR | — |
 
@@ -24,3 +24,4 @@ docs/spec-v1.md §1.2, §4.2, §9 Q1 (auth). CLAUDE.md Stack "Auth" row and R6 n
 ## Notes / answers from Ming
 - 2026-11-05: "giống concept authen của calechip tức là dùng supabase authen" — use Supabase Auth (of stoktok's own project), like CaleChip does for itself. Chose a ticket over /solo because the change spans ~6 files touching auth/secrets docs.
 - Out of scope (follow-up): reusing `SUPABASE_URL` instead of a separate `AUTHEN_SUPABASE_URL` (a code/env change).
+- **Ming (2026-11-05):** fix security-review 🟡 M1 (key-rotation runbook) and M2 (Auth setup settings) in docs/deploy.md before the PR (rework 1).
