@@ -83,3 +83,36 @@ No violations found. R7: the attempt-2 changes are exactly the attempt-1 fix ins
 
 ### Follow-ups (out of scope)
 - Attempt-1 follow-ups still stand. Also the security-review items: F2/F3 (session refresh on `/login`, keeping clearing cookies on the proxy redirect), F6 rate limiting as a go-live blocker before Cloudflare Access is removed, and the real end-to-end CaleChip sign-in, including the 403 path, before go-live.
+
+## Attempt 3 — 2026-11-05
+Verdict: PASS
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck`, exit 0 in all packages.
+- lint: `pnpm lint`, exit 0 in all packages.
+- test: `pnpm test`, exit 0. core 539 (43 files), db 121 + 1 todo (14), worker 236 (15), web 266 (35). This matches impl-log. Web went from 265 to 266 because of the one new `login-path.test.ts` case.
+- Attempt-3 diff (`HEAD~1..HEAD`, commit 720f817) touches `login-path.ts`, `login-path.test.ts`, `actions.test.ts`, `backlog.md` and `ticket.md`, plus impl-log. Nothing else.
+- Probe (node, WHATWG `URL` against the sentinel base, the same parser Next's action reducer uses):
+  - These all normalise to pathname `//evil.com` and are now rejected: `/..//evil.com`, `/.%2e//evil.com`, `/%2e%2e/%2e//evil.com`, `/a/b/../..//evil.com`, `/x/%2E/..//evil.com`.
+  - These do not normalise to a leading `//`, so they are safe: `/%2F/evil.com`, `/.%2F/evil.com`, `/.;//evil.com`, `/a/.//evil.com` (becomes `/a//evil.com`), `/ok?x=//evil`, `/ok#//evil`.
+
+### Acceptance criteria
+- [x] AC1–AC6, R6 restore, signOut scope: same as attempts 1–2. Those files are unchanged and the suites are green.
+- [x] Security-review attempt-2 F9 (dot-segment open redirect, part of the AC3 redirect guard). Evidence:
+  - `apps/web/server/auth/login-path.ts:6-7` now also rejects when `new URL(raw, sentinel).pathname.startsWith('//')`. This is the auditor's exact fix.
+  - `safeNext` still returns `raw`, not the normalised URL, which is what the auditor asked for.
+  - `login-path.test.ts` › "rejects paths that normalize to a protocol-relative URL" covers `/.//evil.com`, `/%2e//evil.com`, `/%2E%2E//evil.com` and `/a/..//evil.com` with exact `toBe('/')`. It passes.
+- [x] Attempt-2 Issue 1 (test strength): `actions.test.ts:39-40` now uses `/^REDIRECT:\/$/` for both evil cases.
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found. R7: the diff is exactly F9 plus the attempt-2 test-strength fix.
+
+### Nits (do not block)
+- 💭 `actions.test.ts:36` still uses the substring `toThrow('REDIRECT:/transactions')`. Attempt-2 Issue 1 also suggested `/^REDIRECT:\/transactions$/` here. Harmless: a weaker guard would make this case fail, not pass.
+- 💭 Attempt-2 nits still stand: no `'server-only'` in `claims.ts`/`login-path.ts`; entry-point test gaps (F4/N1).
+
+### Follow-ups (out of scope)
+- Attempt-1/2 follow-ups and security-review N1 (entry-point test forms), F2/F3, F6 (rate limiting before Cloudflare Access is removed), and a real end-to-end CaleChip sign-in, including the 403 path, before go-live.

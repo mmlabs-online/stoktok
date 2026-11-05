@@ -141,3 +141,46 @@ The new tests at `login-path.test.ts:17-21` and `actions.test.ts:40` cover these
 
 ### Open questions
 - None new.
+
+---
+
+# STK-004 security review, attempt 3
+
+## STK-004 attempt 3: security re-review of safeNext and F9
+
+**Verdict: F9 is fixed. I found no new bypass of `safeNext` that sends a Location header or a client navigation off-origin. Nothing blocks a PASS on security grounds.** All of this was traced statically against next@16.4.2. Nothing was run.
+
+### Findings
+
+**✅ F9 dot-segment open redirect (CWE-601) is resolved.** `/home/user/stoktok/apps/web/server/auth/login-path.ts:7` now returns `/` when the sentinel-resolved pathname starts with `//`. The vectors from attempt 2 (`/.//evil.com`, `/%2e//evil.com`, `/%2E%2E//evil.com`, `/a/..//evil.com`) are covered at `login-path.test.ts:17-21`.
+
+**Bypass attempts. None of these leave the origin:**
+- **Client-side handling in Next:**
+  - `assign-location.js:20` calls `new URL(addBasePath(raw), canonicalHref)`. That uses the same WHATWG parser as the sentinel check. Any input that passes `safeNext` starts with one `/`, has no `\`, whitespace or control characters, and does not resolve to `//…`, so the result always has the current origin.
+  - This means `isExternalURL` is false, and both `completeHardNavigation` fallbacks (`server-action-reducer.js:170-173` and `:269-274`) now receive a same-origin URL object. The F9 attack path is closed.
+- **`normalizePathTrailingSlash` / `removeTrailingSlash`** (`normalize-trailing-slash.js:28`): removing a trailing `/` only drops the last empty segment. It cannot turn a pathname that does not start with `//` into one that does. Example: `/x/..//` already resolves to `//` and is rejected.
+- **Server-side redirect fetch** (`action-handler.js:242-244,297`): it builds `${origin}${pathname}` against a fixed `http://n` base. The host is always our own, so there is no SSRF or host swap.
+- **The `;` split on `x-action-redirect`** (`server-action-reducer.js:108`): `/a;b` only truncates to `/a`, which stays on the same origin. CR/LF is rejected at `login-path.ts:4`, so header injection is not possible.
+- **Encoding tricks:**
+  - `/%2F/evil.com` and `/%5C…` stay encoded inside the path.
+  - `%2F%2Fevil` arrives decoded as `//evil` and is rejected.
+  - `%252F…` does not start with `/` and is rejected.
+  - Fullwidth `／` and U+200B are percent-encoded and stay in the path. U+2028 and U+FEFF match `\s` and are rejected.
+- **Hash and query:** `/#//evil.com` and `/?//evil.com` keep pathname `/`, so they stay on the same origin.
+- **Other entry points:**
+  - `page.tsx:10,16`: an array-valued `next` fails the `typeof` check and becomes `/`. The hidden input value is escaped by React.
+  - `proxy.ts:18` and `require-user.ts:36`: a request path of `//evil.com` goes through `loginPath`, which rejects it, so the user lands on `/login`.
+
+**🔵 Low (test gap, not a vulnerability).** `/home/user/stoktok/apps/web/app/login/actions.test.ts:39-40` checks `//evil.com` and `/\t/evil.com` at the action level, but not a dot-segment case such as `/.//evil.com`. The unit tests on `safeNext` already cover it, so this is optional hardening and not a blocker.
+
+### Recommendations
+1. AC3 (open-redirect guard): this is met. Accept F9 as resolved.
+2. Optional: add `next: '/.//evil.com'` to `actions.test.ts:40` so the action-level test pins the regression.
+3. Carry forward the attempt-2 follow-ups unchanged: N1/F4 (R6 entry-point tests) and F2, F3, F5–F8.
+
+### Risks
+- Static trace only. No real browser run was done with a forced RSC fallback or build-ID mismatch. Because every resolved URL now keeps the origin, the remaining risk is low.
+- If a `basePath` is added later, recheck `assign-location`. `addPathPrefix` would prepend it, and safety then depends on the basePath not being empty or `/`.
+
+### Open questions
+- None.
