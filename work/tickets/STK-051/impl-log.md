@@ -39,3 +39,18 @@ None. `useEffectEvent` is available in the installed React and passed lint, so n
 ### Scope self-check
 - Could the diff be smaller? No.
 - Diff size: about +900 lines including tests (git not available here; no commit made, as instructed).
+
+## Attempt 3 (REWORK 2: security-review findings 1 and 2)
+
+Files touched
+- apps/web/lib/refresh-scheduler.ts: failure backoff (interval, 2x interval; the 3rd consecutive failure stops polling until "Làm mới", which resets the count; success resets); `replan()` added; `onBusy(false)` now always runs, including after dispose. Required by findings 1 and 2.
+- apps/web/components/price-refresh-bar.tsx: scheduler is created once per mounted bar (`[]` deps); view changes call `replan()` instead of dispose/recreate, so a new scheduler can never overlap an in-flight call. Required by finding 2.
+- apps/web/lib/refresh-scheduler.test.ts: tests for backoff timing, stop after 3, button reset, success reset, dispose mid-call clears busy, replan.
+
+Notes
+- Intervals derive from the configured `intervalMs` (R5); no literals in components. `MAX_FAILURES = 3` is a scheduler constant.
+- The stopped state reuses the existing "failed" label (no new core label); the Làm mới button stays active.
+- `replan` is ignored while failures > 0 so server data cannot cancel backoff/stop.
+
+Checks: typecheck OK, lint OK, test OK (web 38 files / 299 tests passed), build OK.
+Out-of-plan files: none. Follow-ups: optional distinct "stopped" label in core. Not committed (as instructed).

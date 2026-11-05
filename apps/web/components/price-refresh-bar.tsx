@@ -68,10 +68,17 @@ export function PriceRefreshBar({ view, action }: { view: RefreshBarView; action
   const runAction = useEffectEvent(() => action());
   const rerender = useEffectEvent(() => startTransition(() => router.refresh()));
 
+  const initial = useEffectEvent(() => ({
+    intervalMs: view.intervalMs,
+    plan: { sessionOpen: view.sessionOpen, nextInMs: view.nextInMs },
+  }));
+
+  // One scheduler per mounted bar: view changes only re-plan, so an in-flight call is never overlapped.
   useEffect(() => {
+    const { intervalMs, plan } = initial();
     const scheduler = createRefreshScheduler({
-      intervalMs: view.intervalMs,
-      initial: { sessionOpen: view.sessionOpen, nextInMs: view.nextInMs },
+      intervalMs,
+      initial: plan,
       action: () => runAction(),
       afterResult: () => rerender(),
       onResult: (status) => setFailed(status === 'failed'),
@@ -87,7 +94,11 @@ export function PriceRefreshBar({ view, action }: { view: RefreshBarView; action
       scheduler.dispose();
       schedulerRef.current = null;
     };
-  }, [view.intervalMs, view.sessionOpen, view.nextInMs]);
+  }, []);
+
+  useEffect(() => {
+    schedulerRef.current?.replan({ sessionOpen: view.sessionOpen, nextInMs: view.nextInMs });
+  }, [view.sessionOpen, view.nextInMs]);
 
   return (
     <RefreshBarContent

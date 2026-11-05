@@ -184,6 +184,62 @@ describe('refresh scheduler', () => {
     t.s.dispose();
   });
 
+  it('backs off 1x, 2x interval on repeated rejection then stops after 3', async () => {
+    const e = () => new Error('x');
+    const t = setup({ results: [e(), e(), e(), e()] });
+    await t.s.refreshNow();
+    expect(t.action).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(INTERVAL);
+    expect(t.action).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(2 * INTERVAL - 1);
+    expect(t.action).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(t.action).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(INTERVAL * 20);
+    expect(t.action).toHaveBeenCalledTimes(3);
+    expect(t.onResult).toHaveBeenLastCalledWith('failed');
+    t.s.replan({ sessionOpen: true, nextInMs: 0 });
+    await vi.advanceTimersByTimeAsync(INTERVAL * 20);
+    expect(t.action).toHaveBeenCalledTimes(3);
+    // button resets the count and polling resumes
+    await t.s.refreshNow();
+    expect(t.action).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(INTERVAL);
+    expect(t.action).toHaveBeenCalledTimes(5);
+    expect(t.onResult).toHaveBeenLastCalledWith('ok');
+    t.s.dispose();
+  });
+
+  it('a success resets the backoff', async () => {
+    const t = setup({ results: [new Error('x'), OPEN, new Error('x')] });
+    await t.s.refreshNow();
+    await vi.advanceTimersByTimeAsync(INTERVAL);
+    await vi.advanceTimersByTimeAsync(INTERVAL);
+    expect(t.action).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(INTERVAL);
+    expect(t.action).toHaveBeenCalledTimes(4);
+    t.s.dispose();
+  });
+
+  it('dispose mid-call clears busy', async () => {
+    const t = setup({ pendingMs: 1_000 });
+    const p = t.s.refreshNow();
+    t.s.dispose();
+    await vi.advanceTimersByTimeAsync(1_000);
+    await p;
+    expect(t.onBusy.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('replan re-times the next call when healthy', async () => {
+    const t = setup();
+    t.s.replan({ sessionOpen: true, nextInMs: 50_000 });
+    await vi.advanceTimersByTimeAsync(49_999);
+    expect(t.action).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(t.action).toHaveBeenCalledTimes(1);
+    t.s.dispose();
+  });
+
   it('onBusy brackets the call on resolve and on reject', async () => {
     const ok = setup();
     await ok.s.refreshNow();

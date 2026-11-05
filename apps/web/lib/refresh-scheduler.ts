@@ -20,8 +20,13 @@ export interface RefreshSchedulerDeps {
 
 export interface RefreshScheduler {
   refreshNow(): Promise<void>;
+  /** Re-plan from fresh server data. Ignored while failures are being retried or after retries stopped. */
+  replan(r: { sessionOpen: boolean; nextInMs: number }): void;
   dispose(): void;
 }
+
+/** Consecutive failures after which polling stops until the user presses refresh. */
+const MAX_FAILURES = 3;
 
 export function createRefreshScheduler(deps: RefreshSchedulerDeps): RefreshScheduler {
   const setTimer = deps.timers?.set ?? ((fn: () => void, ms: number): unknown => setTimeout(fn, ms));
@@ -32,6 +37,7 @@ export function createRefreshScheduler(deps: RefreshSchedulerDeps): RefreshSched
   let due = false;
   let disposed = false;
   let sessionOpen = deps.initial.sessionOpen;
+  let failures = 0;
 
   const clear = (): void => {
     if (timer !== null) clearTimer(timer);
@@ -55,16 +61,22 @@ export function createRefreshScheduler(deps: RefreshSchedulerDeps): RefreshSched
     try {
       const r = await deps.action();
       if (disposed) return;
+      failures = 0;
       deps.afterResult(r);
       deps.onResult(r.status);
       plan(r);
     } catch {
       if (disposed) return;
+      failures += 1;
       deps.onResult('failed');
-      plan({ sessionOpen, nextInMs: 0 });
+      clear();
+      // Backoff: interval, 2x interval, ... then stop (no timer) until refreshNow.
+      if (sessionOpen && failures < MAX_FAILURES) {
+        timer = setTimer(tick, deps.intervalMs * 2 ** (failures - 1));
+      }
     } finally {
       inFlight = false;
-      if (!disposed) deps.onBusy(false);
+      deps.onBusy(false);
     }
   };
 
@@ -89,7 +101,12 @@ export function createRefreshScheduler(deps: RefreshSchedulerDeps): RefreshSched
   return {
     refreshNow: async () => {
       if (disposed || inFlight) return;
+      failures = 0;
       await run();
+    },
+    replan: (r) => {
+      if (disposed || failures > 0) return;
+      plan(r);
     },
     dispose: () => {
       disposed = true;
