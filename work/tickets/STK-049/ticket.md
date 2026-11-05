@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | IN_PROGRESS |
+| State | REVIEW |
 | Priority | P1 |
 | Areas | data, architecture, db, ui |
 | Attempts | 0 |

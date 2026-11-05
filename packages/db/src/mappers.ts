@@ -1,7 +1,7 @@
 /** Row <-> domain conversions for assets and watchlist. No financial calculation (R1); integers only (R2). */
 import { EXCHANGES, RowMappingError, toSafeInt } from '@stoktok/core';
-import type { Exchange, PriceQuote, SectorInfo, SignalLabel, SignalStatus, StoredClose, StoredSignal } from '@stoktok/core';
-import type { AssetRow, FinancialRow, OpenGapRow, PriceCloseRow, PriceDailyRow, SignalRow, SymbolSectorRow, TradeDateRow, WatchlistRow } from './rows';
+import type { Exchange, IntradayQuote, PriceQuote, SectorInfo, SignalLabel, SignalStatus, StoredClose, StoredSignal } from '@stoktok/core';
+import type { AssetRow, FinancialRow, OpenGapRow, PriceCloseRow, PriceDailyRow, PriceIntradayRow, SignalRow, SymbolSectorRow, TradeDateRow, WatchlistRow } from './rows';
 
 export interface Asset {
   id: string;
@@ -66,6 +66,19 @@ export function storedCloseFromRow(row: PriceCloseRow): StoredClose {
   const volume = toSafeInt(row.volume, 'volume', 'prices_daily');
   if (volume < 0) throw new RowMappingError('prices_daily', 'volume', `negative volume: ${volume}`);
   return { ...priceQuoteFromRow(row), volume };
+}
+
+export function intradayQuoteFromRow(row: PriceIntradayRow): IntradayQuote {
+  const volume = toSafeInt(row.volume, 'volume', 'prices_intraday');
+  if (volume < 0) throw new RowMappingError('prices_intraday', 'volume', `negative volume: ${volume}`);
+  return {
+    symbol: row.symbol,
+    ts: row.ts,
+    price: toSafeInt(row.price, 'price', 'prices_intraday'),
+    volume,
+    source: row.source,
+    fetchedAt: row.fetched_at,
+  };
 }
 
 export interface FinancialRecord {

@@ -38,9 +38,9 @@ describe('R3 guard', () => {
     expect(hits).toEqual([]);
   });
 
-  test("no file containing 'use client' imports @stoktok/db or server/db", () => {
+  test("no file containing 'use client' imports @stoktok/db, server/db or @stoktok/sources", () => {
     const bad = files
-      .filter((f) => /['"]use client['"]/.test(f.text) && /@stoktok\/db|server\/db/.test(f.text))
+      .filter((f) => /['"]use client['"]/.test(f.text) && /@stoktok\/db|server\/db|@stoktok\/sources/.test(f.text))
       .map((f) => f.path);
     expect(bad).toEqual([]);
   });

@@ -31,7 +31,7 @@ do $$ -- tables_exist
 declare got text[];
 begin
   select array_agg(tablename order by tablename) into got from pg_tables where schemaname = 'public';
-  if got is distinct from array['assets','corporate_actions','data_gaps','financials','prices_daily','settings','signals','symbols','transactions','watchlist'] then
+  if got is distinct from array['assets','corporate_actions','data_gaps','financials','prices_daily','prices_intraday','settings','signals','symbols','transactions','watchlist'] then
     raise exception 'CHECK FAILED: tables_exist (got %)', got;
   end if;
 end $$;
@@ -53,6 +53,7 @@ begin
   perform pg_temp.assert_col('assets', 'value', 'bigint', true);
   perform pg_temp.assert_col('prices_daily', 'volume', 'bigint', true);
   perform pg_temp.assert_col('prices_daily', 'foreign_net', 'bigint');
+  perform pg_temp.assert_col('prices_intraday', 'volume', 'bigint', true);
 end $$;
 
 do $$ -- qty_price_columns_integer
@@ -63,6 +64,7 @@ begin
   perform pg_temp.assert_col('prices_daily', 'high', 'integer', true);
   perform pg_temp.assert_col('prices_daily', 'low', 'integer', true);
   perform pg_temp.assert_col('prices_daily', 'close', 'integer', true);
+  perform pg_temp.assert_col('prices_intraday', 'price', 'integer', true);
   perform pg_temp.assert_col('corporate_actions', 'ratio_num', 'integer');
   perform pg_temp.assert_col('corporate_actions', 'ratio_den', 'integer');
   perform pg_temp.assert_col('settings', 'fee_rate_ppm', 'integer');
@@ -93,6 +95,9 @@ do $$ -- source_fetched_at_not_null
 begin
   perform pg_temp.assert_col('prices_daily', 'source', 'text', true);
   perform pg_temp.assert_col('prices_daily', 'fetched_at', 'timestamp with time zone', true);
+  perform pg_temp.assert_col('prices_intraday', 'source', 'text', true);
+  perform pg_temp.assert_col('prices_intraday', 'fetched_at', 'timestamp with time zone', true);
+  perform pg_temp.assert_col('prices_intraday', 'ts', 'timestamp with time zone', true);
   perform pg_temp.assert_col('financials', 'source', 'text', true);
   perform pg_temp.assert_col('financials', 'fetched_at', 'timestamp with time zone', true);
   perform pg_temp.assert_col('data_gaps', 'source', 'text', true);
@@ -254,10 +259,26 @@ begin
   if n <> 1 or id1 <> id2 then raise exception 'CHECK FAILED: service_role_can_read_write_signals'; end if;
 end $$;
 
+do $$ -- service_role_can_read_write_prices_intraday
+declare n int; p int;
+begin
+  set local role service_role;
+  insert into public.prices_intraday (symbol, ts, price, volume, source, fetched_at)
+    values ('FPT', '2026-11-05T03:00:00Z', 102000, 10, 'x', now());
+  insert into public.prices_intraday (symbol, ts, price, volume, source, fetched_at)
+    values ('FPT', '2026-11-05T03:00:00Z', 102100, 20, 'x', now())
+    on conflict (symbol, ts) do update set price = excluded.price, volume = excluded.volume, fetched_at = excluded.fetched_at;
+  select count(*), max(price) into n, p from public.prices_intraday where symbol = 'FPT';
+  delete from public.prices_intraday where symbol = 'FPT';
+  reset role;
+  if n <> 1 or p <> 102100 then raise exception 'CHECK FAILED: service_role_can_read_write_prices_intraday'; end if;
+end $$;
+
 do $$ -- rejects_bad_rows
 declare tx text := 'insert into public.transactions (trade_date, symbol, side, quantity, price, fee) values ';
         ca text := 'insert into public.corporate_actions (symbol, type, ex_date, amount_per_share, ratio_num, ratio_den) values ';
         pd text := 'insert into public.prices_daily (symbol, trade_date, open, high, low, close, volume, source, fetched_at) values ';
+        pi text := 'insert into public.prices_intraday (symbol, ts, price, volume, source, fetched_at) values ';
         fi text := 'insert into public.financials (symbol, period, eps, bvps, revenue, net_income, source, fetched_at) values ';
         sg text := 'insert into public.signals (symbol, rule_id, horizon, signal_date, status, label, value, data_fresh, reason_codes, inputs_snapshot, rule_version, computed_at) values ';
         st text := 'insert into public.settings (id, sell_tax_rate_ppm, dividend_withholding_rate_ppm, settlement_days, cash_dividend_treatment, cost_method) values ';
@@ -270,6 +291,12 @@ begin
   perform pg_temp.expect_fail('stock with amount', ca || '(''VNM'',''stock_dividend'',''2026-01-05'',1000,20,100)', array['23514']);
   perform pg_temp.expect_fail('stock zero ratio', ca || '(''VNM'',''stock_dividend'',''2026-01-05'',null,0,100)', array['23514']);
   perform pg_temp.expect_fail('prices low>high', pd || '(''VNM'',''2026-01-05'',100,100,101,100,1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('intraday lowercase symbol', pi || '(''vnm'',now(),100,1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('intraday price 0', pi || '(''VNM'',now(),0,1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('intraday negative volume', pi || '(''VNM'',now(),100,-1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('intraday empty source', pi || '(''VNM'',now(),100,1,'''',now())', array['23514']);
+  perform pg_temp.expect_fail('intraday null source', pi || '(''VNM'',now(),100,1,null,now())', array['23502']);
+  perform pg_temp.expect_fail('intraday null fetched_at', pi || '(''VNM'',now(),100,1,''x'',null)', array['23502']);
   perform pg_temp.expect_fail('settings id 2', st || '(2,1000,50000,2,''reduceCost'',''WAC'')', array['23514']);
   perform pg_temp.expect_fail('cost_method FIFO', st || '(1,1000,50000,2,''reduceCost'',''FIFO'')', array['23514']);
   perform pg_temp.expect_fail('gap to<from',

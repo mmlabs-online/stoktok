@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { getJson, postJson } from './http';
-import { SourceError } from './price-source';
+import { SourceError } from './source-error';
 
 const res = (status: number, body: unknown = {}) =>
   ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response;
