@@ -45,3 +45,11 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-049 | Intraday prices, slice 1 — source adapter, storage and session rule | DONE | P1 | data, architecture, db, ui | 1 | 2026-11-05 |
 | STK-050 | Intraday prices, slice 2 — throttled refresh on the web server and merged prices | BACKLOG | P1 | data, architecture, finance | 0 | 2026-11-05 |
 | STK-051 | Intraday prices, slice 3 — refresh bar, 30 s auto refresh and "Làm mới" | BACKLOG | P1 | ui | 0 | 2026-11-05 |
+| STK-052 | Vietlott core: game rules, ticket checking and net result | BACKLOG | P3 | finance | 0 | 2026-11-05 |
+| STK-053 | Vietlott schema and server data layer | BACKLOG | P3 | db, security | 0 | 2026-11-05 |
+| STK-054 | Vietlott draw results adapter, backfill and ticket checking job | BACKLOG | P3 | data, db | 0 | 2026-11-05 |
+| STK-055 | Vietlott tickets screen: manual entry, history and in-app wins | BACKLOG | P3 | ui, finance | 0 | 2026-11-05 |
+| STK-056 | Parse pasted Vietlott SMS confirmations into tickets | BLOCKED | P3 | data, ui | 0 | 2026-11-05 |
+| STK-057 | Vietlott number suggestions that avoid popular combinations | BACKLOG | P3 | finance, ui | 0 | 2026-11-05 |
+| STK-058 | Vietlott statistics and historical strategy check | BACKLOG | P3 | finance, ui | 0 | 2026-11-05 |
+| STK-059 | Vietlott opportunity cost vs VN-Index | BACKLOG | P3 | finance, ui | 0 | 2026-11-05 |
