@@ -7,7 +7,7 @@
 | Areas | architecture, security |
 | Attempts | 2 |
 | Created | 2026-10-22 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/35 |
 
 ## Goal
 Only Ming can use stoktok: every page, route handler and server action verifies the Authen (mmlabs SSO) JWT on the server and checks the allowlist before doing anything.
