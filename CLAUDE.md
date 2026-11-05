@@ -17,7 +17,7 @@ Part of the mmlabs ecosystem (login via Authen). **v1 is single-user (allowlist)
 | Worker | Node.js + TypeScript in `apps/worker` (scheduled jobs: prices, news, signals, AI, scoring) |
 | Domain logic | `packages/core` (TypeScript) — ledger, lots, holdings, P&L, fees/tax, signals. Shared by web and worker |
 | DB | Supabase (dedicated project for stoktok, Postgres, RLS on). Migrations in `supabase/` |
-| Auth | Authen = CaleChip Supabase project (separate). stoktok's own `/login` signs in server-side; the server verifies via `getClaims()` + allowlist |
+| Auth | Authen = Supabase Auth of stoktok's own Supabase project (Ming, 2026-11-05, STK-048). stoktok's own `/login` signs in server-side; the server verifies via `getClaims()` + allowlist |
 | Package manager | pnpm workspaces |
 | Tests | Vitest (unit), Playwright (e2e, later) |
 | Runtime | Docker Compose on Ming's WSL2 home server behind Cloudflare Tunnel |
@@ -45,7 +45,7 @@ Do not change the stack without Ming's explicit decision.
 | R9 | **AI output (v1.2+)**: input is stored data only, every factual claim cites a stored input ID, output is schema-validated. AI explains rule-based signals; it never decides the action. |
 | R10 | **Non-goals are hard limits**: no brokerage login, no order placement, no multi-user access to suggestions. |
 
-> **R6 restored (Ming resumed STK-004, 2026-11-05).** Authen is the CaleChip Supabase project. stoktok has its own `/login` (server action, httpOnly cookie on stoktok's host). `requireUser()` (`apps/web/server/auth`) runs in every page, route handler and server action; the public list is `/login` and `/healthz` (`apps/web/proxy.ts`). Cloudflare Access stays in front for now.
+> **R6 restored (Ming resumed STK-004, 2026-11-05).** Authen is Supabase Auth of stoktok's own Supabase project (STK-048). stoktok has its own `/login` (server action, httpOnly cookie on stoktok's host). `requireUser()` (`apps/web/server/auth`) runs in every page, route handler and server action; the public list is `/login` and `/healthz` (`apps/web/proxy.ts`). Cloudflare Access stays in front for now.
 
 ---
 

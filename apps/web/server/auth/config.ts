@@ -9,7 +9,7 @@ export type AuthConfig = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-/** Reads the Authen (CaleChip Supabase) settings. Throws on anything missing or malformed (fail closed). */
+/** Reads the Authen settings (Supabase Auth of the stoktok project). Throws on anything missing or malformed (fail closed). */
 export function loadAuthConfig(env: Record<string, string | undefined> = process.env): AuthConfig {
   const supabaseUrl = (env.AUTHEN_SUPABASE_URL ?? '').trim();
   if (!/^https:\/\/[A-Za-z0-9.-]+$/.test(supabaseUrl)) {
