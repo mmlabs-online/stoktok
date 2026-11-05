@@ -177,21 +177,23 @@ describe('refresh scheduler', () => {
     await t.s.refreshNow();
     expect(t.onResult).toHaveBeenLastCalledWith('failed');
     expect(t.afterResult).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(INTERVAL);
+    await vi.advanceTimersByTimeAsync(2 * INTERVAL);
     expect(t.action).toHaveBeenCalledTimes(2);
     expect(t.onResult).toHaveBeenLastCalledWith('ok');
     expect(t.afterResult).toHaveBeenCalledTimes(1);
     t.s.dispose();
   });
 
-  it('backs off 1x, 2x interval on repeated rejection then stops after 3', async () => {
+  it('backs off 2x, 4x interval on repeated rejection then stops after 3', async () => {
     const e = () => new Error('x');
     const t = setup({ results: [e(), e(), e(), e()] });
     await t.s.refreshNow();
     expect(t.action).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(INTERVAL);
-    expect(t.action).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(2 * INTERVAL - 1);
+    expect(t.action).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(t.action).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(4 * INTERVAL - 1);
     expect(t.action).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(1);
     expect(t.action).toHaveBeenCalledTimes(3);
@@ -204,7 +206,7 @@ describe('refresh scheduler', () => {
     // button resets the count and polling resumes
     await t.s.refreshNow();
     expect(t.action).toHaveBeenCalledTimes(4);
-    await vi.advanceTimersByTimeAsync(INTERVAL);
+    await vi.advanceTimersByTimeAsync(2 * INTERVAL);
     expect(t.action).toHaveBeenCalledTimes(5);
     expect(t.onResult).toHaveBeenLastCalledWith('ok');
     t.s.dispose();
@@ -213,11 +215,26 @@ describe('refresh scheduler', () => {
   it('a success resets the backoff', async () => {
     const t = setup({ results: [new Error('x'), OPEN, new Error('x')] });
     await t.s.refreshNow();
-    await vi.advanceTimersByTimeAsync(INTERVAL);
+    await vi.advanceTimersByTimeAsync(2 * INTERVAL);
+    expect(t.action).toHaveBeenCalledTimes(2);
     await vi.advanceTimersByTimeAsync(INTERVAL);
     expect(t.action).toHaveBeenCalledTimes(3);
-    await vi.advanceTimersByTimeAsync(INTERVAL);
+    await vi.advanceTimersByTimeAsync(2 * INTERVAL);
     expect(t.action).toHaveBeenCalledTimes(4);
+    t.s.dispose();
+  });
+
+  it('a failed wake-up call while closed still retries after the backoff', async () => {
+    const t = setup({
+      initial: { sessionOpen: false, nextInMs: 60_000 },
+      results: [new Error('x')],
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(t.action).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(2 * INTERVAL - 1);
+    expect(t.action).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(t.action).toHaveBeenCalledTimes(2);
     t.s.dispose();
   });
 

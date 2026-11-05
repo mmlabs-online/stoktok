@@ -36,7 +36,8 @@ export function createRefreshScheduler(deps: RefreshSchedulerDeps): RefreshSched
   let inFlight = false;
   let due = false;
   let disposed = false;
-  let sessionOpen = deps.initial.sessionOpen;
+  /** True when the next tick is expected to fall inside a session (open now, or a wake-up is scheduled). */
+  let expectOpen = false;
   let failures = 0;
 
   const clear = (): void => {
@@ -46,7 +47,7 @@ export function createRefreshScheduler(deps: RefreshSchedulerDeps): RefreshSched
 
   const plan = (r: { sessionOpen: boolean; nextInMs: number }): void => {
     clear();
-    sessionOpen = r.sessionOpen;
+    expectOpen = r.sessionOpen || r.nextInMs > 0;
     let wait: number | null = null;
     if (r.sessionOpen) wait = Math.max(deps.intervalMs, r.nextInMs);
     else if (r.nextInMs > 0) wait = r.nextInMs;
@@ -70,9 +71,9 @@ export function createRefreshScheduler(deps: RefreshSchedulerDeps): RefreshSched
       failures += 1;
       deps.onResult('failed');
       clear();
-      // Backoff: interval, 2x interval, ... then stop (no timer) until refreshNow.
-      if (sessionOpen && failures < MAX_FAILURES) {
-        timer = setTimer(tick, deps.intervalMs * 2 ** (failures - 1));
+      // Backoff: 2x interval after the 1st failure, 4x after the 2nd, stop after the 3rd until refreshNow.
+      if (expectOpen && failures < MAX_FAILURES) {
+        timer = setTimer(tick, deps.intervalMs * 2 ** failures);
       }
     } finally {
       inFlight = false;

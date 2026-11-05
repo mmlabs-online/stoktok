@@ -54,3 +54,12 @@ Notes
 
 Checks: typecheck OK, lint OK, test OK (web 38 files / 299 tests passed), build OK.
 Out-of-plan files: none. Follow-ups: optional distinct "stopped" label in core. Not committed (as instructed).
+
+## Attempt 3 (REWORK 3: review attempt 2, issues 1 and 2)
+
+Files touched
+- apps/web/lib/refresh-scheduler.ts: backoff wait is now `intervalMs * 2 ** failures` (60 s after the 1st failure, 120 s after the 2nd, stop at the 3rd). `expectOpen = sessionOpen || nextInMs > 0` is recorded in `plan()` and used in the failure branch, so a failure while closed (lunch press, failed wake-up) still backs off and retries. Required by issues 1 and 2.
+- apps/web/lib/refresh-scheduler.test.ts: backoff test rewritten with exact timing (60 000 - 1 / 60 000, 120 000 - 1 / 120 000, then no calls for 20 intervals; replan-ignored and button-reset kept); "success resets" timings updated (fail, 60 s, ok, 30 s, fail, 60 s); "keeps polling" test waits 60 s; new test for a failed wake-up while closed. Required by issues 1 and 2.
+
+Checks: typecheck OK, lint OK, test OK (web 38 files / 300 tests), build OK.
+Out-of-plan files: none. Follow-ups: as in review.md. I did not commit.
