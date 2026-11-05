@@ -1,0 +1,59 @@
+## Attempt 1 — 2026-11-05
+Verdict: PASS
+
+Scope: ships before STK-050 with the stored-only interim action, as the plan says. Reviewed `git diff origin/main...HEAD`; the implementation is commit fa242ec. The diff also holds the earlier work/ming-todo.md bookkeeping commit (823483b) and the orchestrator's notes in backlog.md, STK-050/ticket.md and STK-051/ticket.md. There is no browser here, so I judged the client binding by reading the code and running the scheduler's fake-timer tests.
+
+### Checks (run by reviewer)
+- typecheck: all workspaces Done, no errors (web route types generated)
+- lint: all workspaces Done, no errors
+- test: core 593/593 (45 files), sources 24 passed (1 file skipped), db 128 passed + 1 todo, worker 229/229, web 295/295 (38 files). Matches impl-log.
+
+### Acceptance criteria
+- [x] AC1, 30 s polling only while visible and in session, no overlap, then `router.refresh()`, no calculation in the browser.
+  - Scheduler tests in apps/web/lib/refresh-scheduler.test.ts: "polls every intervalMs" (calls at 30 000 and 60 000), "sets no timer when closed and nextInMs is 0", "wakes once at nextInMs when closed, then polls if open", "a tick while hidden makes no call; visible runs once, then resumes", "a visibility change with no due tick makes no call", "never overlaps calls" (90 s pending gives 1 call, and refreshNow during the flight is ignored), "afterResult runs only after a resolved action", "a result with sessionOpen false stops polling, or wakes at nextInMs". All pass.
+  - The interval comes from config: `intervalMs: config.refreshIntervalMs` (core refresh-view.ts:1271), and the core test "note, interval and session fields come from config". A grep for `30_000|30000` in web components/lib/app, excluding tests, finds nothing.
+  - The binding is apps/web/components/price-refresh-bar.tsx:288-328. The effect builds the scheduler with `document.visibilityState` and a `visibilitychange` subscription, and disposes it on cleanup. `afterResult` runs `startTransition(() => router.refresh())`. `useEffectEvent` (React ^19.3.1) keeps a new action reference from restarting the timer.
+  - Effect deps are `[intervalMs, sessionOpen, nextInMs]`. In session `nextInMs` stays 0, so a re-render does not restart polling. At the 13:00 wake-up or the session close, the new server view recreates the scheduler with the right plan.
+  - The component has no Date, Math or arithmetic, and test/no-calc-in-ui passes.
+  - The action (app/(app)/prices/actions.ts:52-56) calls `await requireUser()` first and imports no source. Covered by test/refresh-action.test.ts (both tests) and test/entrypoints.test.ts.
+- [x] AC2, "Làm mới" uses the same action and path, with a fixed-size pending state.
+  - Scheduler tests "refreshNow calls at once and restarts the interval" and "never overlaps calls" pass.
+  - Bar test "busy keeps label and icon box, adds aria-busy and motion-safe spin" passes. The text "Làm mới" is constant, and the icon is `size-4 shrink-0` (price-refresh-bar.tsx:281).
+- [x] AC3, "Cập nhật lúc HH:mm:ss" in VN time, distinct states with icon + text, and the stored price kept on failure.
+  - core format.test.ts › formatTime covers VN time, h23 ("00:00:05") and RangeError.
+  - refresh-view.test.ts has one test per state (live, delayed with the exact-threshold boundary, oldest wins, missing/no_data, closed, non_trading_day with a date suffix, future fetchedAt, failed labels).
+  - Bar tests render each state's exact text. Delayed, closed, non_trading_day and failed add a state svg next to the button svg.
+  - Loader tests "builds the refresh bar view" pass for dashboard, watchlist and symbol.
+  - Placement:
+    - Dashboard: app/(app)/page.tsx:39-42, shown only when rows > 0.
+    - Watchlist: watchlist/page.tsx:32-42, shown only when rows > 0.
+    - Symbol page: symbols/[symbol]/page.tsx:44-48, through the `refresh` slot in SymbolHeader.
+  - On failure the stored price stays: "a rejected action reports failed, skips afterResult and keeps polling" passes, and the failed overlay only swaps the bar text.
+- [x] AC4, one polite region that announces state changes only; 44 px target; reduced motion.
+  - Bar test "has exactly one polite status region…" passes. The announcement strings have no digits (core test "announcements are distinct per state and carry no digits"), and the time label sits outside the region.
+  - The button has `min-h-11 min-w-11` and `type="button"`.
+  - The spinner uses `motion-safe:animate-spin`, and the bar test asserts there is no bare `animate-spin`.
+- [x] AC5, fake-timer component tests, label tests, green checks. There are 13 fake-timer scheduler tests. The component is a thin binding with static-markup tests plus a smoke render (the plan's no-jsdom choice, following STK-047). Label tests are in core and in the bar test. Checks are green, as listed above.
+
+### Issues
+None blocking.
+
+### Rules R1–R10
+No violations found.
+- R1: session, staleness, labels and nextInMs are all in core (packages/core/src/market/refresh-view.ts). The client only looks values up. The scheduler's `Math.max(intervalMs, nextInMs)` is timing, not financial math, and it is in lib, as the plan says.
+- R3: the client imports only core, lib, lucide and next/navigation.
+- R5: the interval, the stale threshold and the sessions come from `DEFAULT_INTRADAY_CONFIG`; holidays come from settings.
+- R6: requireUser() runs first.
+- R7: no source, throttle, subtitle or "(tạm tính)" work.
+- R8: core tests were added.
+
+Scope: every changed code file is in the plan's file list. The work/ files are orchestrator bookkeeping; the STK-050 note was requested by the plan's Assumptions.
+
+### Nits (do not block)
+- Busy can stick in one rare case. In refresh-scheduler.ts:663-664, if `dispose()` runs while a call is in flight, `onBusy(false)` is never sent. `dispose()` runs on unmount or when the effect deps change, for example when another server action re-renders the page during lunch, when `nextInMs` differs on every render. The bar then stays `aria-busy`/`aria-disabled` with the spinner until the next scheduler run, or until the next navigation when the result was closed/0.
+  - Suggested fix: in `dispose()`, call `deps.onBusy(false)` when `inFlight`. Or call `setBusy(false)` in the effect cleanup.
+- impl-log "Scope self-check" says "git not available here; no commit made". That is harmless, but the commit exists (fa242ec).
+
+### Follow-ups (out of scope)
+- The plan's (a) to (d): per-row time, the offline state, jsdom DOM tests, and the "Làm mới" cool-down after STK-050.
+- STK-050: replace only the body of `refreshPricesAction` and keep `RefreshPricesResult`. This is already noted in STK-050/ticket.md.
