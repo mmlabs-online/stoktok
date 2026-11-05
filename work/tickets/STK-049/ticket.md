@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P1 |
 | Areas | data, architecture, db, ui |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-11-05 |
 | PR | — |
 
@@ -38,3 +38,4 @@ Slice 1 of 3 (Ming chose the split on 2026-11-05; slices 2 and 3 are STK-050 and
 - 2026-11-05: "giữ các cronjob cũ khi user k mở app, còn user mở app thì reload sau mỗi 30s, và thêm 1 nút cho user refresh ngay".
 - Open for the planner: whether intraday prices feed short-term signals now (spec v1.1 also lists short-term signals) — default: out of scope, follow-up; source rate limits / ToS for 30 s polling of VCI/TCBS public endpoints.
 - 2026-11-05: Ming approved splitting into 3 slices: STK-049 (adapter, storage, session rule, live check), STK-050 (throttle, refresh server action, merged prices in loaders incl. dashboard P&L; blocked until the live check passes), STK-051 (refresh bar UI, 30 s auto refresh, "Làm mới").
+- **Ming (2026-11-05):** fix security-review 🟡 items before the PR (rework 1): live-check script exits non-zero on failed calls and has --max-time; http.ts uses redirect: 'error' and a response size cap. The web import pin for @stoktok/sources goes to STK-050.
