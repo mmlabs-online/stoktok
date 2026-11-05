@@ -41,3 +41,4 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-045 | Self-install the Mac-side setup from deploy-stoktok | DONE | P1 | architecture, security | 1 | 2026-11-03 |
 | STK-046 | Seed the Vietnamese exchange holiday calendar and resolve false price gaps | DONE | P1 | data, finance, db | 0 | 2026-11-05 |
 | STK-047 | Holiday calendar editor on the Settings screen | DONE | P2 | ui | 1 | 2026-11-05 |
+| STK-048 | Authen = Supabase Auth of stoktok's own project (docs and comments) | PLANNING | P1 | security | 0 | 2026-11-05 |
