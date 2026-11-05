@@ -42,6 +42,6 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-046 | Seed the Vietnamese exchange holiday calendar and resolve false price gaps | DONE | P1 | data, finance, db | 0 | 2026-11-05 |
 | STK-047 | Holiday calendar editor on the Settings screen | DONE | P2 | ui | 1 | 2026-11-05 |
 | STK-048 | Authen = Supabase Auth of stoktok's own project (docs and comments) | DONE | P1 | security | 1 | 2026-11-05 |
-| STK-049 | Intraday prices, slice 1 — source adapter, storage and session rule | REVIEW | P1 | data, architecture, db, ui | 1 | 2026-11-05 |
+| STK-049 | Intraday prices, slice 1 — source adapter, storage and session rule | DONE | P1 | data, architecture, db, ui | 1 | 2026-11-05 |
 | STK-050 | Intraday prices, slice 2 — throttled refresh on the web server and merged prices | BACKLOG | P1 | data, architecture, finance | 0 | 2026-11-05 |
 | STK-051 | Intraday prices, slice 3 — refresh bar, 30 s auto refresh and "Làm mới" | BACKLOG | P1 | ui | 0 | 2026-11-05 |
