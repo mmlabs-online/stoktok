@@ -16,6 +16,7 @@
   "dependencies": {
     "@stoktok/core": "workspace:*",
     "@stoktok/db": "workspace:*",
+    "@stoktok/sources": "workspace:*",
     "@supabase/supabase-js": "^2.118.0"
   },
   "devDependencies": {

@@ -6,7 +6,7 @@ import { VciPriceSource } from './vci';
 
 const fixture = (name: string): unknown => JSON.parse(readFileSync(new URL(`../../test/fixtures/vci/${name}`, import.meta.url), 'utf8'));
 const res = (status: number, body: unknown = {}) =>
-  ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response;
+  ({ ok: status >= 200 && status < 300, status, text: async () => JSON.stringify(body), headers: new Headers() }) as Response;
 
 function setup(responses: Array<Response | Error>) {
   const queue = [...responses];
@@ -155,7 +155,7 @@ describe('VciPriceSource', () => {
   });
 
   test("200 with non-JSON body -> non-retryable 'response is not valid JSON'", async () => {
-    const html = { ok: true, status: 200, json: async () => Promise.reject(new SyntaxError('x')) } as unknown as Response;
+    const html = { ok: true, status: 200, text: async () => '<html>', headers: new Headers() } as unknown as Response;
     await expect(setup([html]).source.fetchDaily('VNM', FROM, TO, {})).rejects.toMatchObject({
       retryable: false,
       message: 'response is not valid JSON',

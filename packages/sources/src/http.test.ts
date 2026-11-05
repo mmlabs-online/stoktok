@@ -1,9 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { getJson, postJson } from './http';
-import { SourceError } from './price-source';
+import { SourceError } from './source-error';
 
-const res = (status: number, body: unknown = {}) =>
-  ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response;
+const res = (status: number, body: unknown = {}) => new Response(JSON.stringify(body), { status });
 
 function setup(responses: Array<Response | Error>) {
   const queue = [...responses];
@@ -55,6 +54,32 @@ describe('getJson', () => {
     const s = setup([new TypeError('fetch failed'), res(200, { ok: 1 })]);
     await expect(getJson(s.fetchImpl, 'https://x', s.opts)).resolves.toEqual({ ok: 1 });
     expect(s.calls).toHaveLength(2);
+  });
+});
+
+describe('safety limits', () => {
+  test('requests are sent with redirect: error', async () => {
+    const s = setup([res(200, {})]);
+    await getJson(s.fetchImpl, 'https://x', s.opts);
+    expect(s.calls[0]?.[1]?.redirect).toBe('error');
+  });
+  test('a redirect (fetch throws) is a SourceError after retries, not followed', async () => {
+    const s = setup([new TypeError('redirect'), new TypeError('redirect'), new TypeError('redirect')]);
+    await expect(getJson(s.fetchImpl, 'https://x', s.opts)).rejects.toBeInstanceOf(SourceError);
+  });
+  test('body over maxBodyBytes -> non-retryable SourceError', async () => {
+    const s = setup([res(200, { big: 'x'.repeat(100) })]);
+    const err = await getJson(s.fetchImpl, 'https://x', { ...s.opts, maxBodyBytes: 50 }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SourceError);
+    expect(err).toMatchObject({ retryable: false, message: 'response body exceeds 50 bytes' });
+    expect(s.calls).toHaveLength(1);
+  });
+  test('declared content-length over the cap is rejected; body at the cap passes', async () => {
+    const big = new Response('{}', { status: 200, headers: { 'content-length': '999' } });
+    const s = setup([big]);
+    await expect(getJson(s.fetchImpl, 'https://x', { ...s.opts, maxBodyBytes: 50 })).rejects.toMatchObject({ retryable: false });
+    const ok = setup([res(200, { a: 1 })]);
+    await expect(getJson(ok.fetchImpl, 'https://x', { ...ok.opts, maxBodyBytes: 7 })).resolves.toEqual({ a: 1 });
   });
 });
 

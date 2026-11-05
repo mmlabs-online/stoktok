@@ -33,6 +33,26 @@ export interface PriceCloseRow extends PriceDailyRow {
   volume: Int8;
 }
 
+/** Selected columns only. */
+export interface PriceIntradayRow {
+  symbol: string;
+  ts: string;
+  price: number;
+  volume: Int8;
+  source: string;
+  fetched_at: string;
+}
+
+/** Upsert payload (all columns; R4 source + fetched_at). Integer VND (R2). */
+export interface PriceIntradayInsert {
+  symbol: string;
+  ts: string;
+  price: number;
+  volume: number;
+  source: string;
+  fetched_at: string;
+}
+
 /** Upsert payload (all columns; R4 source + fetched_at). */
 export interface PriceDailyInsert {
   symbol: string;

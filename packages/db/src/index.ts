@@ -38,7 +38,8 @@ export {
   listPriceDates,
   upsertPricesDaily,
 } from './repos/prices-daily';
-export type { DataGapInsert, FinancialInsert, PriceDailyInsert, SignalInsert, SymbolSectorRow } from './rows';
+export { getLatestIntraday, upsertPricesIntraday } from './repos/prices-intraday';
+export type { DataGapInsert, FinancialInsert, PriceDailyInsert, PriceIntradayInsert, SignalInsert, SymbolSectorRow } from './rows';
 export { listFinancials, upsertFinancials } from './repos/financials';
 export { insertGaps, listAllOpenGaps, listOpenGaps, listOpenMarketGaps, resolveGaps } from './repos/data-gaps';
 export { listLatestSignals, upsertSignals } from './repos/signals';

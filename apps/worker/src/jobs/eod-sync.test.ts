@@ -435,7 +435,7 @@ describe('runEodSync with VciPriceSource', () => {
       requests += 1;
       const body = JSON.parse(init?.body as string) as { to: number; symbols: string[] };
       const json = [{ symbol: body.symbols[0], t: [body.to - 86400], o: [61500], h: [62000], l: [61200], c: [61800], v: [1000] }];
-      return { ok: status === 200, status, json: async () => json } as Response;
+      return { ok: status === 200, status, text: async () => JSON.stringify(json), headers: new Headers() } as Response;
     }) as unknown as typeof fetch;
     return { source: new VciPriceSource({ fetchImpl, http }), requests: () => requests };
   }
@@ -548,7 +548,7 @@ describe('runEodSync adjusted history', () => {
             ]
           : [{ t: body.to - 86400, o: 33500, h: 33800, l: 33400, c: 33700 }];
       const json = [{ symbol: 'TCB', t: rows.map((r) => r.t), o: rows.map((r) => r.o), h: rows.map((r) => r.h), l: rows.map((r) => r.l), c: rows.map((r) => r.c), v: rows.map(() => 1000) }];
-      return { ok: true, status: 200, json: async () => json } as Response;
+      return { ok: true, status: 200, text: async () => JSON.stringify(json), headers: new Headers() } as Response;
     }) as unknown as typeof fetch;
     const http = { timeoutMs: 1000, maxAttempts: 1, backoffBaseMs: 1, sleep: async () => undefined, log: () => undefined };
     const source = new VciPriceSource({ fetchImpl, http });
