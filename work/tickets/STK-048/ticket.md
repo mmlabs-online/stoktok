@@ -7,7 +7,7 @@
 | Areas | security |
 | Attempts | 1 |
 | Created | 2026-11-05 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/36 |
 
 ## Goal
 Record Ming's decision that stoktok signs in with Supabase Auth of **its own** Supabase project (the same concept CaleChip uses for its own login), not the CaleChip project. STK-004's code is provider-agnostic, so this is a wording and setup-docs change only.
