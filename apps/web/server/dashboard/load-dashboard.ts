@@ -2,11 +2,12 @@ import {
   DEFAULT_PRICE_CUTOFF_MINUTES_VN,
   buildLedger,
   buildPortfolio,
+  buildRefreshBarView,
   expectedPriceDate,
   resolveConcentrationThreshold,
   vnDateOf,
 } from '@stoktok/core';
-import type { LedgerError, Portfolio } from '@stoktok/core';
+import type { LedgerError, Portfolio, RefreshBarView } from '@stoktok/core';
 import {
   getConcentrationThreshold,
   getEntrySettings,
@@ -26,6 +27,7 @@ export type DashboardResult =
       feeRateConfigured: boolean;
       expectedPriceDate: string;
       assets: Asset[];
+      refreshBar: RefreshBarView;
     };
 
 /**
@@ -61,5 +63,10 @@ export async function loadDashboard(db: Db, now: Date): Promise<DashboardResult>
     feeRateConfigured: entry.feeRateConfigured,
     expectedPriceDate: expected,
     assets,
+    refreshBar: buildRefreshBarView({
+      now,
+      holidays: entry.settings.holidays,
+      fetchedAts: portfolio.rows.map((r) => r.fetchedAt),
+    }),
   };
 }

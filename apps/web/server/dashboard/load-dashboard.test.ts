@@ -76,6 +76,10 @@ describe('loadDashboard', () => {
     expect(r.kind).toBe('ok');
     if (r.kind === 'ok') expect(r.feeRateConfigured).toBe(false);
   });
+  it('builds the refresh bar view (Friday 20:00 VN is outside the session)', async () => {
+    const r = await loadDashboard(db, now);
+    expect(r.kind === 'ok' && r.refreshBar).toMatchObject({ state: 'closed', sessionOpen: false, nextInMs: 0, intervalMs: 30_000 });
+  });
   it('settings row missing (defaults) -> ok', async () => {
     vi.mocked(getEntrySettings).mockResolvedValue({
       settings: { ...DEFAULT_MARKET_SETTINGS, feeRatePpm: 0 },
