@@ -57,6 +57,7 @@ Create the `stoktok` environment and its secrets (section above), then Ming merg
    - Sign In / Providers: keep Email enabled and turn **off** "Allow new users to sign up" (public sign-ups disabled; the allowlist still rejects anyone else, this keeps the user list to Ming).
    - Users, Add user, Create new user: Ming's email and a strong password, auto-confirm on.
    - Copy that user's UUID (User UID) for `STOKTOK_ALLOWLIST_USER_IDS`.
+   - Hardening, in the same project: turn **off** anonymous sign-ins; turn **off** every other provider (phone, all OAuth, SSO/SAML); keep "Confirm email" **on**; set a minimum password length (12 or more) and turn on leaked-password protection if the plan offers it; set Site URL and Redirect URLs to `https://<APP_HOSTNAME>` only.
 2. Ming sets `STOKTOK_AUTHEN_SUPABASE_URL`, `STOKTOK_AUTHEN_SUPABASE_ANON_KEY` and `STOKTOK_ALLOWLIST_USER_IDS` in the deployment repo environment `stoktok` (values: see the environment section above).
 3. Ming merges the deployment-repo PR that carries the updated `deploy-stoktok.yml`. A workflow-file change alone does not deploy (the paths filter is `apps/stoktok/**`), so run `workflow_dispatch` on `main` once to rewrite `stoktok.env`.
 4. Only then cut the release that contains STK-004.
@@ -64,12 +65,13 @@ Create the `stoktok` environment and its secrets (section above), then Ming merg
 If step 3 runs before step 2, `deploy-stoktok` stops at `secrets`, names the missing secret and starts nothing. If a STK-004 image runs without the env, `/healthz` stays 200 and every page redirects to `/login`, where sign-in fails: Ming is locked out, nothing is exposed.
 
 ## Rotate the Supabase key
-1. Create the new key in Supabase. For an `sb_secret_...` key, create it next to the old one. For the legacy JWT `service_role` key, rotating means rotating the JWT secret: the old key dies at once and the anon key and sessions are invalidated too (stoktok uses neither yet). Then do steps 2 and 3 right away. Verify which applies in the Supabase dashboard.
-2. Update the `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` secret of the `stoktok` environment.
+1. Create the new key in Supabase. For an `sb_secret_...` key, create it next to the old one. For the legacy JWT `service_role` key, rotating means rotating the JWT secret: the old key dies at once and the anon key and all sessions are invalidated too. That includes web's Authen anon key (`STOKTOK_AUTHEN_SUPABASE_ANON_KEY`) and Ming's login session, so web cannot sign anyone in until the anon key is replaced. Then do steps 2 and 3 right away. Verify which applies in the Supabase dashboard.
+2. Update the `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` secret of the `stoktok` environment. If the legacy JWT secret was rotated, also update `STOKTOK_AUTHEN_SUPABASE_ANON_KEY` with the new anon key.
 3. Run `deploy-stoktok` with `workflow_dispatch` on `main`. It rewrites the env file and, because the content changed, recreates web.
 4. Check that web was recreated: `docker compose -p stoktok ps` shows a new start time.
 5. Run `/Users/mingming/stoktok/current/run-job.sh eod-prices --dry-run`. The health check does not test the DB key (a well-formed wrong key still passes `/healthz`); this run does.
 6. Only then revoke the old key. The key pasted into chat on 2026-11-01 must be revoked, not only replaced.
+7. If the legacy JWT secret was rotated, sign in again at `https://<APP_HOSTNAME>/login` and confirm the dashboard shows (the old session is dead).
 
 ## Cut a release (first one is v0.1.0)
 1. Apply pending migrations by hand. Every migration must work with the previous image.

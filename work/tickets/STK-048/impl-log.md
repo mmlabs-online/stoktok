@@ -26,3 +26,26 @@ None.
 
 ### Scope self-check
 Only plan-listed files, comment/doc lines changed. Not committed, per instruction.
+
+## Attempt 2 (REWORK: security-review M1, M2)
+
+### Files touched
+- `docs/deploy.md`: required because M1 and M2.
+  - M1 (Rotate the Supabase key): step 1 says rotating the legacy JWT secret also invalidates web's Authen anon key and Ming's session; step 2 also updates `STOKTOK_AUTHEN_SUPABASE_ANON_KEY` in that case; new final step 7 signs in again.
+  - M2 (Restore auth step 1): added a hardening bullet. It covers anonymous sign-ins off, all other providers off, "Confirm email" on, minimum password length and leaked-password protection, and Site URL / Redirect URLs set to `https://<APP_HOSTNAME>`.
+
+### Tests added
+None (docs only).
+
+### Checks
+- `pnpm typecheck`, `pnpm lint`, `pnpm test`: green (db 121 passed/1 todo, worker 236, web 266).
+- `bash scripts/check-deploy-env.sh`: `OK: deploy env lists consistent`.
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+None new.
+
+### Scope self-check
+Only docs/deploy.md changed, only the two listed issues. Not committed, per instruction.
