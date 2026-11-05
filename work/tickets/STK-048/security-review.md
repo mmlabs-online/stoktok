@@ -62,3 +62,46 @@ The mitigation for all of these is the same: the allowlist plus the revoked gran
 ## Open questions
 - Is the key leaked on 2026-11-01 a legacy JWT `service_role` key or an `sb_secret_` key? If legacy, the pending rotation will hit M1 immediately.
 - Does the dashboard confirm that only `public` (and `graphql_public`) are exposed through the Data API?
+
+---
+
+# Security review: STK-048, attempt 2
+
+I re-reviewed STK-048 attempt 2. **Both attempt-1 findings are fixed and nothing blocks.** I found no new security issues, only two outdated doc lines (🟢). This was a read-only static review: the directory is not a git repo, so I checked the current `/home/user/stoktok/docs/deploy.md` against `work/tickets/STK-048/security-review.md`. I read no `.env` files.
+
+## Findings
+
+✅ **M1 (key-rotation runbook) is fixed.**
+- `docs/deploy.md:68` now says rotating the legacy JWT secret also invalidates web's Authen anon key (`STOKTOK_AUTHEN_SUPABASE_ANON_KEY`) and Ming's session. It also says sign-in fails until the anon key is replaced.
+- `:69` (step 2) adds "also update `STOKTOK_AUTHEN_SUPABASE_ANON_KEY`" for the legacy case.
+- `:74` (step 7) adds signing in again at `/login` and confirming the dashboard shows.
+- Step 3 (`:70`) carries the new anon key to the host: `deploy-stoktok.yml:162,203` writes `AUTHEN_SUPABASE_ANON_KEY` into the env file on every run.
+- Step 6 (`:73`) still requires revoking the key leaked on 2026-11-01, not just replacing it.
+
+✅ **M2 (Auth setup settings) is fixed.** `docs/deploy.md:60` adds every item I asked for:
+- anonymous sign-ins off
+- all other providers off (phone, OAuth, SSO/SAML)
+- "Confirm email" on
+- minimum password length of 12 or more, and leaked-password protection if the plan offers it
+- Site URL and Redirect URLs set to `https://<APP_HOSTNAME>` only
+
+The order is safe: sign-ups are turned off (`:57`) before the user is created (`:58`).
+
+🟢 **N1. Outdated statement about the secrets file.** `docs/deploy.md:21` (D4) says the file "holds only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`". The workflow now writes five variables into it, including `AUTHEN_SUPABASE_ANON_KEY` and `ALLOWLIST_USER_IDS` (`deploy-stoktok.yml:203`). The mode-600 file still protects them, so nothing is exposed, but the inventory is wrong. Fix: list all five, or say "the variables in the Env list marked web/worker".
+
+🟢 **N2. Outdated wording about missing secrets.** `docs/deploy.md:38` says "If either secret is empty or malformed…", but there are now five secrets. The workflow does check all five (`deploy-stoktok.yml:171-172,189,194`), so only the wording is wrong. Fix: "If any secret…".
+
+ℹ️ **Still open from attempt 1, and correctly left as follow-ups:**
+- `docs/deploy.md:15` still says "No auth code… R6 suspended" (plan follow-up 2).
+- L1: the Authen key slot does not reject a service role key. `deploy-stoktok.yml:189` checks only the characters.
+- L3: the anon key is held in two variables (`deploy.md:112`).
+
+## Recommendations
+1. Optional: fix N1 and N2 in this diff. They are one-line doc corrections in the same file and the same AC1/AC3 area. Otherwise the reviewer can send them to follow-ups (R7).
+2. Keep L1 as a follow-up to enforce the key format (R3).
+
+## Risks
+- None new. If the legacy JWT secret is rotated without following the runbook, Ming is locked out but nothing is exposed (fails closed).
+
+## Open questions
+- Still unanswered: is the key leaked on 2026-11-01 a legacy `service_role` JWT or an `sb_secret_` key? That decides whether the pending rotation goes down the step 1/2/7 path for the legacy key.
