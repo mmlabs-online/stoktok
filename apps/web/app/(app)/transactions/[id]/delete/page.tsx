@@ -4,8 +4,10 @@ import { DeleteTransactionForm } from '../../../../../components/transactions/de
 import { DataError, getDb, getTransaction } from '../../../../../server/db';
 import { isUuid } from '../../../../../server/is-uuid';
 import { deleteTransactionAction } from '../../actions';
+import { requireUser } from '../../../../../server/auth/require-user';
 
 export default async function Page({ params }: { params: Promise<{ id: string }> }) {
+  await requireUser();
   const { id } = await params;
   if (!isUuid(id)) notFound();
   const tx = await getTransaction(getDb(), id).catch((e: unknown) => {

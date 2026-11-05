@@ -6,12 +6,14 @@ import { TransactionFilters } from '../../../components/transactions/transaction
 import { TransactionList } from '../../../components/transactions/transaction-list';
 import { listHref, pageMeta, parseTransactionListQuery, PAGE_SIZE } from '../../../lib/transaction-list-query';
 import { getDb, listCorporateActions, listTransactionsPage } from '../../../server/db';
+import { requireUser } from '../../../server/auth/require-user';
 
 export default async function Page({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  await requireUser();
   const { query, notices } = parseTransactionListQuery(await searchParams);
   const db = getDb();
   const { offset } = pageMeta(0, query.page, PAGE_SIZE);

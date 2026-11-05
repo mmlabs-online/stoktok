@@ -7,7 +7,7 @@ import type { FormState } from '../transactions/handlers';
 
 /**
  * FormData -> raw strings -> core validation -> repo.
- * R6 is suspended: when it is restored, call requireUser() before getDb() in the caller.
+ * Callers must call requireUser() first (R6).
  */
 
 export type SettingsFormState = FormState<SettingsFormRaw>;

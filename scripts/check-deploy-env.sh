@@ -106,6 +106,23 @@ if ! grep -qF "printf 'SUPABASE_URL=" "$WF" \
   fail=1
 fi
 
+# STK-004: every `required now` row of the doc table is written by the workflow (printf NAME=, env mapping
+# STOKTOK_NAME), and the workflow writes nothing else.
+required="$(sed -n '/<!-- env-list:start -->/,/<!-- env-list:end -->/p' "$DOC" \
+  | grep -E '^\| `[A-Z][A-Z0-9_]*` \|.*\| required now \|' | sed -E 's/^\| `([A-Z0-9_]+)`.*/\1/' | sort -u)"
+printf_line="$(grep -F "printf 'SUPABASE_URL=" "$WF" || true)"
+written_keys="$(echo "$printf_line" | grep -oE '[A-Z][A-Z0-9_]*=%s' | sed 's/=%s//' | sort -u)"
+if ! diff <(echo "$required") <(echo "$written_keys"); then
+  echo "FAIL: 'required now' keys in docs/deploy.md differ from keys the workflow writes (< doc, > workflow)" >&2
+  fail=1
+fi
+for k in $required; do
+  if ! grep -qE "^\s+$k: \\$\{\{ secrets\.STOKTOK_$k \}\}\s*$" "$WF"; then
+    echo "FAIL: workflow lacks '$k: \${{ secrets.STOKTOK_$k }}'" >&2
+    fail=1
+  fi
+done
+
 # STK-044: one runner user; env file, scheduler dir and log dir agree across workflow, compose, scripts, plist, runbook.
 DRAFTS="$ROOT/deploy/deployment-repo"
 ADR="$ROOT/docs/adr/0003-deploy-and-scheduling.md"

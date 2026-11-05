@@ -2,10 +2,12 @@ import { TransactionForm } from '../../../../components/transactions/transaction
 import { todayVn } from '../../../../server/clock';
 import { getDb, getEntrySettings } from '../../../../server/db';
 import { createTransactionAction } from '../actions';
+import { requireUser } from '../../../../server/auth/require-user';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
+  await requireUser();
   const today = todayVn();
   const { feeRateConfigured } = await getEntrySettings(getDb());
   return (

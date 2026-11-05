@@ -31,6 +31,7 @@ Create it **before** merging the setup PR. Otherwise GitHub creates the environm
 1. `mmlabs-online/deployment`, Settings, Environments, New environment `stoktok`.
 2. Deployment branches and tags: selected branches, `main` only. This is the control GitHub enforces; the `if: github.ref == 'refs/heads/main'` guard in the workflow is not one on its own, because a manual run uses the workflow file of the chosen branch.
 3. Environment secrets, prefixed `STOKTOK_` because the deployment repo is shared by every mmlabs app: `STOKTOK_SUPABASE_URL` (`https://<ref>.supabase.co`, no trailing slash or path) and `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` (the **new** key, not the one pasted into chat on 2026-11-01). The workflow writes them into the env file as `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, the names the app reads.
+   Auth (STK-004) adds three more: `STOKTOK_AUTHEN_SUPABASE_URL` (the CaleChip project URL, `https://<ref>.supabase.co`, no path), `STOKTOK_AUTHEN_SUPABASE_ANON_KEY` (CaleChip's anon or `sb_publishable_` key) and `STOKTOK_ALLOWLIST_USER_IDS` (comma-separated CaleChip user UUIDs). They are written as `AUTHEN_SUPABASE_URL`, `AUTHEN_SUPABASE_ANON_KEY` and `ALLOWLIST_USER_IDS`.
 4. No repo-level secrets with the same names (environment secrets would quietly override them). No required reviewers: the PR merge is already the gate.
 5. Fallback if the org plan has no environments on a private repo: store both as repo-level Actions secrets and remove the `environment: stoktok` line in the deployment PR before merging. The `main` guard, the fail-safe and D5 stay. Weakness: any workflow on any branch can read repo-level secrets. Record a follow-up to restore the line when the plan allows.
 
@@ -50,6 +51,13 @@ Create the `stoktok` environment and its secrets (section above), then Ming merg
 - Remove an old LaunchDaemon if `preflight` reports one: `sudo launchctl bootout system/online.mmlabs.stoktok.jobs` and `sudo rm /Library/LaunchDaemons/online.mmlabs.stoktok.jobs.plist`.
 - FileVault, and an encrypted Time Machine backup destination.
 - Optional log rotation: a line for `/Users/mingming/stoktok/logs/*.log` in `/etc/newsyslog.d/stoktok.conf` (owner `mingming:staff`).
+
+## Restore auth (STK-004) - order
+1. Ming sets `STOKTOK_AUTHEN_SUPABASE_URL`, `STOKTOK_AUTHEN_SUPABASE_ANON_KEY` and `STOKTOK_ALLOWLIST_USER_IDS` in the deployment repo environment `stoktok`.
+2. Ming merges the deployment-repo PR that carries the updated `deploy-stoktok.yml`. A workflow-file change alone does not deploy (the paths filter is `apps/stoktok/**`), so run `workflow_dispatch` on `main` once to rewrite `stoktok.env`.
+3. Only then cut the release that contains STK-004.
+
+If step 2 runs before step 1, `deploy-stoktok` stops at `secrets`, names the missing secret and starts nothing. If a STK-004 image runs without the env, `/healthz` stays 200 and every page redirects to `/login`, where sign-in fails: Ming is locked out, nothing is exposed.
 
 ## Rotate the Supabase key
 1. Create the new key in Supabase. For an `sb_secret_...` key, create it next to the old one. For the legacy JWT `service_role` key, rotating means rotating the JWT secret: the old key dies at once and the anon key and sessions are invalidated too (stoktok uses neither yet). Then do steps 2 and 3 right away. Verify which applies in the Supabase dashboard.
@@ -71,8 +79,8 @@ Create the `stoktok` environment and its secrets (section above), then Ming merg
 9. **HARD GATE: tunnel token.** `mmlabs-online/deployment/proxy/compose.yml` commits the cloudflared tunnel token in git. Before any public hostname is added, rotate the tunnel token in Cloudflare and move it out of git into a host env file (change made in the deployment repo, not this one). Do not continue until this is done and confirmed.
 10. **Cloudflare Access application** (Zero Trust, Access, Applications, Self-hosted): application domain `<APP_HOSTNAME>`; one Allow policy with Include, Emails, Ming's email only; no bypass rules; note the session duration. Check in the dashboard that it is saved and the policy is attached.
 11. **Then add the public hostname** (Networks, Tunnels, the mmlabs tunnel, Public hostname): `<APP_HOSTNAME>` to service `http://stoktok-web:3000`. Turn on the hostname's Access JWT check ("Protect with Access") and select the application from step 10.
-    **Do not reorder steps 9, 10 and 11.** A hostname without Access exposes the portfolio, because the app has no auth.
-12. Verify: in a private window `https://<APP_HOSTNAME>/` shows the Access login, not the app. After logging in with Ming's email the dashboard loads. Submit one form (server actions check Origin/Host); if it fails, record a follow-up. `curl -sI https://<APP_HOSTNAME>/healthz` without a session gets the Access redirect (302/403), not 200.
+    **Do not reorder steps 9, 10 and 11.** Access is the outer layer; stoktok's `/login` is the inner one.
+12. Verify: in a private window `https://<APP_HOSTNAME>/` shows the Access login, not the app. After logging in with Ming's email, stoktok's `/login` shows; signing in with Ming's CaleChip account shows the dashboard, and "Đăng xuất" returns to `/login`. Submit one form (server actions check Origin/Host); if it fails, record a follow-up. `curl -sI https://<APP_HOSTNAME>/healthz` without a session gets the Access redirect (302/403), not 200.
 13. To take it offline again: delete the public hostname first, then the Access application if wanted. Never the reverse.
 
 ## Roll back
@@ -96,9 +104,9 @@ Names only. Values live in the `stoktok` environment secrets of the deployment r
 | `SUPABASE_URL` | web, worker | required now | n |
 | `SUPABASE_SERVICE_ROLE_KEY` | web, worker | required now | y |
 | `SUPABASE_ANON_KEY` | none | reserved | y |
-| `AUTHEN_SUPABASE_URL` | none | reserved | n |
-| `AUTHEN_JWT_SECRET` | none | reserved | y |
-| `ALLOWLIST_USER_IDS` | none | reserved | n |
+| `AUTHEN_SUPABASE_URL` | web | required now | n |
+| `AUTHEN_SUPABASE_ANON_KEY` | web | required now | y |
+| `ALLOWLIST_USER_IDS` | web | required now | n |
 | `LLM_PROVIDER` | none | reserved | n |
 | `LLM_API_KEY` | none | reserved | y |
 <!-- env-list:end -->

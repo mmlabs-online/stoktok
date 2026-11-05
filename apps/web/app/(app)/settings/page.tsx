@@ -3,10 +3,12 @@ import { SettingsForm } from '../../../components/settings/settings-form';
 import { getAppSettings, getDb } from '../../../server/db';
 import { todayVn } from '../../../server/clock';
 import { saveSettingsAction } from './actions';
+import { requireUser } from '../../../server/auth/require-user';
 
 export const dynamic = 'force-dynamic';
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ saved?: string }> }) {
+  await requireUser();
   const { saved } = await searchParams;
   const { settings, source } = await getAppSettings(getDb());
   return (

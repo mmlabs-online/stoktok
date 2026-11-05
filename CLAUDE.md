@@ -17,7 +17,7 @@ Part of the mmlabs ecosystem (login via Authen). **v1 is single-user (allowlist)
 | Worker | Node.js + TypeScript in `apps/worker` (scheduled jobs: prices, news, signals, AI, scoring) |
 | Domain logic | `packages/core` (TypeScript) — ledger, lots, holdings, P&L, fees/tax, signals. Shared by web and worker |
 | DB | Supabase (dedicated project for stoktok, Postgres, RLS on). Migrations in `supabase/` |
-| Auth | Authen (shared mmlabs SSO, separate Supabase project). Server verifies the Authen JWT + allowlist |
+| Auth | Authen = CaleChip Supabase project (separate). stoktok's own `/login` signs in server-side; the server verifies via `getClaims()` + allowlist |
 | Package manager | pnpm workspaces |
 | Tests | Vitest (unit), Playwright (e2e, later) |
 | Runtime | Docker Compose on Ming's WSL2 home server behind Cloudflare Tunnel |
@@ -39,16 +39,13 @@ Do not change the stack without Ming's explicit decision.
 | R3 | **Service role key is server-only.** Used by Next.js server code and `apps/worker` only. Never in `NEXT_PUBLIC_*`, never in client bundles. The browser never talks to the DB directly. |
 | R4 | **Every market-data record carries `source` and `fetched_at`.** Stale or gapped data never produces a signal; gaps are recorded. |
 | R5 | **Market rules are configuration**, never hard-coded: fee rate, sell tax, price limits per exchange, settlement days, lot size. |
-| R6 | **Every server route / server action verifies the Authen JWT and the allowlist.** ⏸ **Suspended by Ming (2026-10-23)** — see note below. |
+| R6 | **Every server route / server action verifies the Authen JWT and the allowlist.** Restored by STK-004 — see note below. |
 | R7 | **Stay inside the ticket's plan.** Anything else found goes to the follow-ups list, not into the diff. |
 | R8 | **No PASS without green checks.** `typecheck`, `lint`, `test` must pass. New or changed `packages/core` logic must have unit tests. |
 | R9 | **AI output (v1.2+)**: input is stored data only, every factual claim cites a stored input ID, output is schema-validated. AI explains rule-based signals; it never decides the action. |
 | R10 | **Non-goals are hard limits**: no brokerage login, no order placement, no multi-user access to suggestions. |
 
-> **R6 suspended (Ming's decision, 2026-10-23).** No page, route handler or server action has authentication for now; STK-004 is on hold.
-> - Do not add auth code, and do not REWORK a ticket for missing auth. Ticket criteria that say "behind auth" / "calls the auth helper" are waived until R6 is restored.
-> - Keep server-only data access anyway (R3 still applies): the browser never talks to the DB, and server actions and data access go through server code, so adding `requireUser()` later is one call per entry point.
-> - Exposing the app publicly (STK-018) without auth exposes Ming's portfolio data. Before go-live, either restore R6 (finish STK-004) or put the subdomain behind Cloudflare Access — Ming decides.
+> **R6 restored (Ming resumed STK-004, 2026-11-05).** Authen is the CaleChip Supabase project. stoktok has its own `/login` (server action, httpOnly cookie on stoktok's host). `requireUser()` (`apps/web/server/auth`) runs in every page, route handler and server action; the public list is `/login` and `/healthz` (`apps/web/proxy.ts`). Cloudflare Access stays in front for now.
 
 ---
 

@@ -8,6 +8,7 @@ import { nowInstant } from '../../../server/clock';
 import { getDb } from '../../../server/db';
 import { loadWatchlist } from '../../../server/watchlist/load-watchlist';
 import { addWatchAction, removeWatchAction, setExchangeAction } from './actions';
+import { requireUser } from '../../../server/auth/require-user';
 
 const rowActions: RowActions = {
   exchange: (r) => (
@@ -20,6 +21,7 @@ const rowActions: RowActions = {
 export const dynamic = 'force-dynamic';
 
 export default async function Page() {
+  await requireUser();
   const view = await loadWatchlist(getDb(), nowInstant());
   const { holdings, watching, alsoWatched } = view;
 

@@ -34,7 +34,7 @@ ARCHITECTURE RULES (very important)
 4. NO financial calculations inside components. Every number shown (average cost, market value, P&L, P&L %, weights, totals, sellable quantity) must be a pre-computed field in the mock data. Components only format and display.
 5. Formatting helpers (VND, percent, price, date) live in ONE file: src/lib/format.ts.
 6. Screens live in src/screens/, reusable pieces in src/components/. Each screen is a component that takes its data as props; App.tsx wires mock data into screens.
-7. No login screen — authentication is handled outside this app.
+7. Login screen: one simple `/login` page (email + password, Vietnamese labels; no sign-up, no password reset). Ming, 2026-11-05.
 
 DOMAIN TYPES (create in src/types/domain.ts)
 - Transaction { id, date, symbol, side: 'buy'|'sell', quantity, price, fee, tax, source: 'manual'|'import' }
