@@ -17,7 +17,7 @@ export const COOKIE_OPTIONS = {
   path: '/',
 };
 
-/** The only module that talks to the Authen (CaleChip) Supabase project; separate from getDb(). */
+/** The only module that talks to Supabase Auth (Authen, stoktok's own project) with the anon key; separate from getDb(). */
 export function createAuthenClient(cfg: Pick<AuthConfig, 'supabaseUrl' | 'anonKey'>, cookies: CookieMethodsServer) {
   return createServerClient(cfg.supabaseUrl, cfg.anonKey, {
     cookies,
