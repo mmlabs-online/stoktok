@@ -34,3 +34,36 @@ No violations found. R1/R2: all logic is in `packages/core`, integer VND via Big
 - Fixed prize amounts and Power bao range need checking against vietlott.vn before go-live (plan A5).
 - Use the payment date instead of the draw date for tax period selection once the ledger stores it (plan A2).
 - Dated game config (`effectiveFrom` on game rules) if Vietlott changes the prize tables.
+
+## Attempt 2 — 2026-11-05
+Verdict: PASS
+
+### Checks (run by reviewer)
+- typecheck: green (`pnpm typecheck` exit 0, all workspaces)
+- lint: green (`pnpm lint` exit 0, all workspaces)
+- test: green — core 50 files / 652 tests passed (646 + 6 new); sources 24, db 128 (+1 todo), worker 229, web 300. Consistent with impl-log ("651+", 6 new cases).
+
+### Acceptance criteria
+- [x] AC1 Game rules are config — unchanged since attempt 1 (evidence there).
+- [x] AC2 Tier check — unchanged since attempt 1 (evidence there).
+- [x] AC3 Bao expansion; cost counted correctly — `combinations.ts:63-67` `ticketCombinationCount` now runs `validateTicketLines` and throws `RangeError`; `ticketCost` goes through it. `combinations.test.ts › ticketCost / ticketCombinationCount throw on invalid ticket` (size 3, empty line, duplicate, no lines) pass.
+- [x] AC4 Tax — unchanged since attempt 1 (evidence there).
+- [x] AC5 Per-game totals — `summary.ts:22-25` rejects a result whose gameId/drawId differ from the ticket and prices the ticket before touching the accumulator; `summary.test.ts › summarizeTickets validation › rejects invalid pending ticket` and `› rejects result for another ticket` (drawId and gameId cases) pass.
+- [x] AC6 Invalid tickets rejected — `checkTicket` (attempt 1 tests), and now `ticketCost`, `ticketCombinationCount` and `summarizeTickets` too; all checks green.
+
+### Issues
+None. Attempt 1 Issue 1 is resolved exactly as instructed.
+
+### Scope
+Attempt 2 touches only `lottery/combinations.ts`, `lottery/summary.ts` and their tests, all in the plan's file list. The full `packages/` diff vs origin/main matches the plan's file list.
+
+### Rules R1–R10
+No violations. R1/R2/R5 as in attempt 1; R8: new throwing paths have tests.
+
+### Nits (do not block)
+- `check.ts:73,110-111`: `checkTicket` now validates the ticket twice (`validateTicketLines`, then again inside `ticketCost` and `ticketCombinationCount`). Harmless; could compute the count once from the validated lines.
+- `summary.ts:22` throws `'result does not belong to ticket'` without the ids; including gameId/drawId would make debugging easier.
+- Attempt 1 nits (floorDiv doc wording, `topTier` reduce, jackpot2 share assertion with `winnerCount: 0`) are still open.
+
+### Follow-ups (out of scope)
+- As in attempt 1: verify prize amounts and Power bao range against vietlott.vn; payment date for tax period; dated game config.
