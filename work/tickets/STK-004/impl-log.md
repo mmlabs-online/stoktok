@@ -58,3 +58,13 @@ Fixes from review.md attempt 1 (open redirect; security-review F1; nit F4):
 
 Checks: typecheck 0 errors; lint clean; test all pass (core 539, db 121, worker 236, web 265). Not committed, as instructed.
 Follow-ups: other nits/robustness items left as follow-ups.
+
+## Attempt 3 (REWORK)
+
+Fixes: security-review attempt-2 F9; review attempt-2 nit.
+- `apps/web/server/auth/login-path.ts`: after the sentinel-origin parse, `safeNext` also returns '/' when `u.pathname.startsWith('//')` (still returns the raw string otherwise).
+- `apps/web/server/auth/login-path.test.ts`: added '/.//evil.com', '/%2e//evil.com', '/%2E%2E//evil.com', '/a/..//evil.com' with exact `toBe('/')`.
+- `apps/web/app/login/actions.test.ts`: the two `REDIRECT:/` assertions now use `/^REDIRECT:\/$/`.
+
+Checks: typecheck 0 errors; lint clean; test all pass (web 266). Not committed, as instructed.
+Out-of-plan files: none. Follow-ups: none new.

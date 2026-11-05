@@ -3,7 +3,8 @@ export function safeNext(raw: unknown): string {
   if (typeof raw !== 'string' || !raw.startsWith('/')) return '/';
   if (raw.startsWith('//') || /[\\\s]/.test(raw) || [...raw].some((c) => c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)) return '/';
   try {
-    if (new URL(raw, 'http://sentinel.invalid').origin !== 'http://sentinel.invalid') return '/';
+    const u = new URL(raw, 'http://sentinel.invalid');
+    if (u.origin !== 'http://sentinel.invalid' || u.pathname.startsWith('//')) return '/';
   } catch {
     return '/';
   }

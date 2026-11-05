@@ -14,6 +14,12 @@ describe('safeNext / loginPath', () => {
     }
   });
 
+  it('rejects paths that normalize to a protocol-relative URL', () => {
+    for (const bad of ['/.//evil.com', '/%2e//evil.com', '/%2E%2E//evil.com', '/a/..//evil.com']) {
+      expect(safeNext(bad)).toBe('/');
+    }
+  });
+
   it('rejects control chars, whitespace and backslash anywhere', () => {
     for (const bad of ['/\t/evil.com', '/\x0b/evil.com', '/ /evil.com', '/\n/evil.com', '/\r/evil.com', '/\x00/evil.com', '/a\\b']) {
       expect(safeNext(bad)).toBe('/');
