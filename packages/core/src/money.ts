@@ -52,3 +52,15 @@ export function addVnd(...xs: number[]): number {
   for (const x of xs) sum += BigInt(assertVnd(x, 'amount'));
   return toSafe(sum);
 }
+
+/** floor(a / b) computed exactly. b must be a positive integer, a a non-negative-or-negative safe integer. */
+export function floorDiv(a: number, b: number): number {
+  assertVnd(a, 'a');
+  assertVnd(b, 'b');
+  if (b <= 0) throw new RangeError('denominator must be positive');
+  const na = BigInt(a);
+  const nb = BigInt(b);
+  let q = na / nb;
+  if (na % nb !== 0n && na < 0n) q -= 1n;
+  return toSafe(q);
+}

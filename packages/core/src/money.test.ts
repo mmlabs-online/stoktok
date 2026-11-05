@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addVnd, applyRatePpm, assertVnd, mulDiv, roundDiv } from './money';
+import { addVnd, applyRatePpm, assertVnd, floorDiv, mulDiv, roundDiv } from './money';
 
 describe('roundDiv half-up', () => {
   it('rounds half away from zero', () => {
@@ -45,5 +45,23 @@ describe('addVnd', () => {
     expect(addVnd()).toBe(0);
     expect(() => addVnd(Number.MAX_SAFE_INTEGER, 1)).toThrow(RangeError);
     expect(() => addVnd(1.5, 1)).toThrow(RangeError);
+  });
+});
+
+describe('floorDiv', () => {
+  it('is exact when divisible and rounds down otherwise', () => {
+    expect(floorDiv(9, 3)).toBe(3);
+    expect(floorDiv(10, 3)).toBe(3);
+    expect(floorDiv(2, 3)).toBe(0);
+    expect(floorDiv(-1, 3)).toBe(-1);
+  });
+  it('is exact for large values', () => {
+    expect(floorDiv(Number.MAX_SAFE_INTEGER, 2)).toBe(4_503_599_627_370_495);
+  });
+  it('rejects denominator <= 0 and non-integers', () => {
+    expect(() => floorDiv(10, 0)).toThrow(RangeError);
+    expect(() => floorDiv(10, -2)).toThrow(RangeError);
+    expect(() => floorDiv(1.5, 2)).toThrow(RangeError);
+    expect(() => floorDiv(10, 0.5)).toThrow(RangeError);
   });
 });
