@@ -17,7 +17,7 @@ describe.skipIf(files.length === 0)('recorded gap-chart samples parse', () => {
   test.each(files)('%s', async (f) => {
     const body = read(f);
     const source = new VciIntradaySource({
-      fetchImpl: (async () => ({ ok: true, status: 200, json: async () => body })) as unknown as typeof fetch,
+      fetchImpl: (async () => ({ ok: true, status: 200, text: async () => JSON.stringify(body), headers: new Headers() })) as unknown as typeof fetch,
       http: { timeoutMs: 1000, maxAttempts: 1, backoffBaseMs: 0, sleep: async () => undefined, log: () => undefined },
     });
     const r = await source.fetchLatest(request.symbols, { now: recordedAt });

@@ -45,3 +45,27 @@ None. (`apps/web/next.config` `transpilePackages` is not changed: web does not i
 ### Scope self-check
 - Could the diff be smaller? No.
 - Diff size: tracked +104 / -157 (the move), plus new files (sources package, core intraday, db repo, migration, ADR, script).
+
+---
+
+## Attempt 2 (REWORK: security-review.md yellow items)
+
+### Files touched
+- `record-vci-intraday-samples.sh`: gap-chart failures set FAILED and the script exits 1 at the end (403 still stops at once); curl gets `--connect-timeout 10 --max-time 15`. Headers unchanged (honest only).
+- `packages/sources/src/http.ts`: `redirect: 'error'`; optional `maxBodyBytes` (default 5 MiB, `DEFAULT_MAX_BODY_BYTES`); body is read as a capped stream (content-length pre-check) and then JSON-parsed. Over the cap gives non-retryable `SourceError('response body exceeds N bytes')`.
+- `packages/sources/src/http.test.ts`: tests for redirect option, redirect-as-error, cap exceeded, content-length cap, body at the cap.
+- Existing test mocks (`eod-sync.test.ts`, `tcbs.test.ts`, `tcbs-financials.test.ts`, `vci.test.ts`, `vci-iq-financials.test.ts`, `vci-intraday.test.ts`, `vci-intraday.samples.test.ts`): fake responses changed from `json()` to `text()` + `headers` because the client now reads the body as text. Mock-only change, no assertions changed. Required because the client no longer calls `res.json()`.
+
+### Checks
+- typecheck, lint: all Done, clean
+- test: core 577, sources 24, db 128 (1 todo), worker 229, web 266 passed
+- build: worker and web Done
+
+### Out-of-plan files
+The worker test mock edits above (mechanical, needed by the http.ts change).
+
+### Follow-ups
+- A redirect surfaces as a fetch TypeError, so it is treated as a retryable network error (up to maxAttempts); harmless but slightly chatty.
+
+### Scope self-check
+Only the two yellow items were addressed. Nothing committed.

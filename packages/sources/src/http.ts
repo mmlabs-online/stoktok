@@ -5,9 +5,13 @@ export interface GetJsonOptions {
   maxAttempts: number;
   backoffBaseMs: number;
   userAgent: string;
+  /** Max response body size in bytes (default DEFAULT_MAX_BODY_BYTES). */
+  maxBodyBytes?: number;
   sleep: (ms: number) => Promise<void>;
   log: (message: string) => void;
 }
+
+export const DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024;
 
 interface RequestInitLite {
   method: 'GET' | 'POST';
@@ -40,11 +44,19 @@ async function requestJson(fetchImpl: typeof fetch, url: string, init: RequestIn
           Accept: 'application/json',
           ...(init.method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
         },
+        redirect: 'error',
         signal: AbortSignal.timeout(o.timeoutMs),
       });
       if (res.ok) {
+        let text: string;
         try {
-          return await res.json();
+          text = await readCapped(res, o.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES);
+        } catch (e) {
+          if (e instanceof SourceError) throw e;
+          throw new SourceError('failed to read response body', true, res.status);
+        }
+        try {
+          return JSON.parse(text);
         } catch {
           throw new SourceError('response is not valid JSON', false, res.status);
         }
@@ -58,4 +70,30 @@ async function requestJson(fetchImpl: typeof fetch, url: string, init: RequestIn
     if (!last.retryable) throw last;
   }
   throw last ?? new SourceError('no attempt made', true);
+}
+
+async function readCapped(res: Response, max: number): Promise<string> {
+  const tooBig = () => new SourceError(`response body exceeds ${max} bytes`, false, res.status);
+  const declared = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > max) throw tooBig();
+  if (!res.body) {
+    const t = await res.text();
+    if (new TextEncoder().encode(t).length > max) throw tooBig();
+    return t;
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let total = 0;
+  let out = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > max) {
+      await reader.cancel();
+      throw tooBig();
+    }
+    out += decoder.decode(value, { stream: true });
+  }
+  return out + decoder.decode();
 }

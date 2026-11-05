@@ -54,7 +54,7 @@ function build(r: Replies = {}, opts: { maxPeriodsPerResponse?: number; maxQuart
     if (typeof reply === 'object' && reply !== null && 'status' in reply && !('data' in reply)) {
       return { ok: false, status: (reply as { status: number }).status } as Response;
     }
-    return { ok: true, status: 200, json: async () => reply } as Response;
+    return { ok: true, status: 200, text: async () => JSON.stringify(reply), headers: new Headers() } as Response;
   }) as unknown as typeof fetch;
   const http = {
     timeoutMs: 1000,

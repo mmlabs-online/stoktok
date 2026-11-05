@@ -10,7 +10,7 @@ function source(body: unknown) {
   const urls: string[] = [];
   const fetchImpl = (async (url: string) => {
     urls.push(url);
-    return { ok: true, status: 200, json: async () => body } as Response;
+    return { ok: true, status: 200, text: async () => JSON.stringify(body), headers: new Headers() } as Response;
   }) as unknown as typeof fetch;
   const http = { timeoutMs: 1000, maxAttempts: 1, backoffBaseMs: 1, sleep: async () => undefined, log: () => undefined };
   return { src: new TcbsPriceSource({ fetchImpl, http }), urls };

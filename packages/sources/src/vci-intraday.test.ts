@@ -8,7 +8,7 @@ import { VciIntradaySource } from './vci-intraday';
 const fixture = JSON.parse(readFileSync(join(__dirname, '__fixtures__', 'vci-intraday.synthetic.json'), 'utf8')) as unknown[];
 const NOW = new Date('2026-11-05T10:05:00+07:00');
 
-const res = (status: number, body: unknown = {}) => ({ ok: status >= 200 && status < 300, status, json: async () => body }) as Response;
+const res = (status: number, body: unknown = {}) => ({ ok: status >= 200 && status < 300, status, text: async () => JSON.stringify(body), headers: new Headers() }) as Response;
 
 function make(responses: Array<Response | Error>, extra: { maxSymbolsPerRequest?: number } = {}) {
   const queue = [...responses];

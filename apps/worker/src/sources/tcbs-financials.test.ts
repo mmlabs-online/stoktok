@@ -17,7 +17,7 @@ function source(replies: { ratio?: Reply; income?: Reply; overview?: Reply }, op
     if (typeof reply === 'object' && reply !== null && 'status' in reply) {
       return { ok: false, status: (reply as { status: number }).status } as Response;
     }
-    return { ok: true, status: 200, json: async () => reply } as Response;
+    return { ok: true, status: 200, text: async () => JSON.stringify(reply), headers: new Headers() } as Response;
   }) as unknown as typeof fetch;
   const http = { timeoutMs: 1000, maxAttempts: 2, backoffBaseMs: 1, sleep: async (ms: number) => void sleeps.push(ms), log: () => undefined };
   return { src: new TcbsFinancialsSource({ fetchImpl, http, requestDelayMs: 7, ...opts }), calls, sleeps };
