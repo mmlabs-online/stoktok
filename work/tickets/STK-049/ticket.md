@@ -7,7 +7,7 @@
 | Areas | data, architecture, db, ui |
 | Attempts | 1 |
 | Created | 2026-11-05 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/37 |
 
 ## Goal
 While Ming has the app open during a trading session, prices for his watchlist and held symbols refresh every 30 seconds, and a "Làm mới" button refreshes them at once. The existing scheduled EOD jobs stay as they are for when the app is closed.
