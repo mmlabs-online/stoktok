@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P1 |
 | Areas | ui |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-11-05 |
 | PR | — |
 
@@ -24,3 +24,4 @@ docs/spec-v1.md §8 v1.1; §2 "Intraday data may be delayed. Every price carries
 
 ## Notes / answers from Ming
 - 2026-11-05: split from STK-049 ("user mở app thì reload sau mỗi 30s, và thêm 1 nút cho user refresh ngay").
+- **Ming (2026-11-05):** fix security-review findings 1 and 2 before the PR (rework 1): failure backoff 30→60→120 s and stop after 3 consecutive failures until "Làm mới"; clear busy / prevent overlap when the scheduler is recreated mid-call.
