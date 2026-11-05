@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PriceRefreshBar } from '../../components/price-refresh-bar';
 import { EmptyState } from '../../components/empty-state';
 import { HoldingsTable } from '../../components/portfolio/holdings-table';
 import { PortfolioSummary } from '../../components/portfolio/portfolio-summary';
@@ -7,6 +8,7 @@ import { nowInstant } from '../../server/clock';
 import { formatVnd } from '@stoktok/core';
 import { getDb } from '../../server/db';
 import { requireUser } from '../../server/auth/require-user';
+import { refreshPricesAction } from './prices/actions';
 
 // Reads the database per request; never prerendered at build time.
 export const dynamic = 'force-dynamic';
@@ -31,10 +33,13 @@ export default async function Page() {
     );
   }
 
-  const { portfolio, hasTransactions, feeRateConfigured } = result;
+  const { portfolio, hasTransactions, feeRateConfigured, refreshBar } = result;
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">Tổng quan</h1>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <h1 className="text-xl font-semibold">Tổng quan</h1>
+        {portfolio.rows.length > 0 && <PriceRefreshBar view={refreshBar} action={refreshPricesAction} />}
+      </div>
       <PortfolioSummary totals={portfolio.totals} feeRateConfigured={feeRateConfigured} />
       {!hasTransactions ? (
         <EmptyState

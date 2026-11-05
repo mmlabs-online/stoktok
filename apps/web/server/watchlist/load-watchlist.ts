@@ -3,11 +3,12 @@ import {
   DEFAULT_TICK_BANDS,
   buildLedger,
   buildPriceBoardRow,
+  buildRefreshBarView,
   expectedPriceDate,
   splitWatchlistGroups,
   vnDateOf,
 } from '@stoktok/core';
-import type { Exchange, LedgerError, PriceBoardRow } from '@stoktok/core';
+import type { Exchange, LedgerError, PriceBoardRow, RefreshBarView } from '@stoktok/core';
 import {
   getEntrySettings,
   getMarketRules,
@@ -31,6 +32,7 @@ export interface WatchlistView {
   /** Held symbols that are also in the watchlist table (shown once, in holdings). */
   alsoWatched: string[];
   expectedPriceDate: string;
+  refreshBar: RefreshBarView;
 }
 
 /**
@@ -74,12 +76,17 @@ export async function loadWatchlist(db: Db, now: Date): Promise<WatchlistView> {
     return { ...board, priceDateDiffers: board.tradeDate !== null && board.tradeDate !== expected };
   };
 
+  const holdingRows = groups.holdings.map(row);
+  const watchingRows = groups.watching.map(row);
   return {
-    holdings: ledger.ok
-      ? { ok: true, rows: groups.holdings.map(row) }
-      : { ok: false, error: ledger.error },
-    watching: groups.watching.map(row),
+    holdings: ledger.ok ? { ok: true, rows: holdingRows } : { ok: false, error: ledger.error },
+    watching: watchingRows,
     alsoWatched: groups.alsoWatched,
     expectedPriceDate: expected,
+    refreshBar: buildRefreshBarView({
+      now,
+      holidays: entry.settings.holidays,
+      fetchedAts: [...(ledger.ok ? holdingRows : []), ...watchingRows].map((r) => r.fetchedAt),
+    }),
   };
 }

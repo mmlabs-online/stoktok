@@ -5,6 +5,7 @@ import {
   formatPercent,
   formatPrice,
   formatQuantity,
+  formatTime,
   formatVnd,
 } from './format';
 
@@ -101,5 +102,15 @@ describe('formatDateTime', () => {
   });
   it('throws on bad input', () => {
     expect(() => formatDateTime('not a date')).toThrow(RangeError);
+  });
+});
+
+describe('formatTime', () => {
+  it('formats HH:mm:ss in Vietnam time', () => {
+    expect(formatTime('2026-11-05T03:15:42Z')).toBe('10:15:42');
+    expect(formatTime('2026-11-04T17:00:05Z')).toBe('00:00:05');
+  });
+  it('throws RangeError on invalid input', () => {
+    expect(() => formatTime('nope')).toThrow(RangeError);
   });
 });
