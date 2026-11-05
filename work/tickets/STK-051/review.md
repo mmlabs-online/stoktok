@@ -57,3 +57,69 @@ Scope: every changed code file is in the plan's file list. The work/ files are o
 ### Follow-ups (out of scope)
 - The plan's (a) to (d): per-row time, the offline state, jsdom DOM tests, and the "Làm mới" cool-down after STK-050.
 - STK-050: replace only the body of `refreshPricesAction` and keep `RefreshPricesResult`. This is already noted in STK-050/ticket.md.
+
+## Attempt 2 — 2026-11-05
+Verdict: REWORK
+
+Scope: Ming's rework of security-review findings 1 and 2 (ticket note, 2026-11-05). Reviewed `git diff HEAD~1..HEAD` (4b95114). The impl-log heading says "Attempt 3"; this is attempt 2.
+
+### Checks (run by reviewer)
+- typecheck: all workspaces Done, no errors
+- lint: all workspaces Done, no errors
+- test: core 593/593, sources 24 (1 file skipped), db 128 + 1 todo, worker 229/229, web 299/299 (38 files). Matches impl-log.
+
+### Acceptance criteria (rework scope)
+- [ ] Finding 1: "failure backoff 30→60→120 s and stop after 3 consecutive failures until Làm mới". FAILED, see Issue 1. The stop after 3, the reset by "Làm mới" and the reset on success are done and tested (refresh-scheduler.test.ts "backs off 1x, 2x interval…", "a success resets the backoff").
+- [x] Finding 2: clear busy and prevent overlap when the scheduler is recreated mid-call.
+  - `onBusy(false)` now runs in `finally` even after dispose (refresh-scheduler.ts:77-80). Test: "dispose mid-call clears busy".
+  - The scheduler is created once per mount (price-refresh-bar.tsx effect with `[]` deps). View changes call `replan()`, so no second scheduler can overlap an in-flight call. Test: "replan re-times the next call when healthy".
+- [x] The original AC1–AC5 evidence from attempt 1 still holds. All the attempt-1 scheduler and bar tests pass.
+
+### Issues
+#### Issue 1 — 🔴 blocker — the backoff does not match Ming's numbers
+- **Where**: apps/web/lib/refresh-scheduler.ts:73-75, and refresh-scheduler.test.ts "backs off 1x, 2x interval on repeated rejection then stops after 3"
+- **Expected**: Ming's note says 30→60→120 s, then stop after 3 consecutive failures. The only reading that uses all three numbers and stops at 3 failures is:
+  - normal poll gap 30 s;
+  - after the 1st failure, wait 60 s;
+  - after the 2nd failure, wait 120 s;
+  - after the 3rd failure, stop until "Làm mới".
+- **Actual**: the waits are `intervalMs * 2 ** (failures - 1)`, which gives 30 s, then 60 s, then stop. A 120 s wait never happens, so the first retry is not backed off at all.
+- **Fix instruction**:
+  1. Change the wait to `deps.intervalMs * 2 ** failures` (60 s, then 120 s) and keep `failures < MAX_FAILURES`. Update the comment on line 73.
+  2. Rewrite the backoff test with these checks:
+     - after the first rejection, no call at 60 000 − 1 ms and call 2 at 60 000 ms;
+     - no call at 120 000 − 1 ms and call 3 at 120 000 ms;
+     - then no calls for 20 intervals.
+     Keep the replan-ignored and button-reset checks.
+  3. Update the timings in "a success resets the backoff": fail → 60 s → ok → 30 s → fail → 60 s.
+  4. Fix the impl-log wording.
+
+#### Issue 2 — 🟡 should-fix — a failure while the session is closed now stops polling for the rest of the mount
+- **Where**: refresh-scheduler.ts:74 (`if (sessionOpen && …)`) together with :108 (`replan` ignored when `failures > 0`)
+- **Expected**: AC1 says polling runs while the session is open. A single failed call should never stop polling for good. Only 3 failures in a row may do that, and Ming's note asks for exactly that.
+- **Actual**: two cases leave `failures = 1`, set no retry timer (because `sessionOpen` is false), and make every later `replan` a no-op:
+  - the user presses "Làm mới" during lunch (or before 09:00) and the call fails;
+  - the 13:00 or 09:00 wake-up call fails, because `sessionOpen` is still false from the closed plan.
+
+  In both cases the page never polls again until the user presses "Làm mới". Before this attempt, a view change rebuilt the scheduler. `replan` now blocks that. The security re-review saw the same thing (observation 2).
+- **Fix instruction**:
+  1. In `plan()`, record `expectOpen = r.sessionOpen || r.nextInMs > 0`. This means the next tick is expected to be in session.
+  2. Use `expectOpen` instead of `sessionOpen` in the catch-branch guard (line 74). A failed wake-up or a failed lunch press then backs off like a failure in session. The next ok/closed result re-plans correctly through `plan(r)`.
+  3. Add a fake-timer test: initial `{sessionOpen:false, nextInMs:60_000}`, the wake-up call rejects, then one retry happens after the backoff wait.
+  4. Leave `replan` as it is.
+
+### Rules R1–R10
+No violations found.
+- R1/R5: the backoff is timing in lib, derived from the configured `intervalMs`. No money math.
+- R3/R6: unchanged (the action still calls `requireUser()` first, and the client imports are unchanged).
+- R7: the code changes are limited to the plan's files (scheduler, its test, the bar).
+
+### Nits (do not block)
+- impl-log: the heading "Attempt 3" should be "Attempt 2". "Not committed (as instructed)" is wrong, because commit 4b95114 exists.
+- After 3 failures, the stopped state shows the same "Không làm mới được" label as a single failure. That is acceptable for now; see the follow-up.
+
+### Follow-ups (out of scope)
+- A distinct "stopped" label in core, e.g. "Đã dừng tự làm mới · bấm Làm mới" (from impl-log).
+- Security re-review observation 1: a floor on `refreshIntervalMs` in config validation.
+- Expired session (a 307 on the server-action POST) shows "failed" instead of redirecting to /login. A UX check for Ming.
+- STK-050 server-side throttle (already noted in STK-050/ticket.md).
