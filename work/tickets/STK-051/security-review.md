@@ -109,3 +109,45 @@
 
 ### Unchanged checks
 `requireUser()` still runs first in the action (R6). The client imports nothing that can reach the server (R3), the action takes no input, and there is no XSS path. This attempt does not touch any of that.
+
+---
+
+# STK-051 security review, attempt 3
+
+## Security re-review: STK-051 attempt 3
+
+**Verdict: no blocking findings and no new security issues.** Polling is still bounded, calls still cannot overlap, and R3 and R6 are untouched (this attempt changes only the scheduler and its tests). I only read the code; I did not run the tests or diff the commit.
+
+### Findings
+
+**1. Polling stays bounded, and the new `expectOpen` cannot cause endless retries.** `apps/web/lib/refresh-scheduler.ts:40,50,69-77,105,109`
+- **Where `expectOpen` gets set:** only in `plan()` (`:50`). `plan()` runs at start-up, after a success, and from `replan`. `replan` is ignored once `failures > 0` (`:109`), and the catch branch never calls `plan()`. So nothing can change `expectOpen` while retries are running.
+- **What stops the retries:** a retry timer is set only when `failures < MAX_FAILURES`, i.e. failures 1 and 2. The waits are 60 s then 120 s with `intervalMs` = 30 s. The 3rd failure sets no timer.
+- **Worst case:** 3 automatic calls in a row, then a stop. Only "Làm mới" restarts polling: `refreshNow` resets `failures` (`:105`), and each press allows at most 3 more calls.
+- **What `nextInMs > 0` means in core:** it is positive only when a session opens later the same day, such as lunch or pre-open (`packages/core/src/market/refresh-view.ts:50-54`). After the last session it is 0. So `expectOpen` is not stuck at true overnight. Even if it were, the stop at 3 failures would still apply.
+- **Tests:** `refresh-scheduler.test.ts:187-213` covers the 2x and 4x waits, the stop, `replan` being ignored, and the button reset. `:227-239` covers a failed wake-up call while the session is closed.
+
+**2. Still no overlapping calls.**
+- The retry timer is set inside `catch` while `inFlight` is still true, but it fires much later. When it fires, `tick` checks `inFlight` (`:91`).
+- `refreshNow` (`:104`) and the visibility callback (`:96`) also check `inFlight`.
+- `run` clears any pending timer (`:60`), so pressing the button during a backoff cancels the queued retry instead of adding a second call.
+- A hidden tab only sets `due`; becoming visible again runs a single call that counts toward `failures` as usual.
+
+**3. [INFO, not security] `expectOpen` can be stale, so retries may run just after the session ends.** `refresh-scheduler.ts:75`
+- Example: the last success is at 14:44 while the session is open. A failure at 14:45 still schedules retries at about 14:46 and 14:48, after the close.
+- This is at most 2 extra calls, then a stop. The interim action is cheap and makes no source call, so there is no amplification risk.
+- No change needed unless the reviewer reads AC1 strictly. In that case the closed-session window could come from core.
+
+**4. Carried over.**
+- [INFO] There is no minimum for `intervalMs` (`:52,76`). If it were set to 0, polling would become a tight loop. It is server config, not client input, so this cannot be exploited.
+- The server-side throttle is still a follow-up for STK-050 (`work/tickets/STK-050/ticket.md:30`).
+
+### Recommendations
+- None required for this attempt.
+- Optional hardening: a minimum `refreshIntervalMs` in core config validation (R5).
+
+### Risks
+None new.
+
+### Open questions
+None.
