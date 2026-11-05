@@ -7,7 +7,7 @@
 | Areas | ui |
 | Attempts | 2 |
 | Created | 2026-11-05 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/38 |
 
 ## Goal
 While Ming has the dashboard, watchlist or symbol page open and visible during a session, prices refresh every 30 s through the STK-050 server action, and a "Làm mới" button refreshes at once; each page shows when prices were last updated and whether they are delayed.
