@@ -7,7 +7,7 @@
 | Areas | finance |
 | Attempts | 1 |
 | Created | 2026-11-05 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/39 |
 
 ## Goal
 Add a `lottery` module to `packages/core` that models Mega 6/45 and Power 6/55 as configuration and computes, for a ticket and a draw result, the prize tier, gross prize, prize tax and net result.
