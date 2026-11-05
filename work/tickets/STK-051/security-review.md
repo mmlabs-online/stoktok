@@ -61,3 +61,51 @@
 - /home/user/stoktok/apps/web/test/entrypoints.test.ts
 - /home/user/stoktok/apps/web/proxy.ts
 - /home/user/stoktok/apps/web/server/auth/require-user.ts
+
+---
+
+# STK-051 security review, attempt 2
+
+## Security re-review: STK-051 attempt 2
+
+**Verdict: findings 1 and 2 are resolved. Calls cannot overlap, automatic polling stops after a bounded number of failures, and the attempt adds no new security finding.** I did this by reading the code only: I did not run the tests and did not diff the commit. I opened no `.env` files.
+
+### Finding 1 (no backoff or stop on failure): RESOLVED
+- `apps/web/lib/refresh-scheduler.ts:68-76`: each failure adds to `failures` and sets a retry timer at `intervalMs * 2^(failures-1)`, but only while the session is open and `failures < 3`. That means 30 s, then 60 s, then no timer. This is 3 calls in a row at most, not the 30/60/120 s plus stop that I suggested, and that is fine.
+- `replan` (`:107-109`) does nothing once `failures > 0`. So a server re-render cannot restart polling while it is backing off or after it has stopped.
+- The visibility path cannot get around this. Only `tick` sets `due`, a tick needs a timer that was allowed to be set, and `run` clears `due` (`:58`).
+- After the stop, only "Làm mới" restarts polling. `refreshNow` resets `failures` to 0 (`:104`), so each press allows at most 3 more automatic calls. The user has to act each time.
+- Tests: `refresh-scheduler.test.ts:187-211` covers backoff, stop, replan being ignored, and the button reset. `:213-222` covers a success resetting the count.
+- The expired-session case (my attempt-1 open question about a 307 on the server-action POST) is now limited to 3 calls, not endless retries. It still shows "failed" rather than sending the user to `/login`. That is a UX question, not a security one.
+
+### Finding 2 (busy stuck or two calls at once after a rebuild): RESOLVED
+- `apps/web/components/price-refresh-bar.tsx:77-97` creates the scheduler once per mount (`[]` deps). Its initial values come from `useEffectEvent`. View changes only call `replan` (`:99-101`), so a rebuild while a call is in flight no longer happens.
+- `refresh-scheduler.ts:77-80`: `onBusy(false)` is in `finally`, so it also runs on the early `return` after `dispose`. Test: `:224-231`.
+- No overlap inside the one scheduler:
+  - `tick` returns early if a call is running (`:90`).
+  - The visibility callback checks `inFlight` (`:95`).
+  - `refreshNow` checks it too (`:103`).
+  - A `replan` during a call can set a timer, but that tick sees `inFlight` and does nothing. When the call ends, `run` clears or replaces the timer.
+- React StrictMode (dev only) mounts the effect twice. The first scheduler is disposed before it can make any call, so there is still only one live scheduler.
+- The bars on `page.tsx`, `watchlist/page.tsx` and `symbols/[symbol]/page.tsx` are on separate routes, so only one is mounted at a time.
+
+### Polling limits
+- **Session open, calls succeeding:** one call per `max(intervalMs, nextInMs)`. This continues while the session is open, as AC1 intends. Each call waits for the previous one to finish.
+- **Session closed:** no timer when `nextInMs` is 0. Otherwise a single wake-up at `nextInMs`, and `replan` re-times it from fresh server data. This does not loop.
+- **Failures:** at most 3 automatic calls in a row (above).
+- **Tab hidden:** no calls. Becoming visible again runs one call.
+
+### New observations (none blocking)
+1. **[INFO, hardening] Polling has no lower limit if `intervalMs` is set to 0.** `refresh-scheduler.ts:51,75`
+   - If `config.refreshIntervalMs` were ever set to 0 or a negative value, polling in an open session would become a tight loop.
+   - The value is server config, not client input, and is 30_000 today. This cannot be exploited.
+   - Optional fix: a floor in core config validation, or `Math.max(intervalMs, 1000)` here.
+2. **[LOW, functional, not security] Polling may never resume on its own after a failure while the session is closed.** `refresh-scheduler.ts:74,108`
+   - Example: the user presses "Làm mới" during lunch and the call fails.
+   - `failures` becomes 1, no retry is set (the session is closed), and every later `replan` is ignored.
+   - So the 13:00 wake-up never comes until the user presses again. Polling fails safe here, but this may break AC1's "polls while the session is open" for that mount.
+   - Possible fix: let `replan` go through when the plan has no timer and the session is now open, or set the closed-session wake-up in the catch branch. This is for the reviewer and planner to decide.
+3. **Attempt-1 finding 3 (server-side throttle) is still a follow-up for STK-050.** It is already recorded in `work/tickets/STK-050/ticket.md:30`.
+
+### Unchanged checks
+`requireUser()` still runs first in the action (R6). The client imports nothing that can reach the server (R3), the action takes no input, and there is no XSS path. This attempt does not touch any of that.
