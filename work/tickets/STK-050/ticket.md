@@ -27,3 +27,4 @@ docs/spec-v1.md §8 v1.1 "Intraday polling"; §2 trading sessions; §5 `prices_i
 - Security (STK-049): add apps/web/server/sources.ts with 'server-only' and pin web importers of @stoktok/sources in r3-guard.test.ts before web imports it.
 - 2026-11-05: Ming merged STK-049 (PR #37) and will do the live-sample recording and the prices_intraday migration later — tracked in work/ming-todo.md.
 - From STK-051 plan (2026-11-05): implement the body of `refreshPricesAction` in `apps/web/app/(app)/prices/actions.ts` using the core `RefreshPricesResult` contract (STK-051 ships a stored-only interim body); also update the watchlist subtitle and add the "(tạm tính)" note on the dashboard.
+- From STK-051 security review (finding 3): enforce the throttle on the server before any source fetch; the client throttle and `nextInMs` are only hints.
