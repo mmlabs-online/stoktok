@@ -73,6 +73,10 @@ describe('loadWatchlist', () => {
     expect(r.holdings.ok && r.holdings.rows.map((x) => x.symbol)).toEqual(['FPT']);
     expect(r.watching.map((x) => x.symbol)).toEqual(['VNM']);
   });
+  it('builds the refresh bar view', async () => {
+    const r = await loadWatchlist(db, now);
+    expect(r.refreshBar).toMatchObject({ state: 'closed', sessionOpen: false, nextInMs: 0, intervalMs: 30_000 });
+  });
   it('held+watched symbol shown once in Holdings, listed in alsoWatched', async () => {
     vi.mocked(listWatchlist).mockResolvedValue([watch('FPT'), watch('VNM')]);
     const r = await loadWatchlist(db, now);

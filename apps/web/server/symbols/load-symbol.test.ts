@@ -134,6 +134,10 @@ describe('loadSymbol', () => {
     expect(v?.refEstimated).toBe(false);
     expect(getRecentCloses).toHaveBeenCalledWith(db, ['FPT'], 2);
   });
+  it('builds the refresh bar view', async () => {
+    const v = await loadSymbol(db, 'FPT', now);
+    expect(v?.refreshBar).toMatchObject({ state: 'closed', sessionOpen: false, nextInMs: 0, intervalMs: 30_000 });
+  });
   it('ex-date from a corporate action sets flags.exDate', async () => {
     vi.mocked(listCorporateActions).mockResolvedValue([
       { type: 'cash_dividend', id: 'c', symbol: 'FPT', exDate: '2026-10-23', amountPerShare: 1000 },

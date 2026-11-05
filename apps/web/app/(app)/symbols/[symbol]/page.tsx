@@ -1,6 +1,7 @@
 import { formatQuantity, normalizeSymbol } from '@stoktok/core';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { PriceRefreshBar } from '../../../../components/price-refresh-bar';
 import { EmptyState } from '../../../../components/empty-state';
 import { parseChartRange } from '../../../../lib/chart-range-query';
 import { LotsTable } from '../../../../components/symbol/lots-table';
@@ -13,6 +14,7 @@ import { nowInstant } from '../../../../server/clock';
 import { getDb } from '../../../../server/db';
 import { loadSymbol } from '../../../../server/symbols/load-symbol';
 import { requireUser } from '../../../../server/auth/require-user';
+import { refreshPricesAction } from '../../prices/actions';
 
 // Reads the database per request; never prerendered at build time.
 export const dynamic = 'force-dynamic';
@@ -39,7 +41,11 @@ export default async function Page({
 
   return (
     <div className="space-y-6">
-      <SymbolHeader row={view.header} refEstimated={view.refEstimated} />
+      <SymbolHeader
+        row={view.header}
+        refEstimated={view.refEstimated}
+        refresh={<PriceRefreshBar view={view.refreshBar} action={refreshPricesAction} />}
+      />
       <PriceChart series={view.chart} range={view.chartRange} symbol={view.symbol} />
       <SignalsSection vm={view.signals} />
       <div className="grid gap-6 md:grid-cols-2">

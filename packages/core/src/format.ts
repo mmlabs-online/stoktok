@@ -86,3 +86,20 @@ export function formatDateTime(iso: string): string {
   for (const part of dateTimeFormat.formatToParts(new Date(ms))) p[part.type] = part.value;
   return `${p.hour}:${p.minute} ${p.day}/${p.month}/${p.year}`;
 }
+
+const timeFormat = new Intl.DateTimeFormat('en-GB', {
+  timeZone: VN_TIME_ZONE,
+  hourCycle: 'h23',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+});
+
+/** ISO instant -> "HH:mm:ss" in Vietnam time. */
+export function formatTime(iso: string): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) throw new RangeError(`invalid date-time: ${iso}`);
+  const p: Record<string, string> = {};
+  for (const part of timeFormat.formatToParts(new Date(ms))) p[part.type] = part.value;
+  return `${p.hour}:${p.minute}:${p.second}`;
+}

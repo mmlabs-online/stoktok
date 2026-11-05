@@ -10,6 +10,7 @@ import {
   buildLedger,
   buildPortfolio,
   buildPriceBoardRow,
+  buildRefreshBarView,
   chartWindow,
   expectedPriceDate,
   expectedRuleIds,
@@ -23,6 +24,7 @@ import type {
   LedgerError,
   Lot,
   PortfolioRow,
+  RefreshBarView,
   SignalsSectionVM,
   Transaction,
 } from '@stoktok/core';
@@ -66,6 +68,7 @@ export interface SymbolView {
   chart: ChartSeries;
   chartRange: ChartRange;
   signals: SignalsSectionVM;
+  refreshBar: RefreshBarView;
 }
 
 /**
@@ -184,5 +187,6 @@ export async function loadSymbol(
     chart,
     chartRange: range,
     signals,
+    refreshBar: buildRefreshBarView({ now, holidays: entry.settings.holidays, fetchedAts: [header.fetchedAt] }),
   };
 }
