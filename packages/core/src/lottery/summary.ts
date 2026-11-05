@@ -19,6 +19,10 @@ export function summarizeTickets(
 ): Partial<Record<GameId, GameSummary>> {
   const out: Partial<Record<GameId, GameSummary>> = {};
   for (const { ticket, result } of entries) {
+    if (result && (result.gameId !== ticket.gameId || result.drawId !== ticket.drawId)) {
+      throw new RangeError('result does not belong to ticket');
+    }
+    const spent = ticketCost(gamesRules[ticket.gameId], ticket);
     const s = (out[ticket.gameId] ??= {
       ticketCount: 0,
       pendingCount: 0,
@@ -29,7 +33,7 @@ export function summarizeTickets(
       netResultVnd: 0,
     });
     s.ticketCount += 1;
-    s.spentVnd = addVnd(s.spentVnd, ticketCost(gamesRules[ticket.gameId], ticket));
+    s.spentVnd = addVnd(s.spentVnd, spent);
     if (result) {
       s.wonGrossVnd = addVnd(s.wonGrossVnd, result.grossVnd);
       s.taxVnd = addVnd(s.taxVnd, result.taxVnd);

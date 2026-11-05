@@ -68,3 +68,16 @@ describe('validation', () => {
     expect(r).toMatchObject({ ok: false, error: { code: 'empty_ticket' } });
   });
 });
+
+describe('ticketCost / ticketCombinationCount throw on invalid ticket', () => {
+  const mk = (lines: number[][]) => ({ gameId: 'mega645' as const, drawId: 'd', lines });
+  it.each([
+    ['size 3', [[1, 2, 3]]],
+    ['empty line', [[]]],
+    ['duplicate', [[1, 2, 3, 4, 5, 5]]],
+    ['no lines', []],
+  ])('%s', (_n, lines) => {
+    expect(() => ticketCost(MEGA_645, mk(lines))).toThrow(RangeError);
+    expect(() => ticketCombinationCount(MEGA_645, mk(lines))).toThrow(RangeError);
+  });
+});

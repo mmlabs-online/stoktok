@@ -25,3 +25,21 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No.
 - Diff size: ~+900 lines (about half tests), 0 removed.
+
+## Attempt 2 — 2026-11-05 (REWORK)
+
+### Files touched
+| File | Required because |
+|---|---|
+| packages/core/src/lottery/combinations.ts | Review Issue 1: `ticketCombinationCount` (and so `ticketCost`) validates and throws `RangeError` on invalid tickets |
+| packages/core/src/lottery/summary.ts | Review Issue 1: throw `RangeError` when result gameId/drawId differ from ticket; invalid tickets now propagate the throw |
+| packages/core/src/lottery/combinations.test.ts | Tests: throws on size 3, empty line, duplicate, no lines |
+| packages/core/src/lottery/summary.test.ts | Tests: rejects invalid pending ticket, rejects result for another ticket |
+
+### Checks
+- typecheck: green (no errors)
+- lint: green (no errors/warnings)
+- test: green (core 651+ passing incl. 6 new cases; all workspaces pass)
+
+### Out-of-plan files
+None. Nits not addressed (not blocking).

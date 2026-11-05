@@ -31,3 +31,14 @@ describe('summarizeTickets', () => {
     expect(s.mega645?.netResultVnd).toBe(-10_000);
   });
 });
+
+describe('summarizeTickets validation', () => {
+  it('rejects invalid pending ticket', () => {
+    expect(() => summarizeTickets([{ ticket: mk([1, 2, 3]) }])).toThrow(RangeError);
+  });
+  it('rejects result for another ticket', () => {
+    const e = entry(mk([40, 41, 42, 43, 44, 45]));
+    expect(() => summarizeTickets([{ ticket: { ...e.ticket, drawId: 'M2' }, result: e.result }])).toThrow(RangeError);
+    expect(() => summarizeTickets([{ ticket: { ...e.ticket, gameId: 'power655' }, result: e.result }])).toThrow(RangeError);
+  });
+});

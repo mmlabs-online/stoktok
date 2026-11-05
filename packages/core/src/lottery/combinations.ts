@@ -59,8 +59,10 @@ function lineCombinationCount(rules: GameRules, size: number): number {
   return choose(size, rules.pickCount);
 }
 
-/** Number of combinations of a ticket without expanding. Lines must be valid. */
+/** Number of combinations of a ticket without expanding. Throws RangeError on an invalid ticket. */
 export function ticketCombinationCount(rules: GameRules, ticket: LotteryTicket): number {
+  const v = validateTicketLines(rules, ticket);
+  if (!v.ok) throw new RangeError(`${v.error.code}: ${v.error.message}`);
   return addVnd(0, ...ticket.lines.map((l) => lineCombinationCount(rules, l.length)));
 }
 
