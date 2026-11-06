@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P3 |
 | Areas | db, security |
 | Attempts | 0 |
 | Created | 2026-11-05 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/39 |
 
 ## Goal
 Add Supabase tables for Vietlott draws and tickets with RLS, and server-only data functions to create, list and update tickets.
