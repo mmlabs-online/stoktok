@@ -1,7 +1,7 @@
 /** Row <-> domain conversions for assets and watchlist. No financial calculation (R1); integers only (R2). */
 import { EXCHANGES, RowMappingError, toSafeInt } from '@stoktok/core';
-import type { Exchange, IntradayQuote, PriceQuote, SectorInfo, SignalLabel, SignalStatus, StoredClose, StoredSignal } from '@stoktok/core';
-import type { AssetRow, FinancialRow, OpenGapRow, PriceCloseRow, PriceDailyRow, PriceIntradayRow, SignalRow, SymbolSectorRow, TradeDateRow, WatchlistRow } from './rows';
+import type { DrawResult, Exchange, GameId, IntradayQuote, PoolPrize, TierId, PriceQuote, SectorInfo, SignalLabel, SignalStatus, StoredClose, StoredSignal } from '@stoktok/core';
+import type { AssetRow, FinancialRow, LotteryDrawInsert, LotteryDrawRow, LotteryTicketInsert, LotteryTicketRow, OpenGapRow, PriceCloseRow, PriceDailyRow, PriceIntradayRow, SignalRow, SymbolSectorRow, TradeDateRow, WatchlistRow } from './rows';
 
 export interface Asset {
   id: string;
@@ -172,5 +172,159 @@ export function signalFromRow(row: SignalRow): StoredSignal {
     inputs: row.inputs_snapshot,
     ruleVersion: toSafeInt(row.rule_version, 'rule_version', t),
     computedAt: row.computed_at,
+  };
+}
+
+const GAME_IDS: readonly string[] = ['mega645', 'power655'];
+const TIER_IDS: readonly string[] = ['jackpot', 'jackpot1', 'jackpot2', 'first', 'second', 'third'];
+const LOTTERY_CHANNELS = ['sms', 'momo', 'manual'] as const;
+const LOTTERY_STATUSES = ['pending', 'won', 'lost'] as const;
+export type LotteryChannel = (typeof LOTTERY_CHANNELS)[number];
+export type LotteryStatus = (typeof LOTTERY_STATUSES)[number];
+
+/** The draw number as a plain decimal string (STK-053 A4). */
+export function drawIdFromNo(drawNo: number): string {
+  return String(drawNo);
+}
+
+/** Accepts leading zeros ('00123' is 123). Throws RowMappingError; callers map it to VALIDATION or MAPPING. */
+export function drawNoFromId(drawId: string): number {
+  if (!/^\d+$/.test(drawId) || Number(drawId) < 1 || !Number.isSafeInteger(Number(drawId))) {
+    throw new RowMappingError('lottery', 'draw_no', `invalid draw id: ${drawId}`);
+  }
+  return Number(drawId);
+}
+
+/** Pool columns per game: the first holds `jackpot` (mega645) or `jackpot1` (power655), the second `jackpot2`. */
+function poolTiers(game: GameId): { first: TierId; second: TierId | null } {
+  return game === 'mega645' ? { first: 'jackpot', second: null } : { first: 'jackpot1', second: 'jackpot2' };
+}
+
+export type StoredDrawResult = DrawResult & { source: string; fetchedAt: string };
+
+/** R4: a draw without source or fetched_at is rejected. */
+export function lotteryDrawFromRow(row: LotteryDrawRow): StoredDrawResult {
+  const t = 'lottery_draws';
+  if (!GAME_IDS.includes(row.game)) throw new RowMappingError(t, 'game', `invalid game: ${String(row.game)}`);
+  const game = row.game as GameId;
+  if (typeof row.draw_date !== 'string' || !DATE_RE.test(row.draw_date)) {
+    throw new RowMappingError(t, 'draw_date', `invalid date: ${String(row.draw_date)}`);
+  }
+  if (typeof row.source !== 'string' || row.source === '') throw new RowMappingError(t, 'source', 'missing source');
+  if (typeof row.fetched_at !== 'string' || row.fetched_at === '') {
+    throw new RowMappingError(t, 'fetched_at', 'missing fetched_at');
+  }
+  const tiers = poolTiers(game);
+  const pools: Partial<Record<TierId, PoolPrize>> = {};
+  const pool = (tier: TierId | null, amount: unknown, winners: number | null, col: string) => {
+    if (tier === null || amount === null || winners === null) return;
+    pools[tier] = { amountVnd: toSafeInt(amount as number, col, t), winnerCount: toSafeInt(winners, col, t) };
+  };
+  pool(tiers.first, row.jackpot_vnd, row.jackpot_winners, 'jackpot_vnd');
+  pool(tiers.second, row.jackpot2_vnd, row.jackpot2_winners, 'jackpot2_vnd');
+  return {
+    gameId: game,
+    drawId: drawIdFromNo(row.draw_no),
+    drawDate: row.draw_date,
+    numbers: row.numbers.map((n) => toSafeInt(n, 'numbers', t)),
+    ...(row.bonus === null ? {} : { bonus: toSafeInt(row.bonus, 'bonus', t) }),
+    ...(Object.keys(pools).length > 0 ? { pools } : {}),
+    source: row.source,
+    fetchedAt: row.fetched_at,
+  };
+}
+
+export function lotteryDrawToRow(draw: StoredDrawResult): LotteryDrawInsert {
+  const tiers = poolTiers(draw.gameId);
+  const first = draw.pools?.[tiers.first];
+  const second = tiers.second ? draw.pools?.[tiers.second] : undefined;
+  return {
+    game: draw.gameId,
+    draw_no: drawNoFromId(draw.drawId),
+    draw_date: draw.drawDate,
+    numbers: draw.numbers,
+    bonus: draw.bonus ?? null,
+    jackpot_vnd: first?.amountVnd ?? null,
+    jackpot_winners: first?.winnerCount ?? null,
+    jackpot2_vnd: second?.amountVnd ?? null,
+    jackpot2_winners: second?.winnerCount ?? null,
+    source: draw.source,
+    fetched_at: draw.fetchedAt,
+  };
+}
+
+export interface StoredLotteryTicket {
+  id: string;
+  gameId: GameId;
+  drawId: string;
+  lines: number[][];
+  /** Integer VND. */
+  costVnd: number;
+  channel: LotteryChannel;
+  purchasedAt: string;
+  status: LotteryStatus;
+  prizeTier: TierId | null;
+  /** Integer VND before tax; null while pending. */
+  grossVnd: number | null;
+  checkedAt: string | null;
+  rawText: string | null;
+  createdAt: string;
+}
+
+export interface LotteryTicketInput {
+  gameId: GameId;
+  drawId: string;
+  lines: number[][];
+  costVnd: number;
+  channel: LotteryChannel;
+  purchasedAt: string;
+  rawText: string | null;
+}
+
+/** Strict on shape only; game rules are core's job. */
+export function lotteryTicketFromRow(row: LotteryTicketRow): StoredLotteryTicket {
+  const t = 'lottery_tickets';
+  if (!GAME_IDS.includes(row.game)) throw new RowMappingError(t, 'game', `invalid game: ${String(row.game)}`);
+  if (!(LOTTERY_STATUSES as readonly string[]).includes(row.status)) {
+    throw new RowMappingError(t, 'status', `invalid status: ${String(row.status)}`);
+  }
+  if (!(LOTTERY_CHANNELS as readonly string[]).includes(row.channel)) {
+    throw new RowMappingError(t, 'channel', `invalid channel: ${String(row.channel)}`);
+  }
+  if (row.prize_tier !== null && !TIER_IDS.includes(row.prize_tier)) {
+    throw new RowMappingError(t, 'prize_tier', `invalid prize tier: ${String(row.prize_tier)}`);
+  }
+  if (
+    !Array.isArray(row.lines) ||
+    !row.lines.every((l: unknown) => Array.isArray(l) && l.every((n: unknown) => Number.isSafeInteger(n)))
+  ) {
+    throw new RowMappingError(t, 'lines', 'lines is not an array of integer arrays');
+  }
+  return {
+    id: row.id,
+    gameId: row.game as GameId,
+    drawId: drawIdFromNo(row.draw_no),
+    lines: row.lines as number[][],
+    costVnd: toSafeInt(row.cost_vnd, 'cost_vnd', t),
+    channel: row.channel as LotteryChannel,
+    purchasedAt: row.purchased_at,
+    status: row.status as LotteryStatus,
+    prizeTier: row.prize_tier as TierId | null,
+    grossVnd: row.gross_vnd === null ? null : toSafeInt(row.gross_vnd, 'gross_vnd', t),
+    checkedAt: row.checked_at,
+    rawText: row.raw_text,
+    createdAt: row.created_at,
+  };
+}
+
+export function lotteryTicketToRow(input: LotteryTicketInput): LotteryTicketInsert {
+  return {
+    game: input.gameId,
+    draw_no: drawNoFromId(input.drawId),
+    lines: input.lines,
+    cost_vnd: input.costVnd,
+    channel: input.channel,
+    purchased_at: input.purchasedAt,
+    raw_text: input.rawText,
   };
 }

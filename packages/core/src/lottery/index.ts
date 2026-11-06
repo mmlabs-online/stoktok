@@ -7,6 +7,7 @@ export {
   validateLine,
   validateTicketLines,
 } from './combinations';
+export { canonicalTicketLines } from './canonical';
 export { prizeTax, taxRuleFor } from './tax';
 export { checkCombination, checkTicket, validateDrawResult } from './check';
 export type { CheckTicketOptions } from './check';

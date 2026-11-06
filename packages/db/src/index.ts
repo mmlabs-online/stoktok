@@ -2,7 +2,18 @@ export { createServiceClient } from './client';
 export type { Db } from './client';
 export { DataError } from './errors';
 export type { DataErrorCode } from './errors';
-export type { Asset, FinancialRecord, OpenGapRecord, WatchlistEntry } from './mappers';
+export type {
+  Asset,
+  FinancialRecord,
+  LotteryChannel,
+  LotteryStatus,
+  LotteryTicketInput,
+  OpenGapRecord,
+  StoredDrawResult,
+  StoredLotteryTicket,
+  WatchlistEntry,
+} from './mappers';
+export { drawIdFromNo, drawNoFromId } from './mappers';
 export { loadLedger } from './ledger';
 export { listHeldSymbols } from './holdings';
 export {
@@ -46,3 +57,13 @@ export { listLatestSignals, upsertSignals } from './repos/signals';
 export { createAsset, deleteAsset, getAsset, listAssets, updateAsset } from './repos/assets';
 export { addToWatchlist, listWatchlist, removeFromWatchlist } from './repos/watchlist';
 export { getSymbolExchanges, listSymbolSectors, setSymbolExchange, setSymbolSector } from './repos/symbols';
+export {
+  createLotteryTicket,
+  getLotteryDraw,
+  getLotteryTicket,
+  listLotteryTickets,
+  listPendingLotteryTickets,
+  recordLotteryTicketResult,
+  updateLotteryTicket,
+  upsertLotteryDraws,
+} from './repos/lottery';

@@ -31,7 +31,7 @@ do $$ -- tables_exist
 declare got text[];
 begin
   select array_agg(tablename order by tablename) into got from pg_tables where schemaname = 'public';
-  if got is distinct from array['assets','corporate_actions','data_gaps','financials','prices_daily','prices_intraday','settings','signals','symbols','transactions','watchlist'] then
+  if got is distinct from array['assets','corporate_actions','data_gaps','financials','lottery_draws','lottery_tickets','prices_daily','prices_intraday','settings','signals','symbols','transactions','watchlist'] then
     raise exception 'CHECK FAILED: tables_exist (got %)', got;
   end if;
 end $$;
@@ -54,6 +54,10 @@ begin
   perform pg_temp.assert_col('prices_daily', 'volume', 'bigint', true);
   perform pg_temp.assert_col('prices_daily', 'foreign_net', 'bigint');
   perform pg_temp.assert_col('prices_intraday', 'volume', 'bigint', true);
+  perform pg_temp.assert_col('lottery_draws', 'jackpot_vnd', 'bigint');
+  perform pg_temp.assert_col('lottery_draws', 'jackpot2_vnd', 'bigint');
+  perform pg_temp.assert_col('lottery_tickets', 'cost_vnd', 'bigint', true);
+  perform pg_temp.assert_col('lottery_tickets', 'gross_vnd', 'bigint');
 end $$;
 
 do $$ -- qty_price_columns_integer
@@ -98,6 +102,8 @@ begin
   perform pg_temp.assert_col('prices_intraday', 'source', 'text', true);
   perform pg_temp.assert_col('prices_intraday', 'fetched_at', 'timestamp with time zone', true);
   perform pg_temp.assert_col('prices_intraday', 'ts', 'timestamp with time zone', true);
+  perform pg_temp.assert_col('lottery_draws', 'source', 'text', true);
+  perform pg_temp.assert_col('lottery_draws', 'fetched_at', 'timestamp with time zone', true);
   perform pg_temp.assert_col('financials', 'source', 'text', true);
   perform pg_temp.assert_col('financials', 'fetched_at', 'timestamp with time zone', true);
   perform pg_temp.assert_col('data_gaps', 'source', 'text', true);
@@ -274,6 +280,44 @@ begin
   if n <> 1 or p <> 102100 then raise exception 'CHECK FAILED: service_role_can_read_write_prices_intraday'; end if;
 end $$;
 
+do $$ -- lottery_columns
+begin
+  perform pg_temp.assert_col('lottery_tickets', 'lines', 'jsonb', true);
+  perform pg_temp.assert_col('lottery_draws', 'numbers', 'ARRAY', true);
+  perform pg_temp.assert_col('lottery_draws', 'draw_no', 'integer', true);
+  perform pg_temp.assert_col('lottery_tickets', 'draw_no', 'integer', true);
+  perform pg_temp.assert_col('lottery_tickets', 'purchased_at', 'timestamp with time zone', true);
+  perform pg_temp.assert_col('lottery_draws', 'draw_date', 'date', true);
+end $$;
+
+do $$ -- service_role_can_read_write_lottery_draws
+declare n int; j bigint;
+begin
+  set local role service_role;
+  insert into public.lottery_draws (game, draw_no, draw_date, numbers, jackpot_vnd, jackpot_winners, source, fetched_at)
+    values ('mega645', 1, '2026-11-05', '{1,2,3,4,5,6}', 12000000000, 0, 'x', now());
+  insert into public.lottery_draws (game, draw_no, draw_date, numbers, jackpot_vnd, jackpot_winners, source, fetched_at)
+    values ('mega645', 1, '2026-11-05', '{1,2,3,4,5,6}', 13000000000, 0, 'x', now())
+    on conflict (game, draw_no) do update set jackpot_vnd = excluded.jackpot_vnd;
+  select count(*), max(jackpot_vnd) into n, j from public.lottery_draws where game = 'mega645';
+  delete from public.lottery_draws where game = 'mega645';
+  reset role;
+  if n <> 1 or j <> 13000000000 then raise exception 'CHECK FAILED: service_role_can_read_write_lottery_draws'; end if;
+end $$;
+
+do $$ -- service_role_can_read_write_lottery_tickets
+declare n int; st text; g bigint;
+begin
+  set local role service_role;
+  insert into public.lottery_tickets (game, draw_no, lines, cost_vnd, channel, purchased_at)
+    values ('mega645', 1, '[[1,2,3,4,5,6]]', 10000, 'sms', now());
+  update public.lottery_tickets set status = 'won', prize_tier = 'third', gross_vnd = 30000, checked_at = now() where game = 'mega645';
+  select count(*), max(status), max(gross_vnd) into n, st, g from public.lottery_tickets where game = 'mega645';
+  delete from public.lottery_tickets where game = 'mega645';
+  reset role;
+  if n <> 1 or st <> 'won' or g <> 30000 then raise exception 'CHECK FAILED: service_role_can_read_write_lottery_tickets'; end if;
+end $$;
+
 do $$ -- rejects_bad_rows
 declare tx text := 'insert into public.transactions (trade_date, symbol, side, quantity, price, fee) values ';
         ca text := 'insert into public.corporate_actions (symbol, type, ex_date, amount_per_share, ratio_num, ratio_den) values ';
@@ -281,6 +325,8 @@ declare tx text := 'insert into public.transactions (trade_date, symbol, side, q
         pi text := 'insert into public.prices_intraday (symbol, ts, price, volume, source, fetched_at) values ';
         fi text := 'insert into public.financials (symbol, period, eps, bvps, revenue, net_income, source, fetched_at) values ';
         sg text := 'insert into public.signals (symbol, rule_id, horizon, signal_date, status, label, value, data_fresh, reason_codes, inputs_snapshot, rule_version, computed_at) values ';
+        ld text := 'insert into public.lottery_draws (game, draw_no, draw_date, numbers, bonus, jackpot_vnd, jackpot_winners, jackpot2_vnd, jackpot2_winners, source, fetched_at) values ';
+        lt text := 'insert into public.lottery_tickets (game, draw_no, lines, cost_vnd, channel, purchased_at, status, prize_tier, gross_vnd, checked_at, raw_text) values ';
         st text := 'insert into public.settings (id, sell_tax_rate_ppm, dividend_withholding_rate_ppm, settlement_days, cash_dividend_treatment, cost_method) values ';
 begin
   perform pg_temp.expect_fail('qty<=0', tx || '(''2026-01-05'',''VNM'',''buy'',0,100,null)', array['23514']);
@@ -297,6 +343,25 @@ begin
   perform pg_temp.expect_fail('intraday empty source', pi || '(''VNM'',now(),100,1,'''',now())', array['23514']);
   perform pg_temp.expect_fail('intraday null source', pi || '(''VNM'',now(),100,1,null,now())', array['23502']);
   perform pg_temp.expect_fail('intraday null fetched_at', pi || '(''VNM'',now(),100,1,''x'',null)', array['23502']);
+  perform pg_temp.expect_fail('lottery game keno', ld || '(''keno'',1,''2026-11-05'',''{1,2,3,4,5,6}'',null,null,null,null,null,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('lottery draw_no 0', ld || '(''mega645'',0,''2026-11-05'',''{1,2,3,4,5,6}'',null,null,null,null,null,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('lottery 5 numbers', ld || '(''mega645'',1,''2026-11-05'',''{1,2,3,4,5}'',null,null,null,null,null,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('lottery number 56', ld || '(''mega645'',1,''2026-11-05'',''{1,2,3,4,5,56}'',null,null,null,null,null,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('lottery mega with bonus', ld || '(''mega645'',1,''2026-11-05'',''{1,2,3,4,5,6}'',7,null,null,null,null,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('lottery power without bonus', ld || '(''power655'',1,''2026-11-05'',''{1,2,3,4,5,6}'',null,null,null,null,null,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('lottery jackpot without winners', ld || '(''mega645'',1,''2026-11-05'',''{1,2,3,4,5,6}'',null,100,null,null,null,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('lottery mega with jackpot2', ld || '(''mega645'',1,''2026-11-05'',''{1,2,3,4,5,6}'',null,null,null,100,0,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('lottery empty source', ld || '(''mega645'',1,''2026-11-05'',''{1,2,3,4,5,6}'',null,null,null,null,null,'''',now())', array['23514']);
+  perform pg_temp.expect_fail('lottery null fetched_at', ld || '(''mega645'',1,''2026-11-05'',''{1,2,3,4,5,6}'',null,null,null,null,null,''x'',null)', array['23502']);
+  perform pg_temp.expect_fail('lottery lines object', lt || '(''mega645'',1,''{}'',10000,''sms'',now(),''pending'',null,null,null,null)', array['23514']);
+  perform pg_temp.expect_fail('lottery lines empty', lt || '(''mega645'',1,''[]'',10000,''sms'',now(),''pending'',null,null,null,null)', array['23514']);
+  perform pg_temp.expect_fail('lottery negative cost', lt || '(''mega645'',1,''[[1,2,3,4,5,6]]'',-1,''sms'',now(),''pending'',null,null,null,null)', array['23514']);
+  perform pg_temp.expect_fail('lottery channel zalo', lt || '(''mega645'',1,''[[1,2,3,4,5,6]]'',10000,''zalo'',now(),''pending'',null,null,null,null)', array['23514']);
+  perform pg_temp.expect_fail('lottery won without gross', lt || '(''mega645'',1,''[[1,2,3,4,5,6]]'',10000,''sms'',now(),''won'',''third'',null,now(),null)', array['23514']);
+  perform pg_temp.expect_fail('lottery pending with checked_at', lt || '(''mega645'',1,''[[1,2,3,4,5,6]]'',10000,''sms'',now(),''pending'',null,null,now(),null)', array['23514']);
+  perform pg_temp.expect_fail('lottery lost with tier', lt || '(''mega645'',1,''[[1,2,3,4,5,6]]'',10000,''sms'',now(),''lost'',''third'',0,now(),null)', array['23514']);
+  perform pg_temp.expect_fail('lottery raw_text empty', lt || '(''mega645'',1,''[[1,2,3,4,5,6]]'',10000,''sms'',now(),''pending'',null,null,null,'''')', array['23514']);
+  perform pg_temp.expect_fail('lottery raw_text too long', lt || '(''mega645'',1,''[[1,2,3,4,5,6]]'',10000,''sms'',now(),''pending'',null,null,null,''' || repeat('a',2001) || ''')', array['23514']);
   perform pg_temp.expect_fail('settings id 2', st || '(2,1000,50000,2,''reduceCost'',''WAC'')', array['23514']);
   perform pg_temp.expect_fail('cost_method FIFO', st || '(1,1000,50000,2,''reduceCost'',''FIFO'')', array['23514']);
   perform pg_temp.expect_fail('gap to<from',
@@ -359,6 +424,28 @@ begin
   perform pg_temp.expect_fail('duplicate import',
     'insert into public.transactions (trade_date, symbol, side, quantity, price, source, import_batch_id, external_ref) values (''2026-01-05'',''VNM'',''buy'',100,100,''import'',''b1'',''r1'')',
     array['23505']);
+end $$;
+
+do $$ -- lottery_duplicates
+declare ts timestamptz := '2026-11-05T01:00:00Z';
+begin
+  insert into public.lottery_draws (game, draw_no, draw_date, numbers, source, fetched_at)
+    values ('mega645', 7, '2026-11-05', '{1,2,3,4,5,6}', 'x', now());
+  perform pg_temp.expect_fail('lottery duplicate draw',
+    'insert into public.lottery_draws (game, draw_no, draw_date, numbers, source, fetched_at) values (''mega645'',7,''2026-11-05'',''{1,2,3,4,5,6}'',''x'',now())',
+    array['23505']);
+  insert into public.lottery_tickets (game, draw_no, lines, cost_vnd, channel, purchased_at, raw_text)
+    values ('mega645', 7, '[[1,2,3,4,5,6]]', 10000, 'sms', ts, 'Ve so  123 ' || chr(10) || 'ky 7');
+  perform pg_temp.expect_fail('lottery duplicate raw_text',
+    'insert into public.lottery_tickets (game, draw_no, lines, cost_vnd, channel, purchased_at, raw_text) values (''mega645'',8,''[[7,8,9,10,11,12]]'',10000,''momo'',now(),'' Ve so 123   ky 7'')',
+    array['23505']);
+  perform pg_temp.expect_fail('lottery duplicate sms identity',
+    'insert into public.lottery_tickets (game, draw_no, lines, cost_vnd, channel, purchased_at, raw_text) values (''mega645'',7,''[[1,2,3,4,5,6]]'',10000,''sms'',''2026-11-05T01:00:00Z'',''other text'')',
+    array['23505']);
+  insert into public.lottery_tickets (game, draw_no, lines, cost_vnd, channel, purchased_at)
+    values ('mega645', 7, '[[1,2,3,4,5,6]]', 10000, 'manual', ts);
+  insert into public.lottery_tickets (game, draw_no, lines, cost_vnd, channel, purchased_at)
+    values ('mega645', 7, '[[1,2,3,4,5,6]]', 10000, 'manual', ts);
 end $$;
 
 do $$ -- settings_fee_unset_allowed
