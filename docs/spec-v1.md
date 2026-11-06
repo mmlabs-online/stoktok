@@ -17,7 +17,7 @@ A personal app that tracks Vietnamese stock prices and news, keeps Ming's own po
 
 ### 1.3 Non-goals (v1)
 - No login to TCBS or any brokerage account; no use of TCBS iFlash OpenAPI.
-- No order placement of any kind.
+- No order placement of any kind (this includes Vietlott tickets: F8 only records tickets bought elsewhere).
 - No public or multi-user access to investment suggestions.
 - No guaranteed real-time data; no tick-level / scalping use cases.
 - AI never decides; it explains rule-based signals. Final decisions are Ming's.
@@ -98,6 +98,15 @@ All values below are **configuration, not hard-coded**, and must be verified aga
 - Auto-scored at evaluation points: **short term after 5 and 20 sessions; medium term after 3 and 6 months**.
 - Metrics: hit rate, average return vs VN-Index, per-rule performance.
 - Purpose: decide which rules to keep or drop based on evidence.
+
+### F8. Vietlott tracker (after v1.2 — Ming, 2026-11-05)
+Personal record of Vietlott tickets Ming buys elsewhere (Vietlott SMS, MoMo). **Games: Mega 6/45 and Power 6/55 only**; Max 3D, Lotto 5/35 and Keno are out of scope.
+- **Ticket ledger**: game, draw number, numbers (regular and system/"bao" tickets), cost, purchase channel (`sms` / `momo`), purchased_at, status (`pending` / `lost` / `won` + prize tier). Entry by pasting the Vietlott SMS confirmation (parsed) or quick manual entry (MoMo has no API).
+- **Results and checking**: the worker fetches each draw's result (with `source` and `fetched_at`, R4), checks pending tickets, and the app shows wins in-app (no push).
+- **History per game**: total spent, total won, net, with personal income tax on prizes (10% of the part of the prizes on one ticket per draw above 20,000,000 VND from 2026-07-01, 10,000,000 VND before — Law 109/2025/QH15; Ming, 2026-11-05); opportunity cost vs the same money put into VN-Index on the purchase date.
+- **Suggestions** (honest by design): draws are random and independent, so no feature claims to predict numbers. Suggestions are random picks that avoid popular combinations (all numbers ≤ 31, runs, arithmetic patterns, previously drawn sets) to lower the chance of **sharing a jackpot**, with optional fixed numbers chosen by Ming.
+- **Statistics with a strategy check**: frequency, draws since last seen, common pairs; plus a historical check that compares "hot numbers", "overdue numbers" and "random" strategies and shows the result as-is.
+- Prize tables, ticket price, draw days and tax threshold are configuration (R5). Money in integer VND (R2). All calculation in `packages/core` (R1).
 
 ### Deferred to v2
 - Push alerts (Telegram / Zalo).
@@ -251,6 +260,7 @@ Adaptation before use:
 5. News sources list and whether each allows fetching.
 6. LLM provider (e.g. reuse the provider already used in Ricotdin, or another).
 7. App name and subdomain.
+8. F8: source and terms for Vietlott draw results (no official API), and the exact Vietlott SMS confirmation format (needs a sample message).
 
 ---
 
@@ -261,6 +271,7 @@ Adaptation before use:
 | **v1.0** | F1 ledger + import, F2 portfolio & assets, F3 watchlist, EOD data only, medium-term signals |
 | **v1.1** | Intraday polling, short-term signals, gap detection |
 | **v1.2** | F5 news summaries, F6 suggestions, F7 scorecard |
+| **v1.3** | F8 Vietlott tracker (Mega 6/45, Power 6/55) |
 | **v2** | Alerts (Telegram/Zalo), backtesting, optional read-only TCBS OpenAPI |
 
 Rationale: ledger and portfolio correctness first (everything else depends on it); EOD before intraday (simpler, more reliable); suggestions only after the data and signals underneath are trustworthy.

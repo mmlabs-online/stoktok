@@ -151,3 +151,61 @@ export interface SymbolSectorRow {
   sector_source: string | null;
   sector_fetched_at: string | null;
 }
+
+/** Selected columns only; smallint[] arrives as number[], bigint columns as Int8. */
+export interface LotteryDrawRow {
+  game: string;
+  draw_no: number;
+  draw_date: string;
+  numbers: number[];
+  bonus: number | null;
+  jackpot_vnd: Int8 | null;
+  jackpot_winners: number | null;
+  jackpot2_vnd: Int8 | null;
+  jackpot2_winners: number | null;
+  source: string;
+  fetched_at: string;
+}
+
+/** Upsert payload (all columns; R4 source + fetched_at). Integer VND (R2). */
+export interface LotteryDrawInsert {
+  game: string;
+  draw_no: number;
+  draw_date: string;
+  numbers: number[];
+  bonus: number | null;
+  jackpot_vnd: number | null;
+  jackpot_winners: number | null;
+  jackpot2_vnd: number | null;
+  jackpot2_winners: number | null;
+  source: string;
+  fetched_at: string;
+}
+
+/** Selected columns only. */
+export interface LotteryTicketRow {
+  id: string;
+  game: string;
+  draw_no: number;
+  lines: unknown;
+  cost_vnd: Int8;
+  channel: string;
+  purchased_at: string;
+  status: string;
+  prize_tier: string | null;
+  gross_vnd: Int8 | null;
+  checked_at: string | null;
+  raw_text: string | null;
+  created_at: string;
+}
+
+/** Insert payload; id, status and result columns take their database defaults. Integer VND (R2). */
+export interface LotteryTicketInsert {
+  game: string;
+  draw_no: number;
+  lines: number[][];
+  cost_vnd: number;
+  channel: string;
+  purchased_at: string;
+  raw_text: string | null;
+}
