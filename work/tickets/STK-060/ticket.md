@@ -7,7 +7,7 @@
 | Areas | security, architecture |
 | Attempts | 1 |
 | Created | 2026-11-07 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/40 |
 
 ## Goal
 Drop `ALLOWLIST_USER_IDS`: any user of the stoktok Supabase project's Auth with a valid session (correct email + password, JWT verified via `getClaims()`) can use the app. Single-user access is kept by disabling public sign-ups in the Supabase dashboard instead of an app-level allowlist.
