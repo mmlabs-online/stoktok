@@ -1,7 +1,7 @@
 # stoktok
 
 Personal stock-tracking and investment-assistant app for the Vietnamese market (Ming trades on TCBS).
-Part of the mmlabs ecosystem (login via Authen). **v1 is single-user (allowlist) and not listed in the mmlabs gallery.**
+Part of the mmlabs ecosystem (login via Authen). **v1 is single-user (public sign-ups disabled) and not listed in the mmlabs gallery.**
 
 - Product spec: [docs/spec-v1.md](docs/spec-v1.md) — source of truth for scope. If this file and the spec disagree on scope, the spec wins; flag the conflict.
 - UI design brief: [docs/figma-make-prompts.md](docs/figma-make-prompts.md) — no Figma file; UI is designed directly in code from this brief (Ming, 2026-10-23).
@@ -17,7 +17,7 @@ Part of the mmlabs ecosystem (login via Authen). **v1 is single-user (allowlist)
 | Worker | Node.js + TypeScript in `apps/worker` (scheduled jobs: prices, news, signals, AI, scoring) |
 | Domain logic | `packages/core` (TypeScript) — ledger, lots, holdings, P&L, fees/tax, signals. Shared by web and worker |
 | DB | Supabase (dedicated project for stoktok, Postgres, RLS on). Migrations in `supabase/` |
-| Auth | Authen = Supabase Auth of stoktok's own Supabase project (Ming, 2026-11-05, STK-048). stoktok's own `/login` signs in server-side; the server verifies via `getClaims()` + allowlist |
+| Auth | Authen = Supabase Auth of stoktok's own Supabase project (Ming, 2026-11-05, STK-048). stoktok's own `/login` signs in server-side; the server verifies via `getClaims()`; no allowlist, single user via disabled sign-ups (Ming, 2026-11-07, STK-060) |
 | Package manager | pnpm workspaces |
 | Tests | Vitest (unit), Playwright (e2e, later) |
 | Runtime | Docker Compose on Ming's WSL2 home server behind Cloudflare Tunnel |
@@ -39,13 +39,13 @@ Do not change the stack without Ming's explicit decision.
 | R3 | **Service role key is server-only.** Used by Next.js server code and `apps/worker` only. Never in `NEXT_PUBLIC_*`, never in client bundles. The browser never talks to the DB directly. |
 | R4 | **Every market-data record carries `source` and `fetched_at`.** Stale or gapped data never produces a signal; gaps are recorded. |
 | R5 | **Market rules are configuration**, never hard-coded: fee rate, sell tax, price limits per exchange, settlement days, lot size. |
-| R6 | **Every server route / server action verifies the Authen JWT and the allowlist.** Restored by STK-004 — see note below. |
+| R6 | **Every server route / server action verifies the Authen JWT** (`requireUser()`). Single-user access is enforced by disabled public sign-ups in the stoktok Supabase project, not an allowlist (Ming, 2026-11-07, STK-060). See note below. |
 | R7 | **Stay inside the ticket's plan.** Anything else found goes to the follow-ups list, not into the diff. |
 | R8 | **No PASS without green checks.** `typecheck`, `lint`, `test` must pass. New or changed `packages/core` logic must have unit tests. |
 | R9 | **AI output (v1.2+)**: input is stored data only, every factual claim cites a stored input ID, output is schema-validated. AI explains rule-based signals; it never decides the action. |
 | R10 | **Non-goals are hard limits**: no brokerage login, no order placement, no multi-user access to suggestions. |
 
-> **R6 restored (Ming resumed STK-004, 2026-11-05).** Authen is Supabase Auth of stoktok's own Supabase project (STK-048). stoktok has its own `/login` (server action, httpOnly cookie on stoktok's host). `requireUser()` (`apps/web/server/auth`) runs in every page, route handler and server action; the public list is `/login` and `/healthz` (`apps/web/proxy.ts`). Cloudflare Access stays in front for now.
+> **R6 restored (Ming resumed STK-004, 2026-11-05).** Authen is Supabase Auth of stoktok's own Supabase project (STK-048). stoktok has its own `/login` (server action, httpOnly cookie on stoktok's host). `requireUser()` (`apps/web/server/auth`) runs in every page, route handler and server action; the public list is `/login` and `/healthz` (`apps/web/proxy.ts`). Any user in that project's Auth has full access; keep sign-ups disabled (STK-060). Cloudflare Access stays in front for now.
 
 ---
 

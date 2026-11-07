@@ -6,7 +6,7 @@ import { checkClaims } from './claims';
 const URL_ = 'https://test.supabase.co';
 const ISS = `${URL_}/auth/v1`;
 const ID = '11111111-1111-4111-8111-111111111111';
-const cfg = { issuer: ISS, allowlist: new Set([ID]) };
+const cfg = { issuer: ISS };
 
 async function keyPair() {
   const { publicKey, privateKey } = await generateKeyPair('ES256');
@@ -14,7 +14,7 @@ async function keyPair() {
 }
 
 function sign(privateKey: CryptoKey | Uint8Array, alg: string, exp: string | number = '1h') {
-  return new SignJWT({ role: 'authenticated' })
+  return new SignJWT({ role: 'authenticated', session_id: 'sess-1' })
     .setProtectedHeader({ alg, kid: 'k1', typ: 'JWT' })
     .setIssuer(ISS)
     .setAudience('authenticated')

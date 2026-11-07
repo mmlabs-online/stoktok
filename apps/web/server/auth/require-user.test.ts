@@ -6,16 +6,13 @@ const getClaims = vi.fn();
 const redirect = vi.fn((url: string) => {
   throw new Error(`REDIRECT:${url}`);
 });
-const forbidden = vi.fn(() => {
-  throw new Error('FORBIDDEN');
-});
 let pathHeader: string | null = null;
 
 vi.mock('next/headers', () => ({
   cookies: async () => ({ getAll: () => [], set: () => {} }),
   headers: async () => ({ get: () => pathHeader }),
 }));
-vi.mock('next/navigation', () => ({ redirect, forbidden }));
+vi.mock('next/navigation', () => ({ redirect }));
 vi.mock('./authen-client', () => ({
   createAuthenClient: () => ({ auth: { getClaims } }),
   nextCookieAdapter: () => ({}),
@@ -28,6 +25,7 @@ const claims = (over = {}) => ({
   aud: 'authenticated',
   role: 'authenticated',
   sub: ID,
+  session_id: 'sess-1',
   exp: Math.floor(Date.now() / 1000) + 600,
   ...over,
 });
@@ -39,7 +37,6 @@ beforeEach(() => {
   pathHeader = null;
   vi.stubEnv('AUTHEN_SUPABASE_URL', 'https://abc.supabase.co');
   vi.stubEnv('AUTHEN_SUPABASE_ANON_KEY', 'anon');
-  vi.stubEnv('ALLOWLIST_USER_IDS', ID);
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -61,19 +58,25 @@ describe('requireUser', () => {
   });
 
   it('redirects to /login when auth config is missing', async () => {
-    vi.stubEnv('ALLOWLIST_USER_IDS', '');
+    vi.stubEnv('AUTHEN_SUPABASE_URL', '');
     await expect(requireUser()).rejects.toThrow('REDIRECT:/login');
     expect(getClaims).not.toHaveBeenCalled();
   });
 
-  it("calls forbidden() when not allowlisted, and the caller's next line never runs", async () => {
-    getClaims.mockResolvedValue({ data: { claims: claims({ sub: '22222222-2222-4222-8222-222222222222' }) }, error: null });
+  it('returns userId for an arbitrary sub', async () => {
+    const other = '22222222-2222-4222-8222-222222222222';
+    getClaims.mockResolvedValue({ data: { claims: claims({ sub: other }) }, error: null });
+    await expect(requireUser()).resolves.toEqual({ userId: other });
+  });
+
+  it("redirects to /login for an anonymous session, and the caller's next line never runs", async () => {
+    getClaims.mockResolvedValue({ data: { claims: claims({ is_anonymous: true }) }, error: null });
     const getDb = vi.fn();
     const entry = async () => {
       await requireUser();
       getDb();
     };
-    await expect(entry()).rejects.toThrow('FORBIDDEN');
+    await expect(entry()).rejects.toThrow('REDIRECT:/login');
     expect(getDb).not.toHaveBeenCalled();
   });
 });

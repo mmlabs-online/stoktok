@@ -12,7 +12,7 @@
 A personal app that tracks Vietnamese stock prices and news, keeps Ming's own portfolio and asset records, generates rule-based signals for short- and medium-term trading, uses AI to summarize news and explain signals, and **measures whether its own suggestions turn out right over time**.
 
 ### 1.2 Users
-- **v1: Ming only.** Login via Authen (shared mmlabs SSO), restricted by an allowlist.
+- **v1: Ming only.** Login via Authen (Supabase Auth of stoktok's own Supabase project, STK-048). Single user: public sign-ups are disabled in that project; any account in it has full access (Ming, 2026-11-07, STK-060).
 - Not listed in the mmlabs gallery.
 
 ### 1.3 Non-goals (v1)
@@ -133,12 +133,12 @@ Personal record of Vietlott tickets Ming buys elsewhere (Vietlott SMS, MoMo). **
 ### 4.1 Services (Docker Compose on WSL, same network as cloudflared)
 | Service | Responsibility |
 |---|---|
-| `web` | Next.js UI and API routes; reads/writes app DB; verifies Authen JWT + allowlist |
+| `web` | Next.js UI and API routes; reads/writes app DB; verifies the Authen JWT |
 | `worker` | Scheduled jobs: price polling, EOD sync, financials, news fetch, signal computation, AI summaries, suggestion scoring |
 
 ### 4.2 Auth integration
-- Login through Authen; `web` validates the shared JWT.
-- Allowlist check (Ming's user ID) on every request — v1 rejects all other authenticated mmlabs users.
+- Login through Authen; `web` verifies the session JWT server-side (`getClaims()` + issuer/aud/role/expiry, non-anonymous session) on every request.
+- Single user enforced by disabled public sign-ups in the stoktok Supabase project, not an app-level allowlist.
 - App data lives in a **separate Supabase project**; it never stores data in the shared auth project.
 - Open question: how the app DB's RLS trusts the Authen JWT (shared JWT secret vs server-side service role with app-level checks). See §9.
 
@@ -249,7 +249,7 @@ Adaptation before use:
 | Manual ledger drifts from reality | Wrong P&L and wrong suggestions | Transaction-level entry, corporate actions, periodic statement import and reconciliation |
 | LLM fabricates facts | Misleading suggestions | Rules decide, LLM explains; mandatory citations; schema validation |
 | Short-term suggestions are often wrong | Overtrust | Scorecard with visible hit rate; reference-only notice |
-| App later opened to other users | Regulatory exposure | v1 allowlist; any public version drops suggestions |
+| App later opened to other users | Regulatory exposure | v1 single user (public sign-ups disabled); any public version drops suggestions |
 | Supabase Free plan limits/pausing | App DB unavailable | Monitor; upgrade plan or migrate if it becomes an issue |
 
 ### Open questions

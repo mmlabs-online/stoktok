@@ -219,4 +219,4 @@ Sticky footer with "Lưu thay đổi" (disabled until something changes) and "H�
 | `src/lib/format.ts` | `packages/core/src/format.ts` |
 | `src/mock/mock-data.ts` | Kept only for Storybook/tests; replaced by `packages/core` + DB queries in pages |
 | App.tsx screen switching | Next.js routes: `/`, `/transactions`, `/import`, `/watchlist`, `/settings`, `/symbols/[symbol]` |
-| Callback props (`onSubmitTransaction`, …) | Server Actions or API routes, behind auth + allowlist |
+| Callback props (`onSubmitTransaction`, …) | Server Actions or API routes, behind auth (`requireUser()`) |

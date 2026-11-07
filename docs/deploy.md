@@ -31,7 +31,7 @@ Create it **before** merging the setup PR. Otherwise GitHub creates the environm
 1. `mmlabs-online/deployment`, Settings, Environments, New environment `stoktok`.
 2. Deployment branches and tags: selected branches, `main` only. This is the control GitHub enforces; the `if: github.ref == 'refs/heads/main'` guard in the workflow is not one on its own, because a manual run uses the workflow file of the chosen branch.
 3. Environment secrets, prefixed `STOKTOK_` because the deployment repo is shared by every mmlabs app: `STOKTOK_SUPABASE_URL` (`https://<ref>.supabase.co`, no trailing slash or path) and `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` (the **new** key, not the one pasted into chat on 2026-11-01). The workflow writes them into the env file as `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, the names the app reads.
-   Auth (STK-004, STK-048) adds three more. Authen is Supabase Auth of the stoktok project itself: `STOKTOK_AUTHEN_SUPABASE_URL` = the stoktok project URL (same value as `STOKTOK_SUPABASE_URL`, `https://<ref>.supabase.co`, no path), `STOKTOK_AUTHEN_SUPABASE_ANON_KEY` = the stoktok project's anon or `sb_publishable_` key (never the service role key), `STOKTOK_ALLOWLIST_USER_IDS` = Ming's user UUID from the stoktok project's Authentication, Users (comma-separated if more than one). They are written as `AUTHEN_SUPABASE_URL`, `AUTHEN_SUPABASE_ANON_KEY` and `ALLOWLIST_USER_IDS`.
+   Auth (STK-004, STK-048) adds two more. Authen is Supabase Auth of the stoktok project itself: `STOKTOK_AUTHEN_SUPABASE_URL` = the stoktok project URL (same value as `STOKTOK_SUPABASE_URL`, `https://<ref>.supabase.co`, no path), `STOKTOK_AUTHEN_SUPABASE_ANON_KEY` = the stoktok project's anon or `sb_publishable_` key (never the service role key). They are written as `AUTHEN_SUPABASE_URL` and `AUTHEN_SUPABASE_ANON_KEY`.
 4. No repo-level secrets with the same names (environment secrets would quietly override them). No required reviewers: the PR merge is already the gate.
 5. Fallback if the org plan has no environments on a private repo: store both as repo-level Actions secrets and remove the `environment: stoktok` line in the deployment PR before merging. The `main` guard, the fail-safe and D5 stay. Weakness: any workflow on any branch can read repo-level secrets. Record a follow-up to restore the line when the plan allows.
 
@@ -53,16 +53,32 @@ Create the `stoktok` environment and its secrets (section above), then Ming merg
 - Optional log rotation: a line for `/Users/mingming/stoktok/logs/*.log` in `/etc/newsyslog.d/stoktok.conf` (owner `mingming:staff`).
 
 ## Restore auth (STK-004) - order
-1. One-time, in the stoktok project's Supabase dashboard (Authentication):
-   - Sign In / Providers: keep Email enabled and turn **off** "Allow new users to sign up" (public sign-ups disabled; the allowlist still rejects anyone else, this keeps the user list to Ming).
+1. **Access control (required, STK-060).** The app has no allowlist: **any user in the stoktok project's Auth gets full access** (Ming accepted this, 2026-11-07). The only thing keeping it to one user is this checklist. Cloudflare Access stays in front. One-time, in the stoktok project's Supabase dashboard (Authentication), all items required:
+   - Sign In / Providers: Email enabled; "Allow new users to sign up" **off**.
+   - Anonymous sign-ins **off**.
+   - Every other provider **off** (phone, all OAuth, SSO/SAML).
+   - "Confirm email" **on**.
+   - Minimum password length 12 or more; leaked-password protection **on** if the plan offers it.
+   - Site URL and Redirect URLs: `https://<APP_HOSTNAME>` only.
    - Users, Add user, Create new user: Ming's email and a strong password, auto-confirm on.
-   - Copy that user's UUID (User UID) for `STOKTOK_ALLOWLIST_USER_IDS`.
-   - Hardening, in the same project: turn **off** anonymous sign-ins; turn **off** every other provider (phone, all OAuth, SSO/SAML); keep "Confirm email" **on**; set a minimum password length (12 or more) and turn on leaked-password protection if the plan offers it; set Site URL and Redirect URLs to `https://<APP_HOSTNAME>` only.
-2. Ming sets `STOKTOK_AUTHEN_SUPABASE_URL`, `STOKTOK_AUTHEN_SUPABASE_ANON_KEY` and `STOKTOK_ALLOWLIST_USER_IDS` in the deployment repo environment `stoktok` (values: see the environment section above).
+   - Then check Authentication, Users: it must list **only** Ming. Re-check after any change to the Supabase project.
+2. Ming sets `STOKTOK_AUTHEN_SUPABASE_URL` and `STOKTOK_AUTHEN_SUPABASE_ANON_KEY` in the deployment repo environment `stoktok` (values: see the environment section above).
 3. Ming merges the deployment-repo PR that carries the updated `deploy-stoktok.yml`. A workflow-file change alone does not deploy (the paths filter is `apps/stoktok/**`), so run `workflow_dispatch` on `main` once to rewrite `stoktok.env`.
 4. Only then cut the release that contains STK-004.
 
 If step 3 runs before step 2, `deploy-stoktok` stops at `secrets`, names the missing secret and starts nothing. If a STK-004 image runs without the env, `/healthz` stays 200 and every page redirects to `/login`, where sign-in fails: Ming is locked out, nothing is exposed.
+
+## Remove the allowlist (STK-060) - order
+Only if an auth image (STK-004 to STK-059) has already been released. Do these in order:
+1. Merge STK-060 and release the new image **while the deployment repo still runs the old workflow** (it still writes `ALLOWLIST_USER_IDS`; the new image ignores it).
+2. Then merge the deployment-repo PR with the new `deploy-stoktok.yml`.
+3. Only then delete `STOKTOK_ALLOWLIST_USER_IDS` from the `stoktok` environment.
+
+Why: a pre-STK-060 auth image under the new workflow throws in `loadAuthConfig` on every request. `/healthz` stays 200, so the deploy looks healthy and does not roll back, but nobody can log in.
+
+**Rollback warning:** after step 2, do not roll back to a pre-STK-060 image that has auth (STK-004 or later). If you must, re-add the secret and the old workflow first.
+
+If no auth image has been released yet, skip the allowlist secret entirely and ship STK-060 together with the auth setup above.
 
 ## Rotate the Supabase key
 1. Create the new key in Supabase. For an `sb_secret_...` key, create it next to the old one. For the legacy JWT `service_role` key, rotating means rotating the JWT secret: the old key dies at once and the anon key and all sessions are invalidated too. That includes web's Authen anon key (`STOKTOK_AUTHEN_SUPABASE_ANON_KEY`) and Ming's login session, so web cannot sign anyone in until the anon key is replaced. Then do steps 2 and 3 right away. Verify which applies in the Supabase dashboard.
@@ -112,7 +128,6 @@ Names only. Values live in the `stoktok` environment secrets of the deployment r
 | `SUPABASE_ANON_KEY` | none | reserved | y |
 | `AUTHEN_SUPABASE_URL` | web | required now | n |
 | `AUTHEN_SUPABASE_ANON_KEY` | web | required now | y |
-| `ALLOWLIST_USER_IDS` | web | required now | n |
 | `LLM_PROVIDER` | none | reserved | n |
 | `LLM_API_KEY` | none | reserved | y |
 <!-- env-list:end -->
