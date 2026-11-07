@@ -53,3 +53,4 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-057 | Vietlott number suggestions that avoid popular combinations | BACKLOG | P3 | finance, ui | 0 | 2026-11-05 |
 | STK-058 | Vietlott statistics and historical strategy check | BACKLOG | P3 | finance, ui | 0 | 2026-11-05 |
 | STK-059 | Vietlott opportunity cost vs VN-Index | BACKLOG | P3 | finance, ui | 0 | 2026-11-05 |
+| STK-060 | Remove the allowlist check; any verified Supabase Auth user can sign in | IN_PROGRESS | P2 | security, architecture | 0 | 2026-11-07 |
