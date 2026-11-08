@@ -14,7 +14,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@stoktok/core": "workspace:*"
+    "@stoktok/core": "workspace:*",
+    "fast-xml-parser": "5.12.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

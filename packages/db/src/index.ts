@@ -51,10 +51,11 @@ export {
   upsertPricesDaily,
 } from './repos/prices-daily';
 export { getLatestIntraday, upsertPricesIntraday } from './repos/prices-intraday';
-export type { DataGapInsert, FinancialInsert, FinancialLineInsert, PriceDailyInsert, PriceIntradayInsert, SignalInsert, SymbolSectorRow } from './rows';
+export type { DataGapInsert, FinancialInsert, FinancialLineInsert, NewsInsert, PriceDailyInsert, PriceIntradayInsert, SignalInsert, SymbolSectorRow } from './rows';
 export { listFinancials, upsertFinancials } from './repos/financials';
 export { listFinancialLines, upsertFinancialLines } from './repos/financial-lines';
-export { insertGaps, listAllOpenGaps, listOpenGaps, listOpenMarketGaps, resolveGaps } from './repos/data-gaps';
+export { extendGaps, insertGaps, listAllOpenGaps, listOpenGaps, listOpenMarketGaps, resolveGaps } from './repos/data-gaps';
+export { insertNews } from './repos/news';
 export { listLatestSignals, upsertSignals } from './repos/signals';
 export { createAsset, deleteAsset, getAsset, listAssets, updateAsset } from './repos/assets';
 export { addToWatchlist, listWatchlist, removeFromWatchlist } from './repos/watchlist';

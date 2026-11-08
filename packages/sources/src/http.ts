@@ -16,19 +16,39 @@ export const DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024;
 interface RequestInitLite {
   method: 'GET' | 'POST';
   body?: string;
+  accept: string;
 }
 
 /** Polite client: only User-Agent and Accept (plus Content-Type for POST) are sent. Retries network errors, 429 and 5xx with backoff. */
 export function getJson(fetchImpl: typeof fetch, url: string, o: GetJsonOptions): Promise<unknown> {
-  return requestJson(fetchImpl, url, { method: 'GET' }, o);
+  return request(fetchImpl, url, { method: 'GET', accept: 'application/json' }, o, parseJson);
+}
+
+/** Same policy as getJson for text bodies (RSS/XML). Only User-Agent and the given Accept are sent; no redirects, no cookies. */
+export function getText(fetchImpl: typeof fetch, url: string, o: GetJsonOptions & { accept: string }): Promise<string> {
+  return request(fetchImpl, url, { method: 'GET', accept: o.accept }, o, (text) => text);
 }
 
 /** Same policy as getJson, with a JSON body. No caller-supplied headers (no browser-like headers by design). */
 export function postJson(fetchImpl: typeof fetch, url: string, body: unknown, o: GetJsonOptions): Promise<unknown> {
-  return requestJson(fetchImpl, url, { method: 'POST', body: JSON.stringify(body) }, o);
+  return request(fetchImpl, url, { method: 'POST', body: JSON.stringify(body), accept: 'application/json' }, o, parseJson);
 }
 
-async function requestJson(fetchImpl: typeof fetch, url: string, init: RequestInitLite, o: GetJsonOptions): Promise<unknown> {
+function parseJson(text: string, status: number): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new SourceError('response is not valid JSON', false, status);
+  }
+}
+
+async function request<T>(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInitLite,
+  o: GetJsonOptions,
+  parse: (text: string, status: number) => T,
+): Promise<T> {
   let last: SourceError | undefined;
   for (let attempt = 1; attempt <= o.maxAttempts; attempt++) {
     if (attempt > 1) {
@@ -41,7 +61,7 @@ async function requestJson(fetchImpl: typeof fetch, url: string, init: RequestIn
         ...(init.method === 'POST' ? { method: 'POST', body: init.body } : {}),
         headers: {
           'User-Agent': o.userAgent,
-          Accept: 'application/json',
+          Accept: init.accept,
           ...(init.method === 'POST' ? { 'Content-Type': 'application/json' } : {}),
         },
         redirect: 'error',
@@ -55,11 +75,7 @@ async function requestJson(fetchImpl: typeof fetch, url: string, init: RequestIn
           if (e instanceof SourceError) throw e;
           throw new SourceError('failed to read response body', true, res.status);
         }
-        try {
-          return JSON.parse(text);
-        } catch {
-          throw new SourceError('response is not valid JSON', false, res.status);
-        }
+        return parse(text, res.status);
       }
       const retryable = res.status === 429 || res.status >= 500;
       last = new SourceError(`HTTP ${res.status}`, retryable, res.status);

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { getJson, postJson } from './http';
+import { getJson, getText, postJson } from './http';
 import { SourceError } from './source-error';
 
 const res = (status: number, body: unknown = {}) => new Response(JSON.stringify(body), { status });
@@ -100,5 +100,29 @@ describe('postJson', () => {
     const err = await postJson(b.fetchImpl, 'https://x', { secret: 'abc' }, b.opts).catch((e: unknown) => e);
     expect(err).toMatchObject({ retryable: false, status: 403, message: 'HTTP 403' });
     expect(b.calls).toHaveLength(1);
+  });
+});
+
+describe('getText', () => {
+  const xml = (status: number, body = '<rss/>') => new Response(body, { status });
+  test('sends only User-Agent and the given Accept, redirect: error; returns text', async () => {
+    const s = setup([xml(200, '<rss>x</rss>')]);
+    await expect(getText(s.fetchImpl, 'https://x/f.rss', { ...s.opts, accept: 'application/rss+xml' })).resolves.toBe('<rss>x</rss>');
+    const init = s.calls[0]?.[1];
+    expect(init?.headers).toEqual({ 'User-Agent': 'test-agent', Accept: 'application/rss+xml' });
+    expect(init?.redirect).toBe('error');
+    expect(init?.method).toBeUndefined();
+  });
+  test('retries 429/5xx, not 403/404; enforces maxBodyBytes', async () => {
+    const a = setup([xml(429), xml(503), xml(200, 'ok')]);
+    await expect(getText(a.fetchImpl, 'https://x', { ...a.opts, accept: 'a/b' })).resolves.toBe('ok');
+    expect(a.sleeps).toEqual([1000, 2000]);
+    for (const code of [403, 404]) {
+      const b = setup([xml(code)]);
+      await expect(getText(b.fetchImpl, 'https://x', { ...b.opts, accept: 'a/b' })).rejects.toMatchObject({ retryable: false, status: code });
+      expect(b.calls).toHaveLength(1);
+    }
+    const c = setup([xml(200, 'x'.repeat(100))]);
+    await expect(getText(c.fetchImpl, 'https://x', { ...c.opts, accept: 'a/b', maxBodyBytes: 50 })).rejects.toMatchObject({ retryable: false });
   });
 });

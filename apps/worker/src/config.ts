@@ -1,4 +1,5 @@
 import { DEFAULT_FINANCIALS_PUBLISH_LAG_DAYS } from '@stoktok/core';
+import type { NewsCredibility } from '@stoktok/core';
 
 /** R5: sync tuning is configuration, not literals in code. */
 export const PRICE_SOURCE_IDS = ['vci-public', 'tcbs-public'] as const;
@@ -121,3 +122,87 @@ export const HOLIDAY_GAPS_CONFIG = {
   resolveChunkSize: 200,
 };
 export type HolidayGapsConfig = typeof HOLIDAY_GAPS_CONFIG;
+
+export const NEWS_SOURCE_IDS = ['cafef', 'vietstock', 'vnexpress'] as const;
+export type NewsSourceId = (typeof NEWS_SOURCE_IDS)[number];
+export const isNewsSourceId = (v: string): v is NewsSourceId => (NEWS_SOURCE_IDS as readonly string[]).includes(v);
+
+export interface NewsSourceConfig {
+  id: NewsSourceId;
+  /** Display name stored in `news.source`. */
+  name: string;
+  enabled: boolean;
+  credibility: NewsCredibility;
+  feedUrls: readonly string[];
+  /** Hosts an article link may point to (a subdomain is accepted). */
+  linkHosts: readonly string[];
+  upgradeHttps: boolean;
+  /** Pause between two feed requests to this source. */
+  minIntervalMs: number;
+}
+
+/**
+ * News RSS sync (STK-062, F5). Feeds, limits and sources are configuration (R5); set `enabled: false` or edit
+ * `feedUrls` to stop reading a source. robots.txt and terms notes are in apps/worker/README.md.
+ */
+export const NEWS_SYNC_CONFIG = {
+  sources: [
+    {
+      id: 'cafef',
+      name: 'CafeF',
+      enabled: true,
+      credibility: 'established_outlet',
+      feedUrls: ['https://cafef.vn/thi-truong-chung-khoan.rss', 'https://cafef.vn/doanh-nghiep.rss'],
+      linkHosts: ['cafef.vn'],
+      upgradeHttps: true,
+      minIntervalMs: 3000,
+    },
+    {
+      id: 'vietstock',
+      name: 'Vietstock',
+      enabled: true,
+      credibility: 'established_outlet',
+      feedUrls: [
+        'https://vietstock.vn/830/chung-khoan/co-phieu.rss',
+        'https://vietstock.vn/739/chung-khoan/giao-dich-noi-bo.rss',
+        'https://vietstock.vn/741/chung-khoan/niem-yet.rss',
+        'https://vietstock.vn/738/doanh-nghiep/co-tuc.rss',
+        'https://vietstock.vn/737/doanh-nghiep/hoat-dong-kinh-doanh.rss',
+        'https://vietstock.vn/761/kinh-te/vi-mo.rss',
+      ],
+      linkHosts: ['vietstock.vn'],
+      upgradeHttps: true,
+      minIntervalMs: 3000,
+    },
+    {
+      id: 'vnexpress',
+      name: 'VnExpress',
+      enabled: true,
+      credibility: 'established_outlet',
+      feedUrls: ['https://vnexpress.net/rss/kinh-doanh.rss'],
+      linkHosts: ['vnexpress.net'],
+      upgradeHttps: true,
+      minIntervalMs: 3000,
+    },
+  ] as readonly NewsSourceConfig[],
+  timeoutMs: 15_000,
+  maxAttempts: 2,
+  backoffBaseMs: 2000,
+  maxBodyBytes: 2 * 1024 * 1024,
+  /** A source stops after this many feeds fail in a row; the others still run. */
+  maxConsecutiveFeedFailures: 2,
+  maxItemsPerFeed: 100,
+  maxTitleChars: 500,
+  /** The database backstop is 10000. */
+  maxExcerptChars: 2000,
+  /** Matches the database check: published_at <= fetched_at + 1 day. */
+  maxFutureMs: 86_400_000,
+  /** A new gap covers this long before the failed run (the hourly interval). */
+  gapLookbackMs: 3_600_000,
+  /** Rows per insert request; PostgREST caps a response at 1000. */
+  insertChunkSize: 200,
+  gapsPageSize: 1000,
+  userAgent: 'stoktok/0.1 (personal portfolio tracker; hourly RSS check)',
+  accept: 'application/rss+xml, application/xml',
+};
+export type NewsSyncConfig = typeof NEWS_SYNC_CONFIG;

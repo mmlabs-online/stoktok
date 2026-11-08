@@ -1,30 +1,32 @@
 import { pathToFileURL } from 'node:url';
 import { createServiceClient } from '@stoktok/db';
-import { EOD_SYNC_CONFIG, FINANCIAL_STATEMENTS_SYNC_CONFIG, FINANCIALS_SYNC_CONFIG, HOLIDAY_GAPS_CONFIG, SIGNALS_JOB_CONFIG, isFinancialsSourceId, isPriceSourceId } from './config';
-import type { FinancialsSourceId, PriceSourceId } from './config';
+import { EOD_SYNC_CONFIG, FINANCIAL_STATEMENTS_SYNC_CONFIG, FINANCIALS_SYNC_CONFIG, HOLIDAY_GAPS_CONFIG, NEWS_SYNC_CONFIG, SIGNALS_JOB_CONFIG, isFinancialsSourceId, isNewsSourceId, isPriceSourceId } from './config';
+import type { FinancialsSourceId, NewsSourceId, PriceSourceId } from './config';
 import { runEodSync } from './jobs/eod-sync';
 import { runFinancialStatementsSync } from './jobs/financial-statements-sync';
 import { runFinancialsSync } from './jobs/financials-sync';
 import { runMediumSignals } from './jobs/medium-signals';
+import { runNewsSync } from './jobs/news-sync';
 import { runResolveHolidayGaps } from './jobs/resolve-holiday-gaps';
 import { TCBS_FINANCIALS_EPS_BASIS, TCBS_FINANCIALS_SOURCE_NAME } from './sources/tcbs-financials';
 import { VCI_IQ_FINANCIALS_EPS_BASIS, VCI_IQ_FINANCIALS_SOURCE_NAME, VciIqFinancialsSource } from './sources/vci-iq-financials';
+import { createNewsSources } from './sources/news-source';
 import { createFinancialsSource } from './sources/select-financials-source';
 import { createPriceSource } from './sources/select-price-source';
-import { createDbEodStore, createDbFinancialsStore, createDbFinancialStatementsStore, createDbHolidayGapsStore, createDbSignalsStore } from './store';
+import { createDbEodStore, createDbFinancialsStore, createDbFinancialStatementsStore, createDbHolidayGapsStore, createDbNewsStore, createDbSignalsStore } from './store';
 
 export type ParsedArgs =
-  | { ok: true; job: 'eod-prices' | 'financials' | 'financial-statements' | 'signals' | 'resolve-holiday-gaps'; dryRun: boolean; backfillTradingDays?: number; source?: PriceSourceId | FinancialsSourceId }
+  | { ok: true; job: 'eod-prices' | 'financials' | 'financial-statements' | 'signals' | 'resolve-holiday-gaps' | 'news'; dryRun: boolean; backfillTradingDays?: number; source?: PriceSourceId | FinancialsSourceId | NewsSourceId }
   | { ok: false; usage: string };
 
-const USAGE = 'usage: cli.ts <eod-prices|financials|financial-statements|signals|resolve-holiday-gaps> [--dry-run] [--backfill [<tradingDays>]  (eod-prices only)] [--source <vci-public|tcbs-public>  (eod-prices) | <vci-iq|tcbs-public>  (financials)]  (financial-statements takes --dry-run only)';
+const USAGE = 'usage: cli.ts <eod-prices|financials|financial-statements|signals|resolve-holiday-gaps|news> [--dry-run] [--backfill [<tradingDays>]  (eod-prices only)] [--source <vci-public|tcbs-public>  (eod-prices) | <vci-iq|tcbs-public>  (financials)]  | <cafef|vietstock|vnexpress>  (news)]  (financial-statements takes --dry-run only)';
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const [job, ...flags] = argv;
-  if (job !== 'eod-prices' && job !== 'financials' && job !== 'financial-statements' && job !== 'signals' && job !== 'resolve-holiday-gaps') return { ok: false, usage: USAGE };
+  if (job !== 'eod-prices' && job !== 'financials' && job !== 'financial-statements' && job !== 'signals' && job !== 'resolve-holiday-gaps' && job !== 'news') return { ok: false, usage: USAGE };
   let dryRun = false;
   let backfillTradingDays: number | undefined;
-  let source: PriceSourceId | FinancialsSourceId | undefined;
+  let source: PriceSourceId | FinancialsSourceId | NewsSourceId | undefined;
   for (let i = 0; i < flags.length; i++) {
     const f = flags[i];
     if (f === '--dry-run') {
@@ -49,6 +51,7 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
       if (source !== undefined || next === undefined) return { ok: false, usage: USAGE };
       if (job === 'eod-prices' && isPriceSourceId(next)) source = next;
       else if (job === 'financials' && isFinancialsSourceId(next)) source = next;
+      else if (job === 'news' && isNewsSourceId(next)) source = next;
       else return { ok: false, usage: USAGE };
       i += 1;
     } else {
@@ -74,6 +77,18 @@ async function main(): Promise<void> {
       store: createDbHolidayGapsStore(db, HOLIDAY_GAPS_CONFIG),
       now: new Date(),
       config: HOLIDAY_GAPS_CONFIG,
+      log,
+      dryRun: args.dryRun,
+    });
+  } else if (args.job === 'news') {
+    const c = NEWS_SYNC_CONFIG;
+    const only = args.source !== undefined && isNewsSourceId(args.source) ? args.source : undefined;
+    summary = await runNewsSync({
+      store: createDbNewsStore(db, { insertChunkSize: c.insertChunkSize, gapsPageSize: c.gapsPageSize }),
+      sources: createNewsSources(c, { fetchImpl: fetch, http: { timeoutMs: c.timeoutMs, maxAttempts: c.maxAttempts, backoffBaseMs: c.backoffBaseMs, sleep, log } }).filter((s) => only === undefined || s.id === only),
+      now: new Date(),
+      config: c,
+      sleep,
       log,
       dryRun: args.dryRun,
     });

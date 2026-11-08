@@ -31,7 +31,7 @@ do $$ -- tables_exist
 declare got text[];
 begin
   select array_agg(tablename order by tablename) into got from pg_tables where schemaname = 'public';
-  if got is distinct from array['assets','corporate_actions','data_gaps','financial_lines','financials','lottery_draws','lottery_tickets','prices_daily','prices_intraday','settings','signals','symbols','transactions','watchlist'] then
+  if got is distinct from array['assets','corporate_actions','data_gaps','financial_lines','financials','lottery_draws','lottery_tickets','news','prices_daily','prices_intraday','settings','signals','symbols','transactions','watchlist'] then
     raise exception 'CHECK FAILED: tables_exist (got %)', got;
   end if;
 end $$;
@@ -146,6 +146,19 @@ begin
   perform pg_temp.assert_col('financials', 'net_income', 'bigint', true);
 end $$;
 
+do $$ -- news_columns
+begin
+  perform pg_temp.assert_col('news', 'id', 'bigint', true);
+  perform pg_temp.assert_col('news', 'url', 'text', true);
+  perform pg_temp.assert_col('news', 'title', 'text', true);
+  perform pg_temp.assert_col('news', 'source', 'text', true);
+  perform pg_temp.assert_col('news', 'credibility', 'text', true);
+  perform pg_temp.assert_col('news', 'published_at', 'timestamp with time zone', true);
+  perform pg_temp.assert_col('news', 'fetched_at', 'timestamp with time zone', true);
+  perform pg_temp.assert_col('news', 'symbols', 'ARRAY', true);
+  perform pg_temp.assert_col('news', 'excerpt', 'text', true);
+end $$;
+
 do $$ -- financial_lines_columns
 begin
   perform pg_temp.assert_col('financial_lines', 'symbol', 'text', true);
@@ -258,6 +271,18 @@ begin
   delete from public.financial_lines where symbol = 'FPT';
   reset role;
   if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_financial_lines'; end if;
+end $$;
+
+do $$ -- service_role_can_read_write_news
+declare n int;
+begin
+  set local role service_role;
+  insert into public.news (url, title, source, credibility, published_at, fetched_at, symbols)
+    values ('https://cafef.vn/a-1.chn', 't', 'CafeF', 'established_outlet', now(), now(), '{HPG,VIC}');
+  select count(*) into n from public.news where symbols @> '{HPG}';
+  delete from public.news where url = 'https://cafef.vn/a-1.chn';
+  reset role;
+  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_news'; end if;
 end $$;
 
 do $$ -- service_role_can_read_write_financials
@@ -454,6 +479,23 @@ begin
   insert into public.financial_lines (symbol, period_kind, period, statement, line, value, source, fetched_at)
     values ('VNM', 'year', '2025', 'income', 'revenue', 1, 'x', now());
   perform pg_temp.expect_fail('fl duplicate key', fl || '(''VNM'',''year'',''2025'',''income'',''revenue'',2,''x'',now())', array['23505']);
+end $$;
+
+do $$ -- news_negatives
+declare nw text := 'insert into public.news (url, title, source, credibility, published_at, fetched_at, symbols) values ';
+begin
+  perform pg_temp.expect_fail('news bad scheme', nw || '(''javascript:x'',''t'',''s'',''established_outlet'',now(),now(),''{}'')', array['23514']);
+  perform pg_temp.expect_fail('news empty title', nw || '(''https://a.vn/1'','''',''s'',''established_outlet'',now(),now(),''{}'')', array['23514']);
+  perform pg_temp.expect_fail('news long title', nw || '(''https://a.vn/1'',repeat(''x'',501),''s'',''established_outlet'',now(),now(),''{}'')', array['23514']);
+  perform pg_temp.expect_fail('news empty source', nw || '(''https://a.vn/1'',''t'','''',''established_outlet'',now(),now(),''{}'')', array['23514']);
+  perform pg_temp.expect_fail('news bad credibility', nw || '(''https://a.vn/1'',''t'',''s'',''social'',now(),now(),''{}'')', array['23514']);
+  perform pg_temp.expect_fail('news published too far after fetched', nw || '(''https://a.vn/1'',''t'',''s'',''established_outlet'',now() + interval ''2 days'',now(),''{}'')', array['23514']);
+  perform pg_temp.expect_fail('news lowercase symbol', nw || '(''https://a.vn/1'',''t'',''s'',''established_outlet'',now(),now(),''{hpg}'')', array['23514']);
+  perform pg_temp.expect_fail('news 51 symbols', nw || '(''https://a.vn/1'',''t'',''s'',''established_outlet'',now(),now(),(select array_agg(''A'' || g) from generate_series(1, 51) g))', array['23514']);
+  perform pg_temp.expect_fail('news null title', nw || '(''https://a.vn/1'',null,''s'',''established_outlet'',now(),now(),''{}'')', array['23502']);
+  insert into public.news (url, title, source, credibility, published_at, fetched_at)
+    values ('https://a.vn/1', 't', 's', 'established_outlet', now(), now());
+  perform pg_temp.expect_fail('news duplicate url', nw || '(''https://a.vn/1'',''t2'',''s'',''established_outlet'',now(),now(),''{}'')', array['23505']);
 end $$;
 
 do $$ -- manual_rows_nulls_dont_collide

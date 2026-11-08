@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SYNTHETIC - format per work/tickets/STK-062/consult-data-engineer.md section 2, not recorded from the live feed. Unsorted items, CDATA descriptions with </br>. -->
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:media="http://search.yahoo.com/mrss/">
+<channel>
+<title>VnExpress - Kinh doanh</title>
+<link>https://vnexpress.net/kinh-doanh</link>
+<description>Synthetic</description>
+<item>
+<title>Gia vang trong nuoc giam nhe</title>
+<description><![CDATA[<a href="https://vnexpress.net/gia-vang-giam-4800001.html"><img src="https://i1-kinhdoanh.vnecdn.net/1.jpg" ></a></br>Gia vang SJC giam 200.000 dong moi luong.]]></description>
+<pubDate>Sat, 07 Nov 2026 12:00:00 +0700</pubDate>
+<link>https://vnexpress.net/gia-vang-giam-4800001.html</link>
+<guid isPermaLink="true">https://vnexpress.net/gia-vang-giam-4800001.html</guid>
+</item>
+<item>
+<title>Vingroup phat hanh trai phieu 5.000 ti dong</title>
+<description><![CDATA[<img src="https://i1-kinhdoanh.vnecdn.net/2.jpg" ></br>Tap doan Vingroup du kien huy dong von trong nam nay.]]></description>
+<pubDate>Sun, 08 Nov 2026 20:10:00 +0700</pubDate>
+<link>https://vnexpress.net/vingroup-phat-hanh-trai-phieu-4800002.html</link>
+<guid isPermaLink="true">https://vnexpress.net/vingroup-phat-hanh-trai-phieu-4800002.html</guid>
+</item>
+<item>
+<title>Xuat khau gao thang 10 tang manh</title>
+<description><![CDATA[<img src="https://i1-kinhdoanh.vnecdn.net/3.jpg" ></br>Kim ngach xuat khau dat 500 trieu USD.]]></description>
+<pubDate>Sun, 08 Nov 2026 07:30:00 +0700</pubDate>
+<link>https://vnexpress.net/xuat-khau-gao-4800003.html</link>
+<guid isPermaLink="true">https://vnexpress.net/xuat-khau-gao-4800003.html</guid>
+</item>
+<item>
+<title>Thi truong bat dong san phuc hoi</title>
+<description><![CDATA[<img src="https://i1-kinhdoanh.vnecdn.net/4.jpg" ></br>Giao dich tang so voi cung ky.]]></description>
+<pubDate>Fri, 06 Nov 2026 22:00:00 +0700</pubDate>
+<link>https://vnexpress.net/bat-dong-san-phuc-hoi-4800004.html</link>
+<guid isPermaLink="true">https://vnexpress.net/bat-dong-san-phuc-hoi-4800004.html</guid>
+</item>
+<item>
+<title>Ngan hang tang lai suat tiet kiem</title>
+<description><![CDATA[<img src="https://i1-kinhdoanh.vnecdn.net/5.jpg" ></br>Nhieu ngan hang dieu chinh lai suat ky han 12 thang.]]></description>
+<pubDate>Thu, 05 Nov 2026 10:00:00 +0700</pubDate>
+<link>https://vnexpress.net/ngan-hang-tang-lai-suat-4800005.html</link>
+<guid isPermaLink="true">https://vnexpress.net/ngan-hang-tang-lai-suat-4800005.html</guid>
+</item>
+</channel>
+</rss>

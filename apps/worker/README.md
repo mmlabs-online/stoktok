@@ -105,6 +105,34 @@ pnpm worker:financial-statements             # fetch and write
 
 Only `--dry-run` is accepted. Output and exit codes are as for `financials`. **Not scheduled yet:** apply migration `20261108000100_financial_lines.sql` and check a clean dry-run first. Tuning (lookbacks, annual publish lag, caps) is `FINANCIAL_STATEMENTS_SYNC_CONFIG` in `src/config.ts`.
 
+## News sync (`news`)
+
+Reads the RSS feeds of CafeF, Vietstock and VnExpress Kinh doanh and stores the articles in `news` (STK-062, spec F5). Collection only: no UI, no AI. Each article keeps `source`, `url`, `published_at`, `fetched_at`, a `credibility` tag (all three are `established_outlet`), `symbols` linked by deterministic rules in `packages/core` (word-bounded ticker match plus a company-name alias list, no LLM) and a short plain-text excerpt. A url already stored is skipped (first seen wins).
+
+```
+pnpm --filter @stoktok/worker run job news --dry-run   # fetch and normalize, write nothing
+pnpm --filter @stoktok/worker run job news             # fetch and write
+pnpm --filter @stoktok/worker run job news --source vnexpress
+```
+
+Output and exit codes are as for `financials`: one JSON summary line on stdout (counts only, never article text), logs on stderr; exit 1 if any source failed. A failing source is recorded as a `news` gap (`data_gaps`, market-wide, `source` = source id), extended while the outage lasts and resolved on the next success; the other sources still run. On a non-trading day the job exits 0 without fetching.
+
+**Schedule (documented only):** hourly, 07:00-22:00 Asia/Ho_Chi_Minh, Monday to Friday (the job also checks the trading calendar itself). **Not scheduled yet:** apply migration `20261108000200_news.sql` first, run a clean `--dry-run`, then wire the schedule in the deployment repo (separate, High-tier change).
+
+**Untrusted text (R9).** Titles and excerpts come from third parties. They are stripped to plain text (tags, script and style content, event handlers, control and zero-width characters removed; entities decoded once) before they are stored. They must never be rendered as HTML (no `dangerouslySetInnerHTML`) and never be treated as instructions. Article pages, images and enclosures are never fetched.
+
+**Feeds, robots.txt and terms (recorded 2026-11-08, from a summarizing fetch, not raw bytes).** Wording is deliberate: "robots.txt allows; no RSS-specific terms found; site terms page not read" is not "terms checked". Ming approved all three sources on 2026-11-08. `scripts/record-news-fixtures.sh` saves each host's raw `robots.txt` next to the recorded feeds so the check can be repeated byte for byte.
+
+| Source | Feeds (config) | robots.txt | Terms |
+|---|---|---|---|
+| CafeF | `cafef.vn/thi-truong-chung-khoan.rss`, `cafef.vn/doanh-nghiep.rss` | `User-agent: *` / `Allow: /`, no Crawl-delay | No RSS-specific terms found; site terms page not read (`/dieu-khoan-su-dung.chn` returned 404) |
+| Vietstock | `vietstock.vn/830/.../co-phieu.rss`, `739/.../giao-dich-noi-bo.rss`, `741/.../niem-yet.rss`, `738/.../co-tuc.rss`, `737/.../hoat-dong-kinh-doanh.rss`, `761/.../vi-mo.rss` | RSS paths not disallowed, no Crawl-delay | RSS page offers RSS as a reader convenience, "(c) Ban quyen thuoc ve Vietstock"; no RSS terms; site-wide terms not read |
+| VnExpress Kinh doanh | `vnexpress.net/rss/kinh-doanh.rss` | `User-agent: *` / `Allow: /`; named scraper bots are blocked, our honest `stoktok/...` user agent is not one of them | `/rss`: free for individuals and non-profits, the source must be shown, VnExpress may ask us to stop. Personal single-user use fits; always keep `source` + `url` with the text |
+
+To stop reading a source or a feed, set `enabled: false` or edit `feedUrls` in `NEWS_SYNC_CONFIG` (`src/config.ts`), which also holds the rate limit (3 s between feeds of one source), caps and the user agent. Requests send only `User-Agent` and `Accept`, never follow redirects and never retry a 403 or 404.
+
+**Recorded fixtures (human step before merge).** Tests run on synthetic, labelled fixtures in `src/sources/__fixtures__/news/`. Ming runs `bash scripts/record-news-fixtures.sh` from the repo root and commits `work/tickets/STK-062/live-samples/`; the opt-in `rss-news-source.samples.test.ts` then parses every recorded feed. The script stops at the first non-200 response.
+
 ## Medium-term signals (`signals`)
 
 Computes the medium-term rules (P/E and P/B vs sector, earnings growth trend, price vs 50/200-day MA) for watchlist and held symbols from stored data only, and upserts `signals`. All rules, freshness checks and gap checks are in `packages/core`; parameters come from `settings.rule_configs.signals.medium` (defaults apply when unset). The MA rules are suppressed (`corporate_action_in_window`, `price_jump_beyond_limit`) when a stock dividend falls inside the window or a close moves beyond the exchange's daily limit, because the stored closes are not adjusted. Nothing is fetched.
