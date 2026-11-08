@@ -117,4 +117,11 @@ describe('AppShell', () => {
     expect(out).toContain(DISCLAIMER_TEXT);
     expect(out).toMatch(/aria-current="page"[^>]*>(?:<svg[^>]*>.*?<\/svg>)<span[^>]*>Tài sản/);
   });
+  it('shows STOKTOK_VERSION at the bottom of the sidebar, "dev" when unset', () => {
+    vi.stubEnv('STOKTOK_VERSION', 'v0.1.3');
+    expect(html(<AppShell>x</AppShell>)).toMatch(/Phiên bản (?:<!-- -->)?v0\.1\.3/);
+    vi.stubEnv('STOKTOK_VERSION', '');
+    expect(html(<AppShell>x</AppShell>)).toMatch(/Phiên bản (?:<!-- -->)?dev/);
+    vi.unstubAllEnvs();
+  });
 });
