@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | REWORK |
+| State | DONE |
 | Priority | P2 |
 | Areas | data, db, finance |
 | Attempts | 1 |

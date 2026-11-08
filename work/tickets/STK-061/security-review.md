@@ -61,3 +61,37 @@
 ### Open questions
 1. Is `fetchAll` (paging) or symbol chunking the preferred way to fix this repo? Default: `fetchAll` with an explicit order, to match `prices-daily.ts`.
 2. Should the probe stop on 429? Default: yes, stop on any status other than 200 or 404.
+
+## Attempt 2
+
+## Security re-check: STK-061, attempt 2 (commit 86b5250)
+
+**Verdict: the R4 integrity finding is fixed and the change adds no new security issues.** I read the code statically and did not run the tests or a live DB query.
+
+### Findings
+- 🟢 **R4 finding fixed.** `apps/worker/src/store.ts:88-94` now reads stored lines in symbol chunks of `linesSymbolChunk`, the same pattern the signals store uses at `:110-116`.
+  - Each chunk is one query with the same `periodKind` and `fromPeriod`, and the results are concatenated.
+  - The job's two reads at `apps/worker/src/jobs/financial-statements-sync.ts:107-108` both go through this wrapper.
+- 🟢 **Chunk size fits under the cap.** `apps/worker/src/config.ts:105-106` sets `linesSymbolChunk: 4`.
+  - Worst case is 4 symbols × 16 quarters × 12 lines = 768 rows, below the 1000-row PostgREST cap.
+  - The real window is smaller: `lookbackQuarters` is 12, and `.gte('period', windowStart)` bounds the read. Years are 4 × 6 × 12 = 288 rows.
+  - The 12-line count matches the registry (`packages/core/src/market/statement-lines.ts:23-36`).
+- 🟢 **Wiring is correct.** `apps/worker/src/cli.ts:94` passes `c.linesSymbolChunk`. No new env vars, secrets, `NEXT_PUBLIC_*` or service-role exposure. Nothing changed under `apps/web`.
+- 🟢 **Test covers the chunking.** `apps/worker/src/store.test.ts:37-45` checks the chunk boundaries (`[A,B],[C,D],[E]`), that the period arguments are passed through, and that results are concatenated.
+- 🟡 **The cap bound is only a comment.** No test or runtime check ties `linesSymbolChunk × maxQuarters × lines` to the 1000-row cap (`config.ts:105`, `config.test.ts:22-29`).
+  - The cash-flow slice (B) will add lines to `STATEMENT_LINES`. At about 16 or more lines, 4 × 16 × 16 = 1024 rows, and rows are silently dropped again. That brings back the false-gap bug.
+  - `packages/db/src/repos/financial-lines.ts:19` still has no `order` and no check for truncation.
+- 🟢 **Probe 🟡 from attempt 1 still open, as planned.** `scripts/probe-vci-iq-cashflow.sh` was not touched: it still writes non-200 bodies, has no stop on 429/5xx and no `--max-time`. Attempt 2 was scoped to the stored-lines read only, so this is a tracking item, not a regression.
+
+### Recommendations
+1. Add a test to `config.test.ts` (AC "missing recorded as gap", R4, R8):
+   `expect(c.linesSymbolChunk * c.maxQuarters * Object.keys(STATEMENT_LINES).length).toBeLessThan(1000)`.
+   When slice B adds lines, this fails CI instead of silently dropping rows. It is a one-line, low-risk addition. If R7 keeps it out of this diff, make it a `debt` issue linked to slice B.
+2. Optional hardening (follow-up): make `listFinancialLines` throw when one response returns 1000 or more rows, so truncation is reported loudly and never turns into false gaps.
+3. Confirm with the orchestrator that the attempt 1 probe-script recommendations are either in this ticket's plan or filed as a follow-up.
+
+### Risks
+- The protection against silent truncation depends on the line count staying small. Slice B is the trigger to watch.
+
+### Open questions
+- None blocking.

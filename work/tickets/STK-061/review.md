@@ -41,3 +41,42 @@ No violations found.
 - Run `scripts/db-check.sh` on a machine with Postgres (Ming or CI) before merge. This PR is High tier (migration).
 - `debt` issues listed in impl-log.md: schedule the job after the migration is applied; map more NH/CK/BH lines and resolve the VND `isa16` ambiguity; verify consolidated vs parent-only basis.
 - Ming: run the cash-flow probe (gate for STK-068).
+
+## Attempt 2 — 2026-11-08
+Verdict: PASS
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck`, exit 0.
+- lint: `pnpm lint`, exit 0.
+- test: `pnpm -r --no-bail test`: core 669 pass; sources 24 pass; worker 16 files / 262 pass (+1 compared with attempt 1); web 302 pass; db 147 pass, 2 FAIL, 1 todo. Both failures are in `packages/db/src/r3-guard.test.ts` (Windows paths, spaceM#11). They are pre-existing and unrelated to this diff. This matches impl-log.md Attempt 2.
+- `scripts/db-check.sh`: not run, because there is no Postgres here. The migration is unchanged since attempt 1.
+
+### Issue 1 (attempt 1) — resolved
+- `apps/worker/src/store.ts:80-95`: `createDbFinancialStatementsStore.listFinancialLines` now reads in chunks of `opts.linesSymbolChunk` symbols. It awaits each chunk in turn and concatenates the results, the same pattern as `createDbSignalsStore`.
+- `apps/worker/src/config.ts:105-106`: `FINANCIAL_STATEMENTS_SYNC_CONFIG.linesSymbolChunk = 4` (R5). The doc comment derives the bound: 4 × 16 (`maxQuarters`, a safe upper bound on the 12-quarter lookback) × 12 lines = 768 < 1000. The year read is 4 × 6 × 12 = 288 rows.
+- `apps/worker/src/cli.ts:94`: passes the new option through.
+- `apps/worker/src/store.test.ts › createDbFinancialStatementsStore › listFinancialLines chunks by linesSymbolChunk and concatenates`: with chunk 2, five symbols produce 3 calls (`[A,B],[C,D],[E]`). Each call keeps the same kind and period, and the output is concatenated in order. Passes.
+
+### Acceptance criteria
+- [x] AC1: the evidence from attempt 1, plus the complete stored-line read above.
+- [x] AC2: unchanged since attempt 1 (met).
+- [x] AC3: the upsert and gap evidence from attempt 1. The gap and restatement logic now sees every stored row in the window.
+- [x] AC4: unchanged since attempt 1 (met by reading; db-check is pending, see Follow-ups).
+- [x] AC5: the checks above. The new store test covers the chunking.
+
+### Scope
+The attempt 2 diff (`86b5250`) touches only `config.ts`, `store.ts`, `cli.ts`, `store.test.ts` and `impl-log.md`. These are worker files already in the plan, and the change is limited to Issue 1. No out-of-plan changes.
+
+### Rules R1–R10
+No violations. R5: the chunk size is in config. R4: the gap computation now works on complete data.
+
+### Should-fix (non-blocking, carry to debt)
+- 🟡 The `config.test.ts` guard asked for in attempt 1 is missing. `apps/worker/src/config.test.ts` has no assertion that `linesSymbolChunk × STATEMENT_LINES count × max(maxQuarters, maxYears) < 1000`. The value is correct today and the comment documents it. But if `maxQuarters` or the line registry grows, truncation would come back silently. Fix: add `expect(c.linesSymbolChunk * Object.keys(STATEMENT_LINES).length * Math.max(c.maxQuarters, c.maxYears)).toBeLessThan(1000)`. Do it in a follow-up, or fold it into the PR if convenient.
+
+### Nits (do not block)
+- The attempt 1 nits still stand (the comment on stored-but-absent lines, the `public` revoke inconsistency, the `latestExpectedYear` bound `3`).
+
+### Follow-ups (out of scope)
+- Run `scripts/db-check.sh` on a machine with Postgres (Ming or CI) before merge. This PR is High tier (migration), so Ming reviews it.
+- Open a `debt` issue for the config guard above if it is not added before merge.
+- The `debt` items listed in impl-log.md attempt 1 still apply.
