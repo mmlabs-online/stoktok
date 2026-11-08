@@ -77,11 +77,21 @@ export function createDbFinancialsStore(db: Db, opts: { upsertChunkSize: number 
 }
 
 /** Wiring only: all reads and writes go through @stoktok/db. */
-export function createDbFinancialStatementsStore(db: Db, opts: { upsertChunkSize: number }): FinancialStatementsStore {
+export function createDbFinancialStatementsStore(
+  db: Db,
+  opts: { upsertChunkSize: number; linesSymbolChunk: number },
+): FinancialStatementsStore {
   return {
     listWatchlistSymbols: async () => (await listWatchlist(db)).map((w) => w.symbol),
     listHeldSymbols: (asOf) => listHeldSymbols(db, asOf),
-    listFinancialLines: (symbols, periodKind, fromPeriod) => listFinancialLines(db, symbols, periodKind, fromPeriod),
+    // Symbol chunks keep one response under the PostgREST row cap, so the gap logic sees every stored line.
+    listFinancialLines: async (symbols, periodKind, fromPeriod) => {
+      const out = [];
+      for (let i = 0; i < symbols.length; i += opts.linesSymbolChunk) {
+        out.push(...(await listFinancialLines(db, symbols.slice(i, i + opts.linesSymbolChunk), periodKind, fromPeriod)));
+      }
+      return out;
+    },
     upsertFinancialLines: (rows) => upsertFinancialLines(db, rows, { chunkSize: opts.upsertChunkSize }),
     listOpenGaps: (dataType, symbols) => listOpenGaps(db, dataType, symbols),
     insertGaps: (rows) => insertGaps(db, rows),

@@ -102,6 +102,8 @@ export const FINANCIAL_STATEMENTS_SYNC_CONFIG = {
   maxYears: 6,
   /** Days after year end by which the audited annual report is expected (90-day deadline plus slack). */
   annualPublishLagDays: 120,
+  /** Symbols per stored-lines read. 4 symbols x 16 quarters x 12 lines = 768 rows, under the PostgREST 1000-row cap. */
+  linesSymbolChunk: 4,
 };
 export type FinancialStatementsSyncConfig = typeof FINANCIAL_STATEMENTS_SYNC_CONFIG;
 

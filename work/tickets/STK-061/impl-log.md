@@ -60,3 +60,27 @@ None. Two deviations inside planned files: the `worker:financial-statements` scr
 ### Scope self-check
 - Could the diff be smaller? No. Non-test code is about the planned size; the rest is tests, fixtures (45 KB trimmed JSON) and docs.
 - Diff size: +3,826 / -36 lines in 36 files, of which about 2,000 are pretty-printed fixture JSON; non-test source is about +700.
+
+## Attempt 2 (REWORK) — 2026-11-08
+
+Fixes review Attempt 1, Issue 1 only: the stored-lines read exceeded the PostgREST 1000-row cap.
+
+### Files touched
+- `apps/worker/src/config.ts`: new `FINANCIAL_STATEMENTS_SYNC_CONFIG.linesSymbolChunk = 4` (4 symbols x 16 quarters x 12 lines = 768 rows < 1000). Required because chunk size is configuration, like `financialsSymbolChunk`.
+- `apps/worker/src/store.ts`: `createDbFinancialStatementsStore.listFinancialLines` reads in symbol chunks and concatenates (same pattern as `createDbSignalsStore`). Takes `linesSymbolChunk` in opts. Required because it is the unchunked wiring named in the review.
+- `apps/worker/src/cli.ts`: passes `linesSymbolChunk` from config. Required by the new opt.
+- `apps/worker/src/store.test.ts`: mock entry plus a test that chunks of `[A,B],[C,D],[E]` are read with the same kind/period and concatenated in order.
+
+### Checks
+- `pnpm typecheck`: clean.
+- `pnpm lint`: clean.
+- `pnpm -r --no-bail test`: core 669 pass; sources 24 pass; worker 262 pass; web 302 pass; db 147 pass, 2 FAIL (`r3-guard.test.ts`, Windows paths, spaceM#11, pre-existing).
+
+### Out-of-plan files
+None beyond the review's named wiring (`config.ts`, `cli.ts`, `store.ts` are all worker files already in the ticket).
+
+### Follow-ups
+None new. Nits from the review left untouched (non-blocking).
+
+### Scope self-check
+Only Issue 1 addressed; ~25 lines of source plus one test.

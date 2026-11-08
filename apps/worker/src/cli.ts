@@ -91,7 +91,7 @@ async function main(): Promise<void> {
   } else if (args.job === 'financial-statements') {
     const c = FINANCIAL_STATEMENTS_SYNC_CONFIG;
     summary = await runFinancialStatementsSync({
-      store: createDbFinancialStatementsStore(db, { upsertChunkSize: c.upsertChunkSize }),
+      store: createDbFinancialStatementsStore(db, { upsertChunkSize: c.upsertChunkSize, linesSymbolChunk: c.linesSymbolChunk }),
       source: new VciIqFinancialsSource({
         fetchImpl: fetch,
         http: { timeoutMs: c.timeoutMs, maxAttempts: c.maxAttempts, backoffBaseMs: c.backoffBaseMs, sleep, log },
