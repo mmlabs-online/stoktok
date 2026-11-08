@@ -21,6 +21,6 @@ Open items that agents cannot do from the sandbox. Tick and date them when done;
 - [x] Apply migration `20261106000100_lottery.sql` (STK-053). — applied (Ming, 2026-11-08)
 - [ ] ~2026-11-17: check whether HOSE/HNX announce a closure on 2026-11-24 (provisional in the holiday seed).
 - [ ] Verify the seeded 2025–2027 holidays and the intraday session hours against hsx.vn / hnx.vn before go-live.
-- [ ] Rotate the Supabase key pasted in chat on 2026-11-01 (follow `docs/deploy.md` key-rotation runbook; if it is the legacy JWT secret, also update `STOKTOK_AUTHEN_SUPABASE_ANON_KEY`).
+- [x] ~~Rotate the Supabase key pasted in chat on 2026-11-01~~ — dropped (Ming, 2026-11-08: risk accepted, key not rotated).
 - [ ] Edit `docs/spec-v1.md` §4, §4.4, §9 Q1 (intraday is fetched by web while open, watchlist + held).
 - [ ] CLAUDE.md "Runtime" says WSL2; the server is an OrbStack Mac (ADR 0003).
