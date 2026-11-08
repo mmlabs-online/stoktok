@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { NAV_ITEMS, isNavActive } from './nav';
 
 describe('nav', () => {
-  it('has 5 Vietnamese items in order', () => {
+  it('has 4 Vietnamese items in order', () => {
     expect(NAV_ITEMS.map((i) => [i.label, i.href])).toEqual([
-      ['Tổng quan', '/'],
+      ['Tài sản', '/'],
       ['Sổ giao dịch', '/transactions'],
-      ['Nhập sao kê', '/import'],
       ['Danh sách theo dõi', '/watchlist'],
       ['Cài đặt', '/settings'],
     ]);

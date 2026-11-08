@@ -115,6 +115,6 @@ describe('AppShell', () => {
     expect(out).toContain('role="status"');
     expect(out).toContain('aria-label="Giao diện: Hệ thống"');
     expect(out).toContain(DISCLAIMER_TEXT);
-    expect(out).toMatch(/aria-current="page"[^>]*>(?:<svg[^>]*>.*?<\/svg>)<span[^>]*>Tổng quan/);
+    expect(out).toMatch(/aria-current="page"[^>]*>(?:<svg[^>]*>.*?<\/svg>)<span[^>]*>Tài sản/);
   });
 });
