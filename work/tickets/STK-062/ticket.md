@@ -7,7 +7,7 @@
 | Areas | data, db, security |
 | Attempts | 1 |
 | Created | 2026-11-08 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/48 |
 
 ## Goal
 Fetch financial news for the market and for watchlist and holding symbols from CafeF, Vietstock and VnExpress Kinh doanh, and store it with source and credibility. The AI summaries and the chat agent use this as input.
