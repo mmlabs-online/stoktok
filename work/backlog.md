@@ -43,7 +43,7 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-047 | Holiday calendar editor on the Settings screen | DONE | P2 | ui | 1 | 2026-11-05 |
 | STK-048 | Authen = Supabase Auth of stoktok's own project (docs and comments) | DONE | P1 | security | 1 | 2026-11-05 |
 | STK-049 | Intraday prices, slice 1 — source adapter, storage and session rule | DONE | P1 | data, architecture, db, ui | 1 | 2026-11-05 |
-| STK-050 | Intraday prices, slice 2 — throttled refresh on the web server and merged prices | BACKLOG | P1 | data, architecture, finance | 0 | 2026-11-05 |
+| STK-050 | Intraday prices, slice 2 — throttled refresh on the web server and merged prices | BLOCKED | P1 | data, architecture, finance | 0 | 2026-11-08 |
 | STK-051 | Intraday prices, slice 3 — refresh bar, 30 s auto refresh and "Làm mới" | DONE | P1 | ui | 2 | 2026-11-05 |
 | STK-052 | Vietlott core: game rules, ticket checking and net result | DONE | P3 | finance | 1 | 2026-11-05 |
 | STK-053 | Vietlott schema and server data layer | DONE | P3 | db, security | 0 | 2026-11-06 |
