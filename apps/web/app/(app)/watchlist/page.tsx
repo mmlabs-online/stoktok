@@ -4,18 +4,15 @@ import { EmptyState } from '../../../components/empty-state';
 import { AddSymbolForm } from '../../../components/watchlist/add-symbol-form';
 import { PriceBoard } from '../../../components/watchlist/price-board';
 import type { RowActions } from '../../../components/watchlist/price-board';
-import { ExchangeForm, RemoveWatchButton } from '../../../components/watchlist/row-forms';
+import { RemoveWatchButton } from '../../../components/watchlist/row-forms';
 import { nowInstant } from '../../../server/clock';
 import { getDb } from '../../../server/db';
 import { loadWatchlist } from '../../../server/watchlist/load-watchlist';
 import { refreshPricesAction } from '../prices/actions';
-import { addWatchAction, removeWatchAction, setExchangeAction } from './actions';
+import { addWatchAction, removeWatchAction } from './actions';
 import { requireUser } from '../../../server/auth/require-user';
 
 const rowActions: RowActions = {
-  exchange: (r) => (
-    <ExchangeForm symbol={r.symbol} exchange={r.exchange} action={setExchangeAction.bind(null, r.symbol)} />
-  ),
   remove: (r) => <RemoveWatchButton symbol={r.symbol} action={removeWatchAction.bind(null, r.symbol)} />,
 };
 

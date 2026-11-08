@@ -10,7 +10,7 @@ import type { WatchRow } from '../../server/watchlist/load-watchlist';
 import { AddSymbolForm } from './add-symbol-form';
 import { PriceBoard } from './price-board';
 import type { RowActions } from './price-board';
-import { ExchangeForm, RemoveWatchButton } from './row-forms';
+import { RemoveWatchButton } from './row-forms';
 
 const html = (el: React.ReactElement) => renderToStaticMarkup(el);
 const EXPECTED = '2026-10-23';
@@ -95,7 +95,6 @@ describe('PriceBoard', () => {
 
 describe('slice 3 forms', () => {
   const actions: RowActions = {
-    exchange: (r) => <ExchangeForm symbol={r.symbol} exchange={r.exchange} action={async (s) => s} />,
     remove: (r) => <RemoveWatchButton symbol={r.symbol} action={async () => ({ ok: true })} />,
   };
   const two = [
@@ -115,10 +114,11 @@ describe('slice 3 forms', () => {
     expect(out).toContain('Bỏ theo dõi VNM');
     expect(out).not.toContain('Đang theo dõi');
   });
-  it('exchange form shows the stored exchange and a save button', () => {
+  it('board has no exchange column or exchange form', () => {
     const out = html(<PriceBoard rows={[two[0] as WatchRow]} watched={[]} rowActions={actions} />);
-    expect(out).toContain('Sàn của FPT');
-    expect(out).toContain('Lưu');
+    expect(out).not.toContain('Sàn GD');
+    expect(out).not.toContain('Sàn của FPT');
+    expect(out).not.toContain('HOSE');
   });
   it('add form is rendered with the exchange options and keeps values on error', () => {
     const out = html(
