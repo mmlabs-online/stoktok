@@ -17,7 +17,7 @@ Open items that agents cannot do from the sandbox. Tick and date them when done;
 
 ## Other open items
 - [x] Apply migration `20261105000100_data_gaps_resolved_reason.sql` (STK-046). — applied (Ming, 2026-11-08)
-- [ ] Then run `run-job.sh resolve-holiday-gaps --dry-run`, review, run for real (STK-046).
+- [x] Then run `run-job.sh resolve-holiday-gaps --dry-run`, review, run for real (STK-046). — done (Ming, 2026-11-08)
 - [x] Apply migration `20261106000100_lottery.sql` (STK-053). — applied (Ming, 2026-11-08)
 - [ ] ~2026-11-17: check whether HOSE/HNX announce a closure on 2026-11-24 (provisional in the holiday seed).
 - [ ] Verify the seeded 2025–2027 holidays and the intraday session hours against hsx.vn / hnx.vn before go-live.
