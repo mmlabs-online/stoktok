@@ -67,3 +67,42 @@ No violations found.
 ### Follow-ups (out of scope)
 - All plan follow-ups stand (schedule wiring after the migration, retention, re-link backfill, staleness gap, FTS, paged reader, UI text-only rule, AI quoting, Retry-After / conditional GET, spec §5 `symbols[]`).
 - Ming reviews `ambiguousTickers` and `NEWS_SYMBOL_ALIASES` against the real watchlist after the first recorded run.
+
+## Attempt 2 — 2026-11-08
+Verdict: PASS
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck`: all projects Done, no errors.
+- lint: `pnpm lint`: all projects Done, no errors.
+- test: `pnpm -r --no-bail test`: core 59 files / 717 passed; sources 3 passed + 1 skipped (35 tests); worker 19 passed + 1 skipped (292 tests); web 38 / 302 passed; db 17 passed, 1 failed (2 failed / 154 passed / 1 todo). The 2 db failures are the pre-existing Windows `r3-guard.test.ts` cases (spaceM#11). Matches impl-log Attempt 2.
+- `scripts/db-check.sh`: not run (no Postgres). No SQL changed in this attempt.
+- Ad-hoc probe (temporary script via the worker's `tsx`, deleted afterwards; working tree unchanged) of `parseRssFeed` → `toPlainText`:
+  `&#60;img src=x&#62;Giá` → `Giá`; `&#x3C;script&#x3E;alert(1)&#x3C;/script&#x3E;ok` → `ok`; `Ph&amp;aacute;t &amp;Agrave;` → `Phát À`; `&lt;p&gt;x&amp;amp;y&lt;/p&gt;` → `x&y`; `a &amp;lt;b&amp;gt; c` → `a <b> c` (double-escaped, so it is literal text; decoded once only, as intended).
+
+### Previous issues
+- Issue 1 (🔴 numeric refs): fixed. `packages/sources/src/rss.ts:23` `htmlEntities: true`; `rss.test.ts › numeric character references are decoded at the XML layer`; Vietstock fixture item 3 uses `&#60;p&#62;` + numeric text refs and `rss-news-source.test.ts › Vietstock …` asserts `Giao dịch thực hiện theo phương thức khớp lệnh.`; the per-fixture `not.toContain('<')` covers it. Probe confirms.
+- Issue 2 (🟡 named entities): fixed. `packages/core/src/news/plain-text.ts:2-9` static Latin-1 + typographic table, case-sensitive `Object.hasOwn` lookup (`:63`); `plain-text.test.ts › Latin-1 and typographic named entities decode …` (incl. `&Agrave;` vs `&agrave;` and `&foo;` kept). Vietstock item 4 (`&amp;agrave;`, `&amp;#7883;`) → `Ngày giao dịch không hưởng quyền là 20/11.`.
+- Issue 3 (🟡 fixture fidelity): fixed. All three fixtures carry Vietnamese with diacritics, `SYNTHETIC` headers kept. CafeF item 3 title is NFD: `rss-news-source.test.ts › CafeF: a decomposed (NFD) title is stored as NFC` asserts the raw is not NFC and the stored title is. Every fixture item now asserts NFC and no entity residue. `rss-news-source.samples.test.ts:38-46` adds no-`<`, no-entity, NFC checks per item for recorded samples.
+- Issue 4 (🟡 HCM/VIX): fixed. `packages/core/src/news/config.ts:6`; `link-symbols.test.ts › city/index abbreviations …` covers `TP HCM`, `Tp. HCM`, `Chỉ số VIX` (no link) and `mã HCM` (links).
+
+### Acceptance criteria
+- [x] AC1 — unchanged from Attempt 1 (evidence there).
+- [x] AC2 — unchanged (no SQL change); static review only.
+- [x] AC3 — Attempt 1 evidence plus the HCM/VIX test above.
+- [x] AC4 — unchanged; `news-sync.test.ts` still green (worker 292 passed).
+- [x] AC5 — HTML stripped, plain text only: Issues 1 and 2 fixed, see evidence above and probe.
+- [x] AC6 — checks green except spaceM#11; fixtures per source, synthetic per planned deviation A1 (spaceM#27), now in Vietnamese with an NFD case; samples test checks AC5 properties on recorded data.
+
+### Scope
+Attempt 2 diff (`7cc664d..58abb0a`) touches only files already in the plan's file list, limited to the four issues. No out-of-plan files.
+
+### Rules R1–R10
+No violations found. Entity decoding and normalisation stay in `packages/core` / `packages/sources`; the worker only orchestrates (R1). New ambiguous tickers are config (R5). Core changes have unit tests (R8).
+
+### Nits (do not block)
+- Double-escaped markup (`&amp;lt;b&amp;gt;`) is stored as the literal text `<b>`. This is correct plain text, but the samples test's `not.toContain('<')` would fail on a real feed that does this. If it trips on Ming's first recording, relax that one assertion rather than decoding twice.
+- The samples-test entity regex `/&[A-Za-z]+;|&#\d+;/` misses hex refs (`&#x…;`). Cosmetic.
+- Attempt 1 nits still open (news_id_seq grants, `array_position` NULL check, record script `--max-filesize` vs 2 MB, insertNews failure summary, untracked `.gitattributes`).
+
+### Follow-ups (out of scope)
+- Same as Attempt 1. Ming reviews `ambiguousTickers` / `NEWS_SYMBOL_ALIASES` after the first recorded run.

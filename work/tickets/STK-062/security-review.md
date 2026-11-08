@@ -96,3 +96,56 @@ Files reviewed (all under `D:\mmlabs\spaceM\projects\stoktok\`):
 - `apps\worker\src\cli.ts`
 - `packages\db\src\repos\news.ts`
 - `scripts\record-news-fixtures.sh`
+
+## Attempt 2
+
+## STK-062 security re-check, attempt 2 (commit 58abb0a)
+
+**Verdict:** no 🔴. F1 is **still open**. The `htmlEntities: true` change is safe, but it does not fix F1. F2 and F3 are unchanged. I only read the code and ran nothing.
+
+### Findings
+
+🟡 **F1 is not resolved, in either case.**
+- `packages/core/src/news/plain-text.ts:75` still does `decodeEntities(stripTags(html))`: one strip, then the decode. There is no second strip.
+- **CDATA + entities:** fast-xml-parser 5.12.0 hands CDATA text through without decoding it. `OrderedObjParser.js:413` calls `parseTextData(..., escapeEntities=true)`, so `replaceEntitiesValue` is skipped (line 158).
+  - `<description><![CDATA[&lt;img src=x onerror=alert(1)&gt;]]></description>` reaches `toPlainText` as the raw text `&lt;img…&gt;`.
+  - `stripTags` sees no tag, so nothing is removed. Then `decodeEntities` at line 62 turns it into the literal `<img src=x onerror=alert(1)>`, and that is what gets stored.
+- **Double-encoded, no CDATA:** `&amp;lt;img&amp;gt;` is decoded once by the parser (a single pass, `EntityDecoder.js:409-500`) to `&lt;img&gt;`. Core decoding then turns that into `<img>`. It still survives.
+- `htmlEntities` only helps the single-encoded case outside CDATA. The parser now turns `&lt;p&gt;` into `<p>` before `stripTags` runs, so that tag is stripped.
+- The tests still lock in the weak behaviour:
+  - `plain-text.test.ts:24` (`&amp;lt;b&amp;gt;` → `&lt;b&gt;`) and `:25` (`&lt;b&gt;x` → `<b>x`, literal markup as output).
+  - There is still no end-to-end CDATA `&lt;script&gt;` test. `rss.test.ts:31,57` only checks the parser layer. The Vietstock fixture at `rss-news-source.test.ts:77-83` uses harmless `<p>`-style markup.
+- **Fix (same as attempt 1):** change line 75 to `stripTags(decodeEntities(stripTags(html)))`. Change test :25 to expect `x`. Add a fixture item `<description><![CDATA[a &lt;img src=x onerror=alert(1)&gt; b]]></description>` and run it through `parseRssFeed` → `normalizeNewsItem`. Assert that the excerpt does not match `/<[A-Za-z\/!?]/`. Text like "P/E < 10" still survives, because `stripTags` only treats `<` as a tag when a letter or `/!?` follows (line 33).
+- Not exploitable today (no UI; React escapes text), but AC5 ("HTML stripped") is still not met.
+
+🟢 **`htmlEntities: true` does not bring back the entity-expansion risk** (`packages/sources/src/rss.ts:23`).
+- Any DOCTYPE is still refused first (`rss.ts:15`), so no input or external entities can be declared. That means no XXE and no billion-laughs.
+- `htmlEntities: true` loads only the library's fixed `COMMON_HTML` + `CURRENCY` tables (`OrderedObjParser.js:96`). Each value is a short literal, so nothing recurses.
+- `EntityDecoder.decode` makes one linear pass: the lookahead is capped at 32 characters (line 417) and it never re-scans its own output. So output growth is bounded and there is no ReDoS.
+- Numeric references go through `_resolveNCR`, so prohibited code points (null, etc.) are removed. Core also drops values above U+10FFFF and surrogates (`plain-text.ts:65`).
+- The only side effect is the double decode (parser, then core), which is exactly the F1 issue above. Fixing F1 covers it.
+
+🟢 **Named-entity table** (`plain-text.ts:2-9`): it is a fixed allow-list, looked up with `Object.hasOwn` (line 63), so `&constructor;` and `&__proto__;` cannot resolve to prototype properties. Unknown names are left as they are. The regex is bounded (`{2,6}`, `{1,7}`, `{1,6}`). Fine.
+
+🟡 **F2 is still open.** `supabase/migrations/20261108000200_news.sql` still has no `revoke all on sequence public.news_id_seq from anon, authenticated;` (a grep for `news_id_seq` under `supabase/` finds nothing). There is also still no record of `scripts/db-check.sh` being run. This is a High-tier path.
+
+🟡 **F3 is still open.** `scripts/record-news-fixtures.sh:50-62` still fetches robots.txt and then that host's feeds in the same pass. Ming only reviews afterwards (line 74), and robots.txt still goes out with the RSS `Accept` header (lines 12 and 35).
+
+### Recommendations
+1. **AC5:** fix F1 with the second strip, the corrected test :25 and the end-to-end CDATA test before PASS.
+2. **AC2 / High tier:** add the sequence revoke and run `scripts/db-check.sh` against a local Supabase.
+3. **AC1:** split the recorder into a robots pass and a feeds pass. A `debt` issue is acceptable if Ming defers it.
+
+### Risks
+- Every row stored before the F1 fix may contain literal markup, and these rows are permanent. Fix it before the first production sync.
+
+Files:
+- `D:\mmlabs\spaceM\projects\stoktok\packages\core\src\news\plain-text.ts`
+- `D:\mmlabs\spaceM\projects\stoktok\packages\core\src\news\plain-text.test.ts`
+- `D:\mmlabs\spaceM\projects\stoktok\packages\sources\src\rss.ts`
+- `D:\mmlabs\spaceM\projects\stoktok\packages\sources\src\rss.test.ts`
+- `D:\mmlabs\spaceM\projects\stoktok\apps\worker\src\sources\rss-news-source.test.ts`
+- `D:\mmlabs\spaceM\projects\stoktok\supabase\migrations\20261108000200_news.sql`
+- `D:\mmlabs\spaceM\projects\stoktok\scripts\record-news-fixtures.sh`
+- `D:\mmlabs\spaceM\projects\stoktok\node_modules\.pnpm\fast-xml-parser@5.12.0\node_modules\fast-xml-parser\src\xmlparser\OrderedObjParser.js`
+- `D:\mmlabs\spaceM\projects\stoktok\node_modules\.pnpm\@nodable+entities@3.1.0\node_modules\@nodable\entities\src\EntityDecoder.js`
