@@ -20,7 +20,7 @@ export default async function Page() {
   if (result.kind === 'ledgerError') {
     return (
       <div className="space-y-4">
-        <h1 className="text-xl font-semibold">Tổng quan</h1>
+        <h1 className="text-xl font-semibold">Tài sản</h1>
         <EmptyState
           title="Sổ giao dịch có lỗi, không tính được danh mục"
           action={
@@ -37,7 +37,7 @@ export default async function Page() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <h1 className="text-xl font-semibold">Tổng quan</h1>
+        <h1 className="text-xl font-semibold">Tài sản</h1>
         {portfolio.rows.length > 0 && <PriceRefreshBar view={refreshBar} action={refreshPricesAction} />}
       </div>
       <PortfolioSummary totals={portfolio.totals} feeRateConfigured={feeRateConfigured} />

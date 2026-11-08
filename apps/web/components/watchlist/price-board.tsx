@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import {
-  EXCHANGE_LABELS,
   formatDate,
   formatDateTime,
   formatPercent,
@@ -16,8 +15,6 @@ import { SymbolLink } from '../symbol-link';
 import { TONE_STYLES } from '../tone';
 
 export interface RowActions {
-  /** Replaces the plain exchange text (an edit form). */
-  exchange?: (row: WatchRow) => ReactNode;
   /** Rendered only for symbols that are in the watchlist table. */
   remove?: (row: WatchRow) => ReactNode;
 }
@@ -124,11 +121,6 @@ export function Status({ row }: { row: WatchRow }) {
   );
 }
 
-function ExchangeText({ row, actions }: { row: WatchRow; actions?: RowActions }) {
-  if (actions?.exchange) return <>{actions.exchange(row)}</>;
-  return <span>{row.exchange === null ? DASH : EXCHANGE_LABELS[row.exchange]}</span>;
-}
-
 function Symbol({ row, markWatched, canRemove, actions }: { row: WatchRow; markWatched: boolean; canRemove: boolean; actions?: RowActions }) {
   return (
     <span className="flex flex-col items-start gap-0.5">
@@ -147,7 +139,6 @@ export function PriceBoard({ rows, watched, markWatched = false, rowActions }: B
         <thead>
           <tr className="border-border text-fg-muted border-b text-right">
             <th className="py-2 text-left">Mã</th>
-            <th className="text-left">Sàn GD</th>
             <th>TC</th>
             <th>Trần</th>
             <th>Sàn</th>
@@ -163,9 +154,6 @@ export function PriceBoard({ rows, watched, markWatched = false, rowActions }: B
             <tr key={r.symbol} className="border-border border-b text-right align-top">
               <td className="py-2 text-left">
                 <Symbol row={r} markWatched={markWatched} canRemove={isWatched(r.symbol)} actions={rowActions} />
-              </td>
-              <td className="text-left">
-                <ExchangeText row={r} actions={rowActions} />
               </td>
               <td>
                 <LimitValue value={r.ref} tone="ref" label="TC" />
@@ -193,7 +181,6 @@ export function PriceBoard({ rows, watched, markWatched = false, rowActions }: B
           <li key={r.symbol} className="bg-surface border-border space-y-2 rounded-lg border p-4">
             <div className="flex items-start justify-between gap-2">
               <Symbol row={r} markWatched={markWatched} canRemove={isWatched(r.symbol)} actions={rowActions} />
-              <ExchangeText row={r} actions={rowActions} />
             </div>
             <div className="flex items-center justify-between">
               <Close row={r} />
