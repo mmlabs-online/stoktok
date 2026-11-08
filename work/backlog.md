@@ -43,7 +43,7 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-047 | Holiday calendar editor on the Settings screen | DONE | P2 | ui | 1 | 2026-11-05 |
 | STK-048 | Authen = Supabase Auth of stoktok's own project (docs and comments) | DONE | P1 | security | 1 | 2026-11-05 |
 | STK-049 | Intraday prices, slice 1 — source adapter, storage and session rule | DONE | P1 | data, architecture, db, ui | 1 | 2026-11-05 |
-| STK-050 | Intraday prices, slice 2 — throttled refresh on the web server and merged prices | BACKLOG | P1 | data, architecture, finance | 0 | 2026-11-05 |
+| STK-050 | Intraday prices, slice 2 — throttled refresh on the web server and merged prices | BLOCKED | P1 | data, architecture, finance | 0 | 2026-11-08 |
 | STK-051 | Intraday prices, slice 3 — refresh bar, 30 s auto refresh and "Làm mới" | DONE | P1 | ui | 2 | 2026-11-05 |
 | STK-052 | Vietlott core: game rules, ticket checking and net result | DONE | P3 | finance | 1 | 2026-11-05 |
 | STK-053 | Vietlott schema and server data layer | DONE | P3 | db, security | 0 | 2026-11-06 |
@@ -54,3 +54,11 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-058 | Vietlott statistics and historical strategy check | BACKLOG | P3 | finance, ui | 0 | 2026-11-05 |
 | STK-059 | Vietlott opportunity cost vs VN-Index | BACKLOG | P3 | finance, ui | 0 | 2026-11-05 |
 | STK-060 | Remove the allowlist check; any verified Supabase Auth user can sign in | DONE | P2 | security, architecture | 1 | 2026-11-07 |
+| STK-061 | Income statement and balance sheet lines for the AI layer | DONE | P2 | data, db, finance | 1 | 2026-11-08 |
+| STK-062 | News adapters (CafeF, Vietstock, VnExpress) and news store | BACKLOG | P2 | data, db, security | 0 | 2026-11-08 |
+| STK-063 | AI provider layer (Claude + Google AI) with budget cap and usage log | BACKLOG | P2 | architecture, security, db | 0 | 2026-11-08 |
+| STK-064 | Daily AI summaries per symbol and per portfolio (F5) | BACKLOG | P2 | data, ui, security | 0 | 2026-11-08 |
+| STK-065 | Rule-based suggestions with AI explanation, and the suggestion scorecard (F6 + F7) | BACKLOG | P2 | finance, db, ui | 0 | 2026-11-08 |
+| STK-066 | Free chat with a stock-analysis agent | BACKLOG | P2 | architecture, security, ui, finance | 0 | 2026-11-08 |
+| STK-067 | Financial ratios derived in core (margins, D/E, ROE, ROA, YoY, P/E, P/B) | BACKLOG | P2 | finance, db | 0 | 2026-11-08 |
+| STK-068 | Cash-flow statement lines and free cash flow | BLOCKED | P2 | data, finance | 0 | 2026-11-08 |

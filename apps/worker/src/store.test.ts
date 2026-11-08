@@ -17,6 +17,7 @@ vi.mock('@stoktok/db', () => ({
   upsertSignals: vi.fn(async () => 7),
   insertGaps: vi.fn(async () => undefined),
   listFinancials: vi.fn(async () => []),
+  listFinancialLines: vi.fn(async () => []),
   listOpenGaps: vi.fn(async () => []),
   resolveGaps: vi.fn(async () => undefined),
   setSymbolSector: vi.fn(async () => undefined),
@@ -30,7 +31,19 @@ vi.mock('@stoktok/db', () => ({
 }));
 
 import * as dbMock from '@stoktok/db';
-import { createDbEodStore, createDbFinancialsStore, createDbHolidayGapsStore, createDbSignalsStore } from './store';
+import { createDbEodStore, createDbFinancialsStore, createDbFinancialStatementsStore, createDbHolidayGapsStore, createDbSignalsStore } from './store';
+
+describe('createDbFinancialStatementsStore', () => {
+  test('listFinancialLines chunks by linesSymbolChunk and concatenates', async () => {
+    const db = {} as Db;
+    vi.mocked(dbMock.listFinancialLines).mockImplementation(async (_db, symbols) => symbols.map((symbol) => ({ symbol })) as never);
+    const store = createDbFinancialStatementsStore(db, { upsertChunkSize: 3, linesSymbolChunk: 2 });
+    const out = await store.listFinancialLines(['A', 'B', 'C', 'D', 'E'], 'quarter', '2025Q1');
+    expect(vi.mocked(dbMock.listFinancialLines).mock.calls.map((c) => c[1])).toEqual([['A', 'B'], ['C', 'D'], ['E']]);
+    expect(vi.mocked(dbMock.listFinancialLines).mock.calls.every((c) => c[2] === 'quarter' && c[3] === '2025Q1')).toBe(true);
+    expect(out.map((r) => r.symbol)).toEqual(['A', 'B', 'C', 'D', 'E']);
+  });
+});
 
 describe('createDbEodStore', () => {
   test('listWatchlistSymbols reads listWatchlist', async () => {

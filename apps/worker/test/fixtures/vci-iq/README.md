@@ -23,3 +23,10 @@ banks, the equity components `bsb118 bsb121 bsa84 bsa85 bsa90` are kept; values 
 - `vcb-*` (VCB, `NH`), `tcb-*` (TCB, `NH`), `vnd-*` (VND, `CK`), `bmi-*` (BMI, `BH`), each with `-statistics`, `-income`, `-balance`, `-details`.
 
 `{base}` is `https://iq.vietcap.com.vn/api/iq-insight-service/v1/company`.
+
+## STK-061 (statement lines, `statements/`)
+Trimmed copies of REAL responses: HPG from `work/tickets/STK-039/live-samples/` (recorded 2026-11-01), VCB, VND and BMI
+from `work/tickets/STK-042/live-samples/` (recorded 2026-11-04). `{hpg,vcb,vnd,bmi}-{income,balance}.json` keep quarter and
+year rows from 2022 onward, only identifying fields (`organCode`, `ticker`, `yearReport`, `lengthReport`), the mapped codes
+of ADR 0007 for the symbol's company type and `isa20`/`isa21`; values are unchanged. Details (company type) reuse
+`details-ok.json` and `{vcb,vnd,bmi}-details.json`.

@@ -9,6 +9,7 @@ import {
   insertGaps,
   listAllOpenGaps,
   listCorporateActions,
+  listFinancialLines,
   listFinancials,
   listHeldSymbols,
   listOpenGaps,
@@ -18,6 +19,7 @@ import {
   listWatchlist,
   resolveGaps,
   setSymbolSector,
+  upsertFinancialLines,
   upsertFinancials,
   upsertPricesDaily,
   upsertSignals,
@@ -26,6 +28,7 @@ import type { Db } from '@stoktok/db';
 import type { HolidayGapsConfig } from './config';
 import { PRICES_GAP_TYPE } from './jobs/eod-sync';
 import type { EodStore } from './jobs/eod-sync';
+import type { FinancialStatementsStore } from './jobs/financial-statements-sync';
 import { FINANCIALS_GAP_TYPE } from './jobs/financials-sync';
 import type { FinancialsStore } from './jobs/financials-sync';
 import type { HolidayGapsStore } from './jobs/resolve-holiday-gaps';
@@ -70,6 +73,29 @@ export function createDbFinancialsStore(db: Db, opts: { upsertChunkSize: number 
     insertGaps: (rows) => insertGaps(db, rows),
     resolveGaps: (ids, resolvedAt) => resolveGaps(db, ids, resolvedAt),
     setSymbolSector: (symbol, v) => setSymbolSector(db, symbol, v),
+  };
+}
+
+/** Wiring only: all reads and writes go through @stoktok/db. */
+export function createDbFinancialStatementsStore(
+  db: Db,
+  opts: { upsertChunkSize: number; linesSymbolChunk: number },
+): FinancialStatementsStore {
+  return {
+    listWatchlistSymbols: async () => (await listWatchlist(db)).map((w) => w.symbol),
+    listHeldSymbols: (asOf) => listHeldSymbols(db, asOf),
+    // Symbol chunks keep one response under the PostgREST row cap, so the gap logic sees every stored line.
+    listFinancialLines: async (symbols, periodKind, fromPeriod) => {
+      const out = [];
+      for (let i = 0; i < symbols.length; i += opts.linesSymbolChunk) {
+        out.push(...(await listFinancialLines(db, symbols.slice(i, i + opts.linesSymbolChunk), periodKind, fromPeriod)));
+      }
+      return out;
+    },
+    upsertFinancialLines: (rows) => upsertFinancialLines(db, rows, { chunkSize: opts.upsertChunkSize }),
+    listOpenGaps: (dataType, symbols) => listOpenGaps(db, dataType, symbols),
+    insertGaps: (rows) => insertGaps(db, rows),
+    resolveGaps: (ids, resolvedAt) => resolveGaps(db, ids, resolvedAt),
   };
 }
 

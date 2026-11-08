@@ -1,0 +1,263 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": {
+  "years": [
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2022,
+    "lengthReport": 5,
+    "bsa53": 7036881103160,
+    "bsa54": 4616731719342,
+    "bsa78": 2420149383818,
+    "bsa210": 0,
+    "bsa2": 168725034414
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2023,
+    "lengthReport": 5,
+    "bsa53": 7004194676943,
+    "bsa54": 4361324815727,
+    "bsa78": 2642869861216,
+    "bsa210": 0,
+    "bsa2": 181629382582
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2024,
+    "lengthReport": 5,
+    "bsa53": 7778560178314,
+    "bsa54": 4991016678715,
+    "bsa78": 2787543499599,
+    "bsa210": 0,
+    "bsa2": 446093893383
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2025,
+    "lengthReport": 5,
+    "bsa53": 7676589565161,
+    "bsa54": 4749338830364,
+    "bsa78": 2927250734797,
+    "bsa210": 0,
+    "bsa2": 216746321443
+   }
+  ],
+  "quarters": [
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2022,
+    "lengthReport": 1,
+    "bsa53": 7463565257577,
+    "bsa54": 5064596426589,
+    "bsa78": 2398968830988,
+    "bsa210": 0,
+    "bsa2": 181741988659
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2022,
+    "lengthReport": 2,
+    "bsa53": 7177968126032,
+    "bsa54": 4889008652314,
+    "bsa78": 2288959473718,
+    "bsa210": 0,
+    "bsa2": 86031302015
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2022,
+    "lengthReport": 3,
+    "bsa53": 7194167740544,
+    "bsa54": 4830875154022,
+    "bsa78": 2363292586522,
+    "bsa210": 0,
+    "bsa2": 246536845632
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2022,
+    "lengthReport": 4,
+    "bsa53": 6923593737098,
+    "bsa54": 4501740994333,
+    "bsa78": 2421852742765,
+    "bsa210": 0,
+    "bsa2": 168725775157
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2023,
+    "lengthReport": 1,
+    "bsa53": 7402396872877,
+    "bsa54": 4918125657570,
+    "bsa78": 2484271215307,
+    "bsa210": 0,
+    "bsa2": 152969882845
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2023,
+    "lengthReport": 2,
+    "bsa53": 6895757693683,
+    "bsa54": 4409669356323,
+    "bsa78": 2486088337360,
+    "bsa210": 0,
+    "bsa2": 272360036953
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2023,
+    "lengthReport": 3,
+    "bsa53": 7041906909503,
+    "bsa54": 4463130253427,
+    "bsa78": 2578776656076,
+    "bsa210": 0,
+    "bsa2": 210148224424
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2023,
+    "lengthReport": 4,
+    "bsa53": 7030926655631,
+    "bsa54": 4389484919363,
+    "bsa78": 2641441736268,
+    "bsa210": 0,
+    "bsa2": 181629382358
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2024,
+    "lengthReport": 1,
+    "bsa53": 7303110987131,
+    "bsa54": 4592984288215,
+    "bsa78": 2710126698916,
+    "bsa210": 0,
+    "bsa2": 341814784248
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2024,
+    "lengthReport": 2,
+    "bsa53": 7103580294412,
+    "bsa54": 4392142483619,
+    "bsa78": 2711437810793,
+    "bsa210": 0,
+    "bsa2": 177506565971
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2024,
+    "lengthReport": 3,
+    "bsa53": 8099277437202,
+    "bsa54": 5345725953547,
+    "bsa78": 2753551483655,
+    "bsa210": 0,
+    "bsa2": 256412974068
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2024,
+    "lengthReport": 4,
+    "bsa53": 7749557171700,
+    "bsa54": 4962013672101,
+    "bsa78": 2787543499599,
+    "bsa210": 0,
+    "bsa2": 446093893383
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2025,
+    "lengthReport": 1,
+    "bsa53": 7575722885548,
+    "bsa54": 4724460089025,
+    "bsa78": 2851262796523,
+    "bsa210": 0,
+    "bsa2": 188607787375
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2025,
+    "lengthReport": 2,
+    "bsa53": 7453506062318,
+    "bsa54": 4625359031923,
+    "bsa78": 2828147030395,
+    "bsa210": 0,
+    "bsa2": 251243960224
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2025,
+    "lengthReport": 3,
+    "bsa53": 7537642439762,
+    "bsa54": 4609567291465,
+    "bsa78": 2928075148297,
+    "bsa210": 0,
+    "bsa2": 229372318095
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2025,
+    "lengthReport": 4,
+    "bsa53": 7676589565161,
+    "bsa54": 4749338830364,
+    "bsa78": 2927250734797,
+    "bsa210": 0,
+    "bsa2": 216746321443
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2026,
+    "lengthReport": 1,
+    "bsa53": 8287718210837,
+    "bsa54": 5313450447231,
+    "bsa78": 2974267763606,
+    "bsa210": 0,
+    "bsa2": 138007269005
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2026,
+    "lengthReport": 2,
+    "bsa53": 8647448682873,
+    "bsa54": 5558618458508,
+    "bsa78": 3088830224365,
+    "bsa210": 0,
+    "bsa2": 197767967390
+   },
+   {
+    "organCode": "BMI",
+    "ticker": "BMI",
+    "yearReport": 2026,
+    "lengthReport": 3,
+    "bsa53": 8945506029397,
+    "bsa54": 5868861955448,
+    "bsa78": 3076644073949,
+    "bsa210": 0,
+    "bsa2": 352787833764
+   }
+  ]
+ }
+}

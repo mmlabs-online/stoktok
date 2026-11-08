@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | BLOCKED |
 | Priority | P1 |
 | Areas | data, architecture, finance |
 | Attempts | 0 |

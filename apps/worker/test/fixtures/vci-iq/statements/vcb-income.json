@@ -1,0 +1,263 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": {
+  "years": [
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2022,
+    "lengthReport": 5,
+    "isa20": 29919054000000,
+    "isa21": -20040000000,
+    "isb38": 68082821000000,
+    "isa16": 37368091000000,
+    "isa22": 29899014000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2023,
+    "lengthReport": 5,
+    "isa20": 33122272000000,
+    "isa21": -21245000000,
+    "isb38": 67764326000000,
+    "isa16": 41328467000000,
+    "isa22": 33101027000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2024,
+    "lengthReport": 5,
+    "isa20": 33853117000000,
+    "isa21": -21731000000,
+    "isb38": 68578496000000,
+    "isa16": 42236135000000,
+    "isa22": 33831386000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2025,
+    "lengthReport": 5,
+    "isa20": 35197940000000,
+    "isa21": -20277000000,
+    "isb38": 72454622000000,
+    "isa16": 44019637000000,
+    "isa22": 35177663000000
+   }
+  ],
+  "quarters": [
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2022,
+    "lengthReport": 1,
+    "isa20": 7967426000000,
+    "isa21": -5242000000,
+    "isb38": 16733361000000,
+    "isa16": 9950256000000,
+    "isa22": 7962184000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2022,
+    "lengthReport": 2,
+    "isa20": 5941931000000,
+    "isa21": -4977000000,
+    "isb38": 15972341000000,
+    "isa16": 7423087000000,
+    "isa22": 5936954000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2022,
+    "lengthReport": 3,
+    "isa20": 6069444000000,
+    "isa21": -4574000000,
+    "isb38": 16714424000000,
+    "isa16": 7566222000000,
+    "isa22": 6064870000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2022,
+    "lengthReport": 4,
+    "isa20": 9933519000000,
+    "isa21": -5242000000,
+    "isb38": 18662641000000,
+    "isa16": 12419095000000,
+    "isa22": 9928277000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2023,
+    "lengthReport": 1,
+    "isa20": 8991901000000,
+    "isa21": -5466000000,
+    "isb38": 18517174000000,
+    "isa16": 11221344000000,
+    "isa22": 8986435000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2023,
+    "lengthReport": 2,
+    "isa20": 7427958000000,
+    "isa21": -5135000000,
+    "isb38": 17470176000000,
+    "isa16": 9277682000000,
+    "isa22": 7422823000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2023,
+    "lengthReport": 3,
+    "isa20": 7274556000000,
+    "isa21": -5637000000,
+    "isb38": 15777277000000,
+    "isa16": 9051164000000,
+    "isa22": 7268919000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2023,
+    "lengthReport": 4,
+    "isa20": 9360033000000,
+    "isa21": -5007000000,
+    "isb38": 15958835000000,
+    "isa16": 11693497000000,
+    "isa22": 9355026000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2024,
+    "lengthReport": 1,
+    "isa20": 8585993000000,
+    "isa21": -5997000000,
+    "isb38": 17280398000000,
+    "isa16": 10718239000000,
+    "isa22": 8579996000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2024,
+    "lengthReport": 2,
+    "isa20": 8124709000000,
+    "isa21": -5295000000,
+    "isb38": 16751609000000,
+    "isa16": 10116275000000,
+    "isa22": 8119414000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2024,
+    "lengthReport": 3,
+    "isa20": 8572494000000,
+    "isa21": -5896000000,
+    "isb38": 16835953000000,
+    "isa16": 10698944000000,
+    "isa22": 8566598000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2024,
+    "lengthReport": 4,
+    "isa20": 8569921000000,
+    "isa21": -4543000000,
+    "isb38": 17710536000000,
+    "isa16": 10702677000000,
+    "isa22": 8565378000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2025,
+    "lengthReport": 1,
+    "isa20": 8701726000000,
+    "isa21": -5497000000,
+    "isb38": 17264726000000,
+    "isa16": 10859933000000,
+    "isa22": 8696229000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2025,
+    "lengthReport": 2,
+    "isa20": 8837371000000,
+    "isa21": -5486000000,
+    "isb38": 17868237000000,
+    "isa16": 11033915000000,
+    "isa22": 8831885000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2025,
+    "lengthReport": 3,
+    "isa20": 9025553000000,
+    "isa21": -5054000000,
+    "isb38": 18052128000000,
+    "isa16": 11239105000000,
+    "isa22": 9020499000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2025,
+    "lengthReport": 4,
+    "isa20": 8633290000000,
+    "isa21": -4240000000,
+    "isb38": 19269531000000,
+    "isa16": 10886684000000,
+    "isa22": 8629050000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2026,
+    "lengthReport": 1,
+    "isa20": 9462095000000,
+    "isa21": -5529000000,
+    "isb38": 21179810000000,
+    "isa16": 11802653000000,
+    "isa22": 9456566000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2026,
+    "lengthReport": 2,
+    "isa20": 14550959000000,
+    "isa21": -8683000000,
+    "isb38": 26371601000000,
+    "isa16": 17419725000000,
+    "isa22": 14542276000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2026,
+    "lengthReport": 3,
+    "isa20": 9041121000000,
+    "isa21": -7819000000,
+    "isb38": 25431117000000,
+    "isa16": 11217676000000,
+    "isa22": 9033302000000
+   }
+  ]
+ }
+}

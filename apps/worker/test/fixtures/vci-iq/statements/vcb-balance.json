@@ -1,0 +1,240 @@
+{
+ "status": 200,
+ "successful": true,
+ "data": {
+  "years": [
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2022,
+    "lengthReport": 5,
+    "bsa53": 1813815170000000,
+    "bsa54": 1678169085000000,
+    "bsa78": 135646085000000,
+    "bsa210": 88383000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2023,
+    "lengthReport": 5,
+    "bsa53": 1839724560000000,
+    "bsa54": 1674644070000000,
+    "bsa78": 165080490000000,
+    "bsa210": 93990000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2024,
+    "lengthReport": 5,
+    "bsa53": 2085873522000000,
+    "bsa54": 1889664354000000,
+    "bsa78": 196209168000000,
+    "bsa210": 96261000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2025,
+    "lengthReport": 5,
+    "bsa53": 2442279166000000,
+    "bsa54": 2217720440000000,
+    "bsa78": 224558726000000,
+    "bsa210": 71521000000
+   }
+  ],
+  "quarters": [
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2022,
+    "lengthReport": 1,
+    "bsa53": 1462748158000000,
+    "bsa54": 1345670470000000,
+    "bsa78": 117077688000000,
+    "bsa210": 92420000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2022,
+    "lengthReport": 2,
+    "bsa53": 1601680964000000,
+    "bsa54": 1478691267000000,
+    "bsa78": 122989697000000,
+    "bsa210": 97774000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2022,
+    "lengthReport": 3,
+    "bsa53": 1649664327000000,
+    "bsa54": 1521274777000000,
+    "bsa78": 128389550000000,
+    "bsa210": 102207000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2022,
+    "lengthReport": 4,
+    "bsa53": 1814188209000000,
+    "bsa54": 1676199767000000,
+    "bsa78": 137988442000000,
+    "bsa210": 88379000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2023,
+    "lengthReport": 1,
+    "bsa53": 1846431290000000,
+    "bsa54": 1701772932000000,
+    "bsa78": 144658358000000,
+    "bsa210": 93744000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2023,
+    "lengthReport": 2,
+    "bsa53": 1704273133000000,
+    "bsa54": 1552272005000000,
+    "bsa78": 152001128000000,
+    "bsa210": 98316000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2023,
+    "lengthReport": 3,
+    "bsa53": 1731305572000000,
+    "bsa54": 1572062054000000,
+    "bsa78": 159243518000000,
+    "bsa210": 104660000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2023,
+    "lengthReport": 4,
+    "bsa53": 1839223339000000,
+    "bsa54": 1670680015000000,
+    "bsa78": 168543324000000,
+    "bsa210": 93990000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2024,
+    "lengthReport": 1,
+    "bsa53": 1773713584000000,
+    "bsa54": 1600099458000000,
+    "bsa78": 173614126000000,
+    "bsa210": 100556000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2024,
+    "lengthReport": 2,
+    "bsa53": 1905638840000000,
+    "bsa54": 1723936055000000,
+    "bsa78": 181702785000000,
+    "bsa210": 105738000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2024,
+    "lengthReport": 3,
+    "bsa53": 1932361908000000,
+    "bsa54": 1742064907000000,
+    "bsa78": 190297001000000,
+    "bsa210": 110763000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2024,
+    "lengthReport": 4,
+    "bsa53": 2085873522000000,
+    "bsa54": 1889664354000000,
+    "bsa78": 196209168000000,
+    "bsa210": 96261000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2025,
+    "lengthReport": 1,
+    "bsa53": 2109260616000000,
+    "bsa54": 1904318782000000,
+    "bsa78": 204941834000000,
+    "bsa210": 101952000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2025,
+    "lengthReport": 2,
+    "bsa53": 2217636600000000,
+    "bsa54": 2003887178000000,
+    "bsa78": 213749422000000,
+    "bsa210": 107351000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2025,
+    "lengthReport": 3,
+    "bsa53": 2378185628000000,
+    "bsa54": 2155394083000000,
+    "bsa78": 222791545000000,
+    "bsa210": 112712000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2025,
+    "lengthReport": 4,
+    "bsa53": 2442279166000000,
+    "bsa54": 2217720440000000,
+    "bsa78": 224558726000000,
+    "bsa210": 71521000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2026,
+    "lengthReport": 1,
+    "bsa53": 2550963342000000,
+    "bsa54": 2316932013000000,
+    "bsa78": 234031329000000,
+    "bsa210": 76614000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2026,
+    "lengthReport": 2,
+    "bsa53": 2657440573000000,
+    "bsa54": 2408950067000000,
+    "bsa78": 248490506000000,
+    "bsa210": 85009000000
+   },
+   {
+    "organCode": "VCB",
+    "ticker": "VCB",
+    "yearReport": 2026,
+    "lengthReport": 3,
+    "bsa53": 2682408935000000,
+    "bsa54": 2428647789000000,
+    "bsa78": 253761146000000,
+    "bsa210": 92442000000
+   }
+  ]
+ }
+}

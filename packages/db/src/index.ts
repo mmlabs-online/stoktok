@@ -4,6 +4,7 @@ export { DataError } from './errors';
 export type { DataErrorCode } from './errors';
 export type {
   Asset,
+  FinancialLineRecord,
   FinancialRecord,
   LotteryChannel,
   LotteryStatus,
@@ -50,8 +51,9 @@ export {
   upsertPricesDaily,
 } from './repos/prices-daily';
 export { getLatestIntraday, upsertPricesIntraday } from './repos/prices-intraday';
-export type { DataGapInsert, FinancialInsert, PriceDailyInsert, PriceIntradayInsert, SignalInsert, SymbolSectorRow } from './rows';
+export type { DataGapInsert, FinancialInsert, FinancialLineInsert, PriceDailyInsert, PriceIntradayInsert, SignalInsert, SymbolSectorRow } from './rows';
 export { listFinancials, upsertFinancials } from './repos/financials';
+export { listFinancialLines, upsertFinancialLines } from './repos/financial-lines';
 export { insertGaps, listAllOpenGaps, listOpenGaps, listOpenMarketGaps, resolveGaps } from './repos/data-gaps';
 export { listLatestSignals, upsertSignals } from './repos/signals';
 export { createAsset, deleteAsset, getAsset, listAssets, updateAsset } from './repos/assets';

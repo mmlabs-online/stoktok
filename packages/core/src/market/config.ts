@@ -66,3 +66,13 @@ export const DEFAULT_FINANCIALS_SANITY: FinancialsSanity = {
 
 /** Days after quarter end by which a quarterly report is expected (VN deadline, 30/45 days). Shared by the financials sync and the signal freshness check. */
 export const DEFAULT_FINANCIALS_PUBLISH_LAG_DAYS = 45;
+
+/** Plausibility bound for stored statement lines (R5). Integer VND. */
+export interface StatementLinesSanity {
+  /** Highest plausible |line value|. Balance-sheet totals of the largest banks reach about 3e15 VND, above the quarterly-financials bound, so this sits just under Number.MAX_SAFE_INTEGER (about 9.007e15); a 1000x scale error on any large line is then rejected here or by the safe-integer check. */
+  maxAbsTotalVnd: number;
+}
+
+export const DEFAULT_STATEMENT_LINES_SANITY: StatementLinesSanity = {
+  maxAbsTotalVnd: 9_000_000_000_000_000,
+};

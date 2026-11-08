@@ -31,7 +31,7 @@ do $$ -- tables_exist
 declare got text[];
 begin
   select array_agg(tablename order by tablename) into got from pg_tables where schemaname = 'public';
-  if got is distinct from array['assets','corporate_actions','data_gaps','financials','lottery_draws','lottery_tickets','prices_daily','prices_intraday','settings','signals','symbols','transactions','watchlist'] then
+  if got is distinct from array['assets','corporate_actions','data_gaps','financial_lines','financials','lottery_draws','lottery_tickets','prices_daily','prices_intraday','settings','signals','symbols','transactions','watchlist'] then
     raise exception 'CHECK FAILED: tables_exist (got %)', got;
   end if;
 end $$;
@@ -146,6 +146,18 @@ begin
   perform pg_temp.assert_col('financials', 'net_income', 'bigint', true);
 end $$;
 
+do $$ -- financial_lines_columns
+begin
+  perform pg_temp.assert_col('financial_lines', 'symbol', 'text', true);
+  perform pg_temp.assert_col('financial_lines', 'period_kind', 'text', true);
+  perform pg_temp.assert_col('financial_lines', 'period', 'text', true);
+  perform pg_temp.assert_col('financial_lines', 'statement', 'text', true);
+  perform pg_temp.assert_col('financial_lines', 'line', 'text', true);
+  perform pg_temp.assert_col('financial_lines', 'value', 'bigint', true);
+  perform pg_temp.assert_col('financial_lines', 'source', 'text', true);
+  perform pg_temp.assert_col('financial_lines', 'fetched_at', 'timestamp with time zone', true);
+end $$;
+
 do $$ -- signals_columns
 begin
   perform pg_temp.assert_col('signals', 'symbol', 'text', true);
@@ -234,6 +246,18 @@ begin
   delete from public.symbols where symbol = 'FPT';
   reset role;
   if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_symbols'; end if;
+end $$;
+
+do $$ -- service_role_can_read_write_financial_lines
+declare n int;
+begin
+  set local role service_role;
+  insert into public.financial_lines (symbol, period_kind, period, statement, line, value, source, fetched_at)
+    values ('FPT', 'quarter', '2026Q1', 'income', 'net_income_parent', -5, 'x', now());
+  select count(*) into n from public.financial_lines where symbol = 'FPT';
+  delete from public.financial_lines where symbol = 'FPT';
+  reset role;
+  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_financial_lines'; end if;
 end $$;
 
 do $$ -- service_role_can_read_write_financials
@@ -413,6 +437,23 @@ begin
   insert into public.symbols (symbol, exchange) values ('VNM', null);
   insert into public.corporate_actions (symbol, type, ex_date, amount_per_share) values ('VNM', 'cash_dividend', '2026-01-05', 1000);
   perform pg_temp.expect_fail('duplicate corporate action', ca || '(''VNM'',''cash_dividend'',''2026-01-05'',2000,null,null)', array['23505']);
+end $$;
+
+do $$ -- financial_lines_negatives
+declare fl text := 'insert into public.financial_lines (symbol, period_kind, period, statement, line, value, source, fetched_at) values ';
+begin
+  perform pg_temp.expect_fail('fl bad symbol', fl || '(''vnm'',''quarter'',''2026Q1'',''income'',''revenue'',1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('fl bad kind', fl || '(''VNM'',''month'',''2026Q1'',''income'',''revenue'',1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('fl quarter label for year', fl || '(''VNM'',''year'',''2026Q1'',''income'',''revenue'',1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('fl year label for quarter', fl || '(''VNM'',''quarter'',''2026'',''income'',''revenue'',1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('fl bad quarter number', fl || '(''VNM'',''quarter'',''2026Q5'',''income'',''revenue'',1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('fl bad statement', fl || '(''VNM'',''quarter'',''2026Q1'',''equity'',''revenue'',1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('fl bad line', fl || '(''VNM'',''quarter'',''2026Q1'',''income'',''Revenue'',1,''x'',now())', array['23514']);
+  perform pg_temp.expect_fail('fl empty source', fl || '(''VNM'',''quarter'',''2026Q1'',''income'',''revenue'',1,'''',now())', array['23514']);
+  perform pg_temp.expect_fail('fl null value', fl || '(''VNM'',''quarter'',''2026Q1'',''income'',''revenue'',null,''x'',now())', array['23502']);
+  insert into public.financial_lines (symbol, period_kind, period, statement, line, value, source, fetched_at)
+    values ('VNM', 'year', '2025', 'income', 'revenue', 1, 'x', now());
+  perform pg_temp.expect_fail('fl duplicate key', fl || '(''VNM'',''year'',''2025'',''income'',''revenue'',2,''x'',now())', array['23505']);
 end $$;
 
 do $$ -- manual_rows_nulls_dont_collide

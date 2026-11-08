@@ -91,6 +91,23 @@ export interface FinancialRow {
   fetched_at: string;
 }
 
+/** Upsert payload for `financial_lines` (R4 source + fetched_at). `value` is integer VND (R2). */
+export interface FinancialLineInsert {
+  symbol: string;
+  period_kind: 'quarter' | 'year';
+  period: string;
+  statement: 'income' | 'balance' | 'cashflow';
+  line: string;
+  value: number;
+  source: string;
+  fetched_at: string;
+}
+
+/** Selected columns only; bigint columns arrive as Int8. */
+export interface FinancialLineRow extends Omit<FinancialLineInsert, 'value'> {
+  value: Int8;
+}
+
 /** Insert payload; `detected_at` defaults in the database. */
 export interface DataGapInsert {
   symbol: string;
