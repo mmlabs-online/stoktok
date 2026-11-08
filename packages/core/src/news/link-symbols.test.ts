@@ -40,6 +40,13 @@ describe('linkSymbols tickers', () => {
     expect(link('xmã VND', c2)).toEqual([]);
     expect(link('VNDirect báo lãi', c2, { VND: ['VNDirect'] })).toEqual(['VND']);
   });
+  test('city/index abbreviations (TP HCM, Tp. HCM, chỉ số VIX) do not link without context; "mã HCM" does', () => {
+    const c3 = set('HCM', 'VIX');
+    expect(link('Giá nhà tại TP HCM tăng mạnh', c3)).toEqual([]);
+    expect(link('Tp. HCM và Hà Nội', c3)).toEqual([]);
+    expect(link('Chỉ số VIX tăng', c3)).toEqual([]);
+    expect(link('mã HCM tăng', c3)).toEqual(['HCM']);
+  });
   test('only candidate symbols link; a non-candidate ticker shape is ignored', () => {
     expect(link('HPG và VIC và ABC', set('HPG'))).toEqual(['HPG']);
   });

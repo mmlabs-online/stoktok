@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { normalizeNewsItem } from '@stoktok/core';
+import { normalizeNewsItem, toPlainText } from '@stoktok/core';
 import { parseRssFeed } from '@stoktok/sources';
 import { describe, expect, test } from 'vitest';
 import { NEWS_SYNC_CONFIG } from '../config';
@@ -34,6 +34,15 @@ describe.skipIf(files.length === 0)('recorded news feeds parse', () => {
       });
       if (n.ok) ok += 1;
       else reasons.push(n.reason);
+    }
+    for (const r of raws) {
+      const t = toPlainText(r.title);
+      const e = toPlainText(r.description);
+      for (const v of [t, e]) {
+        expect(v).not.toContain('<');
+        expect(v).not.toMatch(/&[A-Za-z]+;|&#\d+;/);
+        expect(v).toBe(v.normalize('NFC'));
+      }
     }
     expect(reasons.filter((x) => x === 'bad_url' || x === 'bad_date')).toEqual([]);
     expect(ok).toBeGreaterThan(0);

@@ -3,7 +3,7 @@ export const NEWS_LINK_CONFIG = {
   /** Upper-case tokens that look like tickers but never are in news text. */
   stopTokens: ['USD', 'EUR', 'GDP', 'CPI', 'PMI', 'IPO', 'ETF', 'FDI', 'ODA', 'EPS', 'ROE', 'ROA', 'VAT', 'WTO', 'FED', 'OPEC', 'VNINDEX', 'VN30', 'HNX30', 'HNX', 'HOSE', 'UPCOM'] as readonly string[],
   /** Real tickers that are also common words: they link only with a context prefix, parentheses or an alias. */
-  ambiguousTickers: ['VND', 'GAS', 'CEO', 'TOP'] as readonly string[],
+  ambiguousTickers: ['VND', 'GAS', 'CEO', 'TOP', 'HCM', 'VIX'] as readonly string[],
   /** Lower-case text that may precede a ticker as context. */
   contextPrefixes: ['mã ', 'mã cp ', 'mã chứng khoán ', 'cổ phiếu ', 'cp ', 'hose: ', 'hnx: ', 'upcom: ', 'hose:', 'hnx:', 'upcom:'] as readonly string[],
   /** One article never links more symbols than this (the database allows 50). */

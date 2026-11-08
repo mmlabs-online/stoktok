@@ -44,6 +44,9 @@ describe.each(['cafef', 'vietstock', 'vnexpress'] as const)('%s synthetic fixtur
       expect(Date.parse(it.publishedAt)).toBeLessThanOrEqual(Date.parse(FETCHED_AT));
       expect(it.excerpt).not.toContain('<');
       expect(it.title).not.toContain('<');
+      expect(it.title).toBe(it.title.normalize('NFC'));
+      expect(it.excerpt).toBe(it.excerpt.normalize('NFC'));
+      expect(`${it.title} ${it.excerpt}`).not.toMatch(/&[A-Za-z]+;|&#\d+;/);
       expect(it.url).toMatch(/^https:\/\//);
       expect(it.url).not.toMatch(/utm_|#|\/$/);
       expect(it.source).toBe(NEWS_SYNC_CONFIG.sources.find((s) => s.id === id)?.name);
@@ -63,14 +66,21 @@ describe('fixture specifics', () => {
     expect(items[1]?.symbols).toEqual(['VCB']);
     expect(items[2]?.symbols).toEqual([]);
     expect(items[3]?.symbols).toEqual(['VNM']);
-    expect(items[3]?.excerpt).toBe('Doanh thu thuan dat 16.000 ti dong.');
+    expect(items[3]?.excerpt).toBe('Doanh thu thuần đạt 16.000 tỷ đồng.');
     expect(items[4]?.excerpt).toBe('');
+  });
+  test('CafeF: a decomposed (NFD) title is stored as NFC', async () => {
+    const { raws, items } = await run('cafef');
+    expect(raws[2]?.title).not.toBe(raws[2]?.title.normalize('NFC'));
+    expect(items[2]?.title).toBe('VN-Index đi ngang trong phiên cuối tuần'.normalize('NFC'));
   });
   test('Vietstock: escaped markup stripped, XML and HTML entities decoded in turn, id param kept', async () => {
     const { items } = await run('vietstock');
-    expect(items[0]?.excerpt).toBe('Tap doan FPT cong bo ket qua kinh doanh thang 10.');
+    expect(items[0]?.excerpt).toBe('Tập đoàn FPT công bố kết quả kinh doanh tháng 10.');
     expect(items[0]?.symbols).toEqual(['FPT']);
-    expect(items[1]?.excerpt).toBe('Gia tang 3% trong phien, P/E o muc 12 & thanh khoan cao.');
+    expect(items[1]?.excerpt).toBe('Giá tăng 3% trong phiên, P/E ở mức 12 & thanh khoản cao.');
+    expect(items[2]?.excerpt).toBe('Giao dịch thực hiện theo phương thức khớp lệnh.');
+    expect(items[3]?.excerpt).toBe('Ngày giao dịch không hưởng quyền là 20/11.');
     expect(items[1]?.symbols).toEqual(['HPG']);
     expect(items[3]?.url).toBe('https://vietstock.vn/2026/11/co-tuc-738-1100004.htm?id=4');
   });
@@ -78,6 +88,6 @@ describe('fixture specifics', () => {
     const { items } = await run('vnexpress');
     expect(items.map((i) => i.publishedAt)).not.toEqual([...items.map((i) => i.publishedAt)].sort());
     expect(items[1]?.symbols).toEqual(['VIC']);
-    expect(items[0]?.excerpt).toBe('Gia vang SJC giam 200.000 dong moi luong.');
+    expect(items[0]?.excerpt).toBe('Giá vàng SJC giảm 200.000 đồng mỗi lượng.');
   });
 });

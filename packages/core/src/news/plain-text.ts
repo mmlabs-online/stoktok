@@ -1,4 +1,12 @@
-const NAMED_ENTITIES: Readonly<Record<string, string>> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+/** Case-sensitive: `&Agrave;` and `&agrave;` are different characters. Latin-1 letters used by Vietnamese CMS output, plus typographic marks. */
+const NAMED_ENTITIES: Readonly<Record<string, string>> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+  agrave: 'à', aacute: 'á', acirc: 'â', atilde: 'ã', egrave: 'è', eacute: 'é', ecirc: 'ê', igrave: 'ì', iacute: 'í',
+  ograve: 'ò', oacute: 'ó', ocirc: 'ô', otilde: 'õ', ugrave: 'ù', uacute: 'ú', yacute: 'ý',
+  Agrave: 'À', Aacute: 'Á', Acirc: 'Â', Atilde: 'Ã', Egrave: 'È', Eacute: 'É', Ecirc: 'Ê', Igrave: 'Ì', Iacute: 'Í',
+  Ograve: 'Ò', Oacute: 'Ó', Ocirc: 'Ô', Otilde: 'Õ', Ugrave: 'Ù', Uacute: 'Ú', Yacute: 'Ý',
+  ndash: '–', mdash: '—', lsquo: '‘', rsquo: '’', ldquo: '“', rdquo: '”', hellip: '…', laquo: '«', raquo: '»',
+};
 
 /** Index just past the `>` that closes the tag starting at `from`, honouring quoted attribute values. -1 if unclosed. */
 function tagEnd(s: string, from: number): number {
@@ -52,7 +60,7 @@ function stripTags(input: string): string {
 /** One pass only: `&amp;lt;` becomes the text `&lt;`, never `<`. */
 function decodeEntities(s: string): string {
   return s.replace(/&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([A-Za-z]{2,6}));/g, (m, dec: string | undefined, hex: string | undefined, name: string | undefined) => {
-    if (name !== undefined) return NAMED_ENTITIES[name.toLowerCase()] ?? m;
+    if (name !== undefined) return Object.hasOwn(NAMED_ENTITIES, name) ? (NAMED_ENTITIES[name] as string) : m;
     const cp = dec !== undefined ? Number(dec) : parseInt(hex as string, 16);
     if (cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff)) return '';
     return String.fromCodePoint(cp);

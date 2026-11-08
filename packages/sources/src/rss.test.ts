@@ -52,6 +52,10 @@ describe('parseRssFeed', () => {
       expect(err, xml).toMatchObject({ retryable: false });
     }
   });
+  test('numeric character references are decoded at the XML layer', () => {
+    const out = parseRssFeed(feed('<item><title>t</title><link>https://x/1</link><description>&#60;p&#62;Hi&#60;/p&#62;</description></item>'), { maxItems: 10 });
+    expect(out[0]?.description).toBe('<p>Hi</p>');
+  });
   test('truncates to maxItems', () => {
     expect(parseRssFeed(feed(item(1) + item(2) + item(3)), { maxItems: 2 })).toHaveLength(2);
   });

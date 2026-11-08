@@ -58,3 +58,32 @@ None. (`DataGapInsert.symbol` widening is inside `packages/db/src/rows.ts`, whic
 ### Scope self-check
 - Could the diff be smaller? No: each file is in the plan list; the non-test production diff is about 780 lines, under the 900-line split threshold.
 - Diff size: tracked files +429 / -37, plus new files (core news ~410, job + source ~235, rss 37, news repo 18, SQL ~60, script ~85 lines, tests and fixtures on top).
+
+## Attempt 2 (REWORK) - 2026-11-08
+
+### Files touched
+| File | Required because |
+|---|---|
+| `packages/sources/src/rss.ts` | Issue 1: `htmlEntities: true` so `&#60;`/`&#x3C;` decode at the XML layer and `toPlainText` strips the resulting markup |
+| `packages/sources/src/rss.test.ts` | Issue 1: `numeric character references are decoded at the XML layer` |
+| `packages/core/src/news/plain-text.ts`, `plain-text.test.ts` | Issue 2: static Latin-1 letter and typographic entity table, case-sensitive lookup (`Object.hasOwn`); unknown `&foo;` stays |
+| `packages/core/src/news/config.ts` | Issue 4: `HCM`, `VIX` added to `ambiguousTickers` |
+| `packages/core/src/news/link-symbols.test.ts` | Issue 4: city/index abbreviation test |
+| `apps/worker/src/sources/__fixtures__/news/{cafef,vietstock,vnexpress}.xml` | Issue 3: real Vietnamese with diacritics; CafeF item 3 title is NFD; Vietstock item 3 uses numeric references for markup and text, item 4 double-escaped `&amp;agrave;`. `SYNTHETIC` headers kept |
+| `apps/worker/src/sources/rss-news-source.test.ts` | Issue 3: updated expectations; NFC and no-entity assertions on every item; NFD title stored as NFC |
+| `apps/worker/src/sources/rss-news-source.samples.test.ts` | Issue 3: per item no `<`, no entity residue, NFC |
+
+### Checks
+- typecheck: `pnpm typecheck` - all projects Done, no errors.
+- lint: `pnpm lint` - all projects Done, no errors.
+- test: `pnpm -r --no-bail test` - core 59 files / 717 passed; sources 3 passed + 1 skipped (35 tests); worker 19 passed + 1 skipped (292 tests); web 38 / 302 passed; db 17 files passed, 1 failed (2 failed / 154 passed / 1 todo) = the pre-existing Windows r3-guard failures (spaceM#11).
+- `scripts/db-check.sh`: not run (no Postgres).
+
+### Out-of-plan files
+None. `.gitattributes` left untouched.
+
+### Follow-ups
+Reviewer nits remain open (news_id_seq grants, `array_position` null check, record script max-filesize, insertNews failure summary).
+
+### Scope self-check
+Only the four listed issues were addressed; nits were not touched.

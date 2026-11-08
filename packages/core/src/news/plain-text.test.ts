@@ -30,6 +30,9 @@ describe('toPlainText', () => {
   test('numeric and named entities (&#7889; &nbsp; &quot;)', () => {
     expect(toPlainText('&#7889; &#x1F600;&nbsp;&quot;a&quot; &unknown; &#1114112; &#55357;')).toBe('ố 😀 "a" &unknown;');
   });
+  test('Latin-1 and typographic named entities decode (Ph&aacute;t -> Phát, &Ecirc; -> Ê, &ndash; -> –)', () => {
+    expect(toPlainText('Ph&aacute;t &Ecirc; &ecirc; &Agrave;&agrave; a &ndash; b &hellip; &foo;')).toBe('Phát Ê ê Àà a – b … &foo;');
+  });
   test('CDATA is unwrapped', () => {
     expect(toPlainText('<![CDATA[<p>Hello</p>]]>')).toBe('Hello');
   });

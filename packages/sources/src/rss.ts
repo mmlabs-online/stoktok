@@ -20,6 +20,7 @@ export function parseRssFeed(xml: string, opts: { maxItems: number }): RawFeedIt
     ignoreAttributes: true,
     parseTagValue: false,
     trimValues: true,
+    htmlEntities: true,
     isArray: (_name, jpath) => jpath === 'rss.channel.item',
   }).parse(text) as { rss?: { channel?: { item?: unknown[] } } };
   const channel = doc.rss?.channel;
