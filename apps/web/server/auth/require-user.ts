@@ -1,6 +1,6 @@
 import 'server-only';
 import { cookies, headers } from 'next/headers';
-import { forbidden, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { nowInstant } from '../clock';
 import { createAuthenClient, nextCookieAdapter } from './authen-client';
 import { checkClaims } from './claims';
@@ -8,7 +8,7 @@ import type { ClaimsResult } from './claims';
 import { loadAuthConfig } from './config';
 import { loginPath } from './login-path';
 
-/** Verifies the session cookie (getClaims) and the allowlist. Any failure is 'unauthenticated' (fail closed). */
+/** Verifies the session cookie (getClaims) and its claims. Any failure is 'unauthenticated' (fail closed). */
 export async function authenticate(): Promise<ClaimsResult> {
   let cfg;
   try {
@@ -28,10 +28,9 @@ export async function authenticate(): Promise<ClaimsResult> {
   }
 }
 
-/** Single entry point for pages, route handlers and server actions (R6). Redirects or 403s; never returns otherwise. */
+/** Single entry point for pages, route handlers and server actions (R6). Redirects to /login; never returns otherwise. */
 export async function requireUser(): Promise<{ userId: string }> {
   const result = await authenticate();
   if (result.kind === 'ok') return { userId: result.userId };
-  if (result.kind === 'forbidden') forbidden();
   redirect(loginPath((await headers()).get('x-stoktok-path')));
 }

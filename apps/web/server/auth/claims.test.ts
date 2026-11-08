@@ -2,16 +2,30 @@ import { describe, expect, it } from 'vitest';
 import { checkClaims } from './claims';
 
 const ID = '11111111-1111-4111-8111-111111111111';
-const cfg = { issuer: 'https://abc.supabase.co/auth/v1', allowlist: new Set([ID]) };
+const cfg = { issuer: 'https://abc.supabase.co/auth/v1' };
 const NOW = 1_000_000;
-const good = () => ({ iss: cfg.issuer, aud: 'authenticated', role: 'authenticated', sub: ID, exp: NOW + 3600 });
+const good = () => ({
+  iss: cfg.issuer,
+  aud: 'authenticated',
+  role: 'authenticated',
+  sub: ID,
+  session_id: 'sess-1',
+  exp: NOW + 3600,
+});
 
 describe('checkClaims', () => {
-  it('ok for valid claims of an allowlisted sub', () => {
-    expect(checkClaims(good(), cfg, NOW)).toEqual({ kind: 'ok', userId: ID });
+  it('ok for valid claims of an arbitrary sub', () => {
+    const random = crypto.randomUUID();
+    expect(checkClaims({ ...good(), sub: random }, cfg, NOW)).toEqual({ kind: 'ok', userId: random });
+    const other = '22222222-2222-4222-8222-222222222222';
+    expect(checkClaims({ ...good(), sub: other }, cfg, NOW)).toEqual({ kind: 'ok', userId: other });
   });
 
-  it('unauthenticated when exp is in the past', () => {
+  it('sub is returned lowercased', () => {
+    expect(checkClaims({ ...good(), sub: ID.toUpperCase() }, cfg, NOW)).toEqual({ kind: 'ok', userId: ID });
+  });
+
+  it('unauthenticated when exp is in the past or equals now', () => {
     expect(checkClaims({ ...good(), exp: NOW - 1 }, cfg, NOW).kind).toBe('unauthenticated');
     expect(checkClaims({ ...good(), exp: NOW }, cfg, NOW).kind).toBe('unauthenticated');
   });
@@ -39,18 +53,22 @@ describe('checkClaims', () => {
     expect(checkClaims({ ...good(), role: 'service_role' }, cfg, NOW).kind).toBe('unauthenticated');
   });
 
-  it('unauthenticated when sub is missing or not a string', () => {
+  it('unauthenticated when sub is missing, empty or not a string', () => {
     expect(checkClaims({ ...good(), sub: undefined }, cfg, NOW).kind).toBe('unauthenticated');
+    expect(checkClaims({ ...good(), sub: '' }, cfg, NOW).kind).toBe('unauthenticated');
     expect(checkClaims({ ...good(), sub: 42 }, cfg, NOW).kind).toBe('unauthenticated');
   });
 
-  it('forbidden when sub is valid but not allowlisted', () => {
-    expect(checkClaims({ ...good(), sub: '22222222-2222-4222-8222-222222222222' }, cfg, NOW).kind).toBe('forbidden');
+  it('unauthenticated when is_anonymous is true; ok when it is false or absent', () => {
+    expect(checkClaims({ ...good(), is_anonymous: true }, cfg, NOW).kind).toBe('unauthenticated');
+    expect(checkClaims({ ...good(), is_anonymous: false }, cfg, NOW).kind).toBe('ok');
+    expect(checkClaims(good(), cfg, NOW).kind).toBe('ok');
   });
 
-  it('allowlist match is case-insensitive', () => {
-    const upper = ID.toUpperCase();
-    expect(checkClaims({ ...good(), sub: upper }, cfg, NOW)).toEqual({ kind: 'ok', userId: ID });
+  it('unauthenticated when session_id is missing, empty or not a string', () => {
+    expect(checkClaims({ ...good(), session_id: undefined }, cfg, NOW).kind).toBe('unauthenticated');
+    expect(checkClaims({ ...good(), session_id: '' }, cfg, NOW).kind).toBe('unauthenticated');
+    expect(checkClaims({ ...good(), session_id: 7 }, cfg, NOW).kind).toBe('unauthenticated');
   });
 
   it('unauthenticated for null/undefined/non-object claims', () => {

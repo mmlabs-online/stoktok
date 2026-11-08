@@ -10,7 +10,7 @@ export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-/** Coarse gate: a verified session is required. The allowlist is checked by requireUser() in each entry point. */
+/** Coarse gate: a verified session is required. Full claims check is done by requireUser() in each entry point. */
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (isPublicPath(pathname)) return NextResponse.next();

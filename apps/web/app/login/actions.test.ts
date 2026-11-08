@@ -27,7 +27,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv('AUTHEN_SUPABASE_URL', 'https://abc.supabase.co');
   vi.stubEnv('AUTHEN_SUPABASE_ANON_KEY', 'anon');
-  vi.stubEnv('ALLOWLIST_USER_IDS', '11111111-1111-4111-8111-111111111111');
 });
 
 describe('signInAction', () => {
