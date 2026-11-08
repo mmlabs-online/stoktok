@@ -8,7 +8,7 @@ export function NavLinks({ variant }: { variant: 'sidebar' | 'tabbar' }) {
   const pathname = usePathname();
   const tabbar = variant === 'tabbar';
   return (
-    <ul className={tabbar ? 'flex' : 'flex flex-col gap-1'}>
+    <ul className={tabbar ? 'flex' : 'flex flex-col gap-1.5'}>
       {NAV_ITEMS.map(({ href, label, shortLabel, icon: Icon }) => {
         const active = isNavActive(pathname, href);
         return (
@@ -21,10 +21,10 @@ export function NavLinks({ variant }: { variant: 'sidebar' | 'tabbar' }) {
                   ? `flex min-h-11 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-[11px] ${
                       active ? 'text-accent font-semibold' : 'text-fg-muted'
                     }`
-                  : `flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm ${
+                  : `flex min-h-11 items-center gap-3 rounded-full px-3.5 text-sm font-bold transition-colors ${
                       active
-                        ? 'bg-bg text-accent border-accent border-l-2 font-semibold'
-                        : 'text-fg-muted hover:bg-bg border-l-2 border-transparent'
+                        ? 'bg-sidebar-active text-sidebar-active-fg'
+                        : 'text-sidebar-fg/85 hover:text-sidebar-fg hover:bg-white/10'
                     }`
               }
             >
