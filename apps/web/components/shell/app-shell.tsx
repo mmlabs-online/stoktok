@@ -8,10 +8,11 @@ import { ThemeToggle } from './theme-toggle';
 export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh">
-      <aside className="bg-surface border-border sticky top-0 hidden h-dvh w-56 shrink-0 border-r p-3 lg:block">
-        <nav aria-label="Điều hướng chính">
+      <aside className="bg-surface border-border sticky top-0 hidden h-dvh w-56 shrink-0 flex-col border-r p-3 lg:flex">
+        <nav aria-label="Điều hướng chính" className="flex-1">
           <NavLinks variant="sidebar" />
         </nav>
+        <p className="text-fg-muted px-3 text-xs">Phiên bản {process.env.STOKTOK_VERSION || 'dev'}</p>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="bg-surface border-border sticky top-0 z-10 flex h-14 items-center justify-between gap-2 border-b px-4">
