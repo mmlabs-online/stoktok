@@ -12,7 +12,7 @@ export function StatCard({
   icon?: ReactNode;
 }) {
   return (
-    <dl className="bg-surface border-border rounded-lg border p-4">
+    <dl className="bg-surface border-border shadow-card rounded-lg border p-4">
       <dt className="text-fg-muted flex items-center gap-2 text-sm">
         {icon}
         {label}

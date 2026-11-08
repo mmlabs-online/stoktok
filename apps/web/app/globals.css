@@ -2,48 +2,65 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Single source of design tokens (AC6). */
+/* Single source of design tokens (AC6). Light palette follows the Figma Make design
+   "Build Stock Investment Assistant" (sage / cream / yellow); a few values are darkened
+   to keep text at WCAG AA (4.5:1). Ceiling purple and floor cyan keep the VN price-board
+   convention (CLAUDE.md market rules), toned to fit the palette. */
 :root {
-  --color-bg: #f8fafc;
+  --color-bg: #f7f6ef;
   --color-surface: #ffffff;
-  --color-border: #e2e8f0;
-  --color-fg: #0f172a;
-  --color-fg-muted: #475569;
-  --color-accent: #1d4ed8;
-  --color-warn: #b45309;
-  --radius: 0.5rem;
+  --color-border: #dfe4da;
+  --color-fg: #28342d;
+  --color-fg-muted: #657068;
+  --color-accent: #44735a;
+  --color-warn: #8c6a1b;
+  --radius: 0.625rem;
+  --shadow-card: 0 8px 24px rgb(54 72 60 / 6%);
 
-  --price-up: #15803d;
-  --price-down: #b91c1c;
-  --price-ref: #a16207;
-  --price-ceiling: #7e22ce;
-  --price-floor: #0e7490;
-  --price-up-bg: #dcfce7;
-  --price-down-bg: #fee2e2;
-  --price-ref-bg: #fef9c3;
-  --price-ceiling-bg: #f3e8ff;
-  --price-floor-bg: #cffafe;
+  --sidebar: #5a7f66;
+  --sidebar-fg: #ffffff;
+  --sidebar-active: #f4f2df;
+  --sidebar-active-fg: #28342d;
+  --brand-mark: #e8cc59;
+
+  --price-up: #44735a;
+  --price-down: #9a5548;
+  --price-ref: #85650c;
+  --price-ceiling: #7a4f9a;
+  --price-floor: #2f7a8a;
+  --price-up-bg: #dcead5;
+  --price-down-bg: #f4ddd2;
+  --price-ref-bg: #f8ebbd;
+  --price-ceiling-bg: #ece3f3;
+  --price-floor-bg: #dcecef;
 }
 
 .dark {
-  --color-bg: #020617;
-  --color-surface: #0f172a;
-  --color-border: #1e293b;
-  --color-fg: #f1f5f9;
-  --color-fg-muted: #94a3b8;
-  --color-accent: #60a5fa;
-  --color-warn: #fbbf24;
+  --color-bg: #141a16;
+  --color-surface: #1c241f;
+  --color-border: #2c3830;
+  --color-fg: #e8ece6;
+  --color-fg-muted: #a3ada5;
+  --color-accent: #9fc4a9;
+  --color-warn: #e3c065;
+  --shadow-card: 0 8px 24px rgb(0 0 0 / 25%);
 
-  --price-up: #4ade80;
-  --price-down: #f87171;
-  --price-ref: #facc15;
-  --price-ceiling: #c084fc;
-  --price-floor: #22d3ee;
-  --price-up-bg: #052e16;
-  --price-down-bg: #450a0a;
-  --price-ref-bg: #422006;
-  --price-ceiling-bg: #3b0764;
-  --price-floor-bg: #083344;
+  --sidebar: #22302a;
+  --sidebar-fg: #e8ece6;
+  --sidebar-active: #3a5244;
+  --sidebar-active-fg: #ffffff;
+  --brand-mark: #e5c354;
+
+  --price-up: #8fc79f;
+  --price-down: #e39a8a;
+  --price-ref: #e5c354;
+  --price-ceiling: #c7a3e6;
+  --price-floor: #7fc8d6;
+  --price-up-bg: #1f3326;
+  --price-down-bg: #3a231e;
+  --price-ref-bg: #3a3115;
+  --price-ceiling-bg: #2e2340;
+  --price-floor-bg: #183238;
 }
 
 @theme inline {
@@ -54,6 +71,11 @@
   --color-fg-muted: var(--color-fg-muted);
   --color-accent: var(--color-accent);
   --color-warn: var(--color-warn);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-active-fg: var(--sidebar-active-fg);
+  --color-brand-mark: var(--brand-mark);
   --color-price-up: var(--price-up);
   --color-price-down: var(--price-down);
   --color-price-ref: var(--price-ref);
@@ -65,7 +87,19 @@
   --color-price-ceiling-bg: var(--price-ceiling-bg);
   --color-price-floor-bg: var(--price-floor-bg);
   --radius-token: var(--radius);
+  --radius-lg: var(--radius);
+  --shadow-card: var(--shadow-card);
+  --font-sans: var(--font-nunito), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@layer base {
+  h1,
+  h2,
+  h3 {
+    font-weight: 800;
+    letter-spacing: -0.015em;
+  }
 }
 
 @utility num {
