@@ -7,7 +7,7 @@
 | Areas | data, db, finance |
 | Attempts | 1 |
 | Created | 2026-11-08 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/47 |
 
 ## Goal
 Extend the quarterly financials from STK-014 (eps, bvps, revenue, net_income) to the main lines of the income statement and balance sheet, quarterly and annual (ratios: STK-067; cash flow: STK-068). The AI summaries (STK-064) and the chat agent (STK-066) need this data to "read the financial reports" for Ming. The data is structured and comes from a data API, not from PDFs.
