@@ -16,6 +16,7 @@
     "check:deploy-env": "bash scripts/check-deploy-env.sh",
     "worker:eod": "pnpm --filter @stoktok/worker run job eod-prices",
     "worker:financials": "pnpm --filter @stoktok/worker run job financials",
+    "worker:financial-statements": "pnpm --filter @stoktok/worker run job financial-statements",
     "worker:signals": "pnpm --filter @stoktok/worker run job signals",
     "worker:holiday-gaps": "pnpm --filter @stoktok/worker run job resolve-holiday-gaps"
   },

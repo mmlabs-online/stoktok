@@ -94,6 +94,17 @@ TZ=Asia/Ho_Chi_Minh
 
 Tuning (lookback, publish lag, delay, caps) is in `src/config.ts`.
 
+## Financial statement lines (`financial-statements`)
+
+Fetches income-statement and balance-sheet lines (revenue, gross profit, operating profit, profit before tax, parent net income, total assets, total liabilities, equity, minority interests, cash, short- and long-term borrowings; the lines that apply to the company type) for watchlist and held symbols from VietCap IQ, for the latest quarters and years. It upserts `financial_lines` (idempotent on `symbol,period_kind,period,line`; `source` and `fetched_at` on every row). A line missing from a period is never written as 0: the period is recorded in `data_gaps` (`financial_lines` for quarters, `financial_lines_annual` for years). Lines that do not apply to a company type are skipped without a gap. See `docs/adr/0007-vci-iq-statement-lines.md`.
+
+```
+pnpm worker:financial-statements --dry-run   # fetch and validate, write nothing
+pnpm worker:financial-statements             # fetch and write
+```
+
+Only `--dry-run` is accepted. Output and exit codes are as for `financials`. **Not scheduled yet:** apply migration `20261108000100_financial_lines.sql` and check a clean dry-run first. Tuning (lookbacks, annual publish lag, caps) is `FINANCIAL_STATEMENTS_SYNC_CONFIG` in `src/config.ts`.
+
 ## Medium-term signals (`signals`)
 
 Computes the medium-term rules (P/E and P/B vs sector, earnings growth trend, price vs 50/200-day MA) for watchlist and held symbols from stored data only, and upserts `signals`. All rules, freshness checks and gap checks are in `packages/core`; parameters come from `settings.rule_configs.signals.medium` (defaults apply when unset). The MA rules are suppressed (`corporate_action_in_window`, `price_jump_beyond_limit`) when a stock dividend falls inside the window or a close moves beyond the exchange's daily limit, because the stored closes are not adjusted. Nothing is fetched.

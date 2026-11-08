@@ -59,9 +59,27 @@ export {
   DEFAULT_FINANCIALS_PUBLISH_LAG_DAYS,
   DEFAULT_FINANCIALS_SANITY,
   DEFAULT_PRICE_SANITY,
+  DEFAULT_STATEMENT_LINES_SANITY,
   DEFAULT_TICK_BANDS,
 } from './market/config';
-export type { FinancialsSanity, PriceSanity, TickBand } from './market/config';
+export type { FinancialsSanity, PriceSanity, StatementLinesSanity, TickBand } from './market/config';
+export {
+  FINANCIAL_LINES_ANNUAL_GAP_TYPE,
+  FINANCIAL_LINES_GAP_TYPE,
+  STATEMENT_LINES,
+  assertFieldMap,
+  latestExpectedYear,
+  normalizeStatementLines,
+  planAnnualGaps,
+  yearBounds,
+} from './market/statement-lines';
+export type {
+  AnnualGapPlan,
+  NormalizedStatementLines,
+  StatementFieldMap,
+  StatementLine,
+  StatementName,
+} from './market/statement-lines';
 export { buildPriceBoardRow, isOnTick, priceLimits, splitWatchlistGroups, tickSize } from './market/price-board';
 export type { PriceBoardRow, StoredClose } from './market/price-board';
 export { ADJUSTED_HISTORY_REASON, adjustedHistoryCutoff } from './market/adjusted-history';

@@ -82,6 +82,29 @@ export const FINANCIALS_SYNC_CONFIG = {
 };
 export type FinancialsSyncConfig = typeof FINANCIALS_SYNC_CONFIG;
 
+/** Income and balance-sheet lines (STK-061, ADR 0007). Shares the pacing and publish rules of the quarterly financials sync. */
+export const FINANCIAL_STATEMENTS_SYNC_CONFIG = {
+  timeoutMs: FINANCIALS_SYNC_CONFIG.timeoutMs,
+  maxAttempts: FINANCIALS_SYNC_CONFIG.maxAttempts,
+  backoffBaseMs: FINANCIALS_SYNC_CONFIG.backoffBaseMs,
+  requestDelayMs: FINANCIALS_SYNC_CONFIG.requestDelayMs,
+  maxConsecutiveFailures: FINANCIALS_SYNC_CONFIG.maxConsecutiveFailures,
+  upsertChunkSize: FINANCIALS_SYNC_CONFIG.upsertChunkSize,
+  maxPeriodsPerResponse: FINANCIALS_SYNC_CONFIG.maxPeriodsPerResponse,
+  nonFailingRejectReasons: FINANCIALS_SYNC_CONFIG.nonFailingRejectReasons,
+  publishLagDays: FINANCIALS_SYNC_CONFIG.publishLagDays,
+  lookbackQuarters: FINANCIALS_SYNC_CONFIG.lookbackQuarters,
+  /** Latest quarters emitted per symbol (older history is dropped silently). */
+  maxQuarters: 16,
+  /** Years kept per symbol, ending at the latest expected year. */
+  lookbackYears: 5,
+  /** Latest years emitted per symbol. */
+  maxYears: 6,
+  /** Days after year end by which the audited annual report is expected (90-day deadline plus slack). */
+  annualPublishLagDays: 120,
+};
+export type FinancialStatementsSyncConfig = typeof FINANCIAL_STATEMENTS_SYNC_CONFIG;
+
 export const SIGNALS_JOB_CONFIG = {
   upsertChunkSize: 500,
   /** Symbols per financials read (each symbol has up to ~12 quarters; keeps a response under the 1000-row cap). */

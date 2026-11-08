@@ -13,6 +13,12 @@ describe('parseArgs', () => {
     expect(parseArgs(['financials'])).toEqual({ ok: true, job: 'financials', dryRun: false });
     expect(parseArgs(['financials', '--dry-run'])).toEqual({ ok: true, job: 'financials', dryRun: true });
   });
+  test('financial-statements and --dry-run accepted; --source and --backfill rejected', () => {
+    expect(parseArgs(['financial-statements'])).toEqual({ ok: true, job: 'financial-statements', dryRun: false });
+    expect(parseArgs(['financial-statements', '--dry-run'])).toEqual({ ok: true, job: 'financial-statements', dryRun: true });
+    expect(parseArgs(['financial-statements', '--source', 'vci-iq'])).toMatchObject({ ok: false });
+    expect(parseArgs(['financial-statements', '--backfill'])).toMatchObject({ ok: false });
+  });
   test('signals and signals --dry-run are accepted', () => {
     expect(parseArgs(['signals'])).toEqual({ ok: true, job: 'signals', dryRun: false });
     expect(parseArgs(['signals', '--dry-run'])).toEqual({ ok: true, job: 'signals', dryRun: true });

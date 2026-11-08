@@ -1,7 +1,7 @@
 /** Row <-> domain conversions for assets and watchlist. No financial calculation (R1); integers only (R2). */
 import { EXCHANGES, RowMappingError, toSafeInt } from '@stoktok/core';
 import type { DrawResult, Exchange, GameId, IntradayQuote, PoolPrize, TierId, PriceQuote, SectorInfo, SignalLabel, SignalStatus, StoredClose, StoredSignal } from '@stoktok/core';
-import type { AssetRow, FinancialRow, LotteryDrawInsert, LotteryDrawRow, LotteryTicketInsert, LotteryTicketRow, OpenGapRow, PriceCloseRow, PriceDailyRow, PriceIntradayRow, SignalRow, SymbolSectorRow, TradeDateRow, WatchlistRow } from './rows';
+import type { AssetRow, FinancialLineRow, FinancialRow, LotteryDrawInsert, LotteryDrawRow, LotteryTicketInsert, LotteryTicketRow, OpenGapRow, PriceCloseRow, PriceDailyRow, PriceIntradayRow, SignalRow, SymbolSectorRow, TradeDateRow, WatchlistRow } from './rows';
 
 export interface Asset {
   id: string;
@@ -114,6 +114,46 @@ export function financialFromRow(row: FinancialRow): FinancialRecord {
     bvps: toSafeInt(row.bvps, 'bvps', t),
     revenue: toSafeInt(row.revenue, 'revenue', t),
     netIncome: toSafeInt(row.net_income, 'net_income', t),
+    source: row.source,
+    fetchedAt: row.fetched_at,
+  };
+}
+
+export interface FinancialLineRecord {
+  symbol: string;
+  periodKind: 'quarter' | 'year';
+  /** 'YYYYQn' for quarter rows, 'YYYY' for year rows. */
+  period: string;
+  statement: 'income' | 'balance' | 'cashflow';
+  line: string;
+  /** Integer VND. */
+  value: number;
+  source: string;
+  fetchedAt: string;
+}
+
+const LINE_PERIOD_RE = { quarter: /^\d{4}Q[1-4]$/, year: /^\d{4}$/ } as const;
+
+/** R4: a row without source or fetched_at is rejected. */
+export function financialLineFromRow(row: FinancialLineRow): FinancialLineRecord {
+  const t = 'financial_lines';
+  if (row.period_kind !== 'quarter' && row.period_kind !== 'year') {
+    throw new RowMappingError(t, 'period_kind', `invalid period_kind: ${String(row.period_kind)}`);
+  }
+  if (typeof row.period !== 'string' || !LINE_PERIOD_RE[row.period_kind].test(row.period)) {
+    throw new RowMappingError(t, 'period', `invalid period: ${String(row.period)}`);
+  }
+  if (typeof row.source !== 'string' || row.source === '') throw new RowMappingError(t, 'source', 'missing source');
+  if (typeof row.fetched_at !== 'string' || row.fetched_at === '') {
+    throw new RowMappingError(t, 'fetched_at', 'missing fetched_at');
+  }
+  return {
+    symbol: row.symbol,
+    periodKind: row.period_kind,
+    period: row.period,
+    statement: row.statement,
+    line: row.line,
+    value: toSafeInt(row.value, 'value', t),
     source: row.source,
     fetchedAt: row.fetched_at,
   };
