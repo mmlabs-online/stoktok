@@ -31,18 +31,15 @@ export async function listOpenMarketGaps(db: Db, dataType: string): Promise<Open
   return rows.map((r) => mapRow(openGapFromRow, r, ctx));
 }
 
-/** Every unresolved gap of one data type, any symbol (including NULL), paged past the PostgREST row cap. */
-export async function listAllOpenGaps(db: Db, dataType: string, opts: { pageSize?: number } = {}): Promise<OpenGapRecord[]> {
+/** Every unresolved gap of one data type, any symbol (including NULL), paged past the PostgREST row cap. `source` narrows it to one source. */
+export async function listAllOpenGaps(db: Db, dataType: string, opts: { pageSize?: number; source?: string } = {}): Promise<OpenGapRecord[]> {
   const ctx = { table: 'data_gaps', op: 'list_all_open' };
   const rows = await fetchAll<OpenGapRow>(
-    (from, to) =>
-      db
-        .from('data_gaps')
-        .select('id,symbol,from_ts,to_ts')
-        .eq('data_type', dataType)
-        .is('resolved_at', null)
-        .order('id', { ascending: true })
-        .range(from, to),
+    (from, to) => {
+      let q = db.from('data_gaps').select('id,symbol,from_ts,to_ts').eq('data_type', dataType);
+      if (opts.source !== undefined) q = q.eq('source', opts.source);
+      return q.is('resolved_at', null).order('id', { ascending: true }).range(from, to);
+    },
     ctx,
     opts.pageSize,
   );
@@ -62,4 +59,11 @@ export async function resolveGaps(db: Db, ids: readonly number[], resolvedAt: st
   const patch = reason === undefined ? { resolved_at: resolvedAt } : { resolved_at: resolvedAt, resolved_reason: reason };
   const res = await db.from('data_gaps').update(patch).in('id', [...ids]).is('resolved_at', null);
   if (res.error) unwrap(res, { table: 'data_gaps', op: 'resolve' });
+}
+
+/** Moves the end of still-open gaps forward (a continuing outage is one row). Resolved rows are never touched. */
+export async function extendGaps(db: Db, ids: readonly number[], toTs: string): Promise<void> {
+  if (ids.length === 0) return;
+  const res = await db.from('data_gaps').update({ to_ts: toTs }).in('id', [...ids]).is('resolved_at', null);
+  if (res.error) unwrap(res, { table: 'data_gaps', op: 'extend' });
 }

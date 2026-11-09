@@ -96,3 +96,17 @@ describe('parseArgs', () => {
     });
   });
 });
+
+describe('parseArgs news', () => {
+  test('parses "news", "news --dry-run", "news --source vnexpress"; rejects --backfill and unknown sources', () => {
+    expect(parseArgs(['news'])).toEqual({ ok: true, job: 'news', dryRun: false });
+    expect(parseArgs(['news', '--dry-run'])).toEqual({ ok: true, job: 'news', dryRun: true });
+    expect(parseArgs(['news', '--source', 'vnexpress'])).toEqual({ ok: true, job: 'news', dryRun: false, source: 'vnexpress' });
+    expect(parseArgs(['news', '--dry-run', '--source', 'cafef'])).toEqual({ ok: true, job: 'news', dryRun: true, source: 'cafef' });
+    expect(parseArgs(['news', '--backfill'])).toMatchObject({ ok: false });
+    expect(parseArgs(['news', '--source', 'reuters'])).toMatchObject({ ok: false });
+    expect(parseArgs(['news', '--source', 'vci-public'])).toMatchObject({ ok: false });
+    expect(parseArgs(['news', '--source'])).toMatchObject({ ok: false });
+    expect(parseArgs(['signals', '--source', 'cafef'])).toMatchObject({ ok: false });
+  });
+});

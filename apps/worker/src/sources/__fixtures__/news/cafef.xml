@@ -1,0 +1,43 @@
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<!-- SYNTHETIC - format per work/tickets/STK-062/consult-data-engineer.md section 2, not recorded from the live feed. No XML declaration, 2-digit years, CDATA descriptions. -->
+<channel>
+<title>CafeF - Thị trường chứng khoán</title>
+<link>https://cafef.vn/thi-truong-chung-khoan.chn</link>
+<description>Synthetic</description>
+<item>
+<title><![CDATA[Cổ phiếu HPG tăng mạnh, thanh khoản vượt 1.000 tỷ đồng]]></title>
+<link>https://cafef.vn/hpg-tang-manh-188261108205400001.chn</link>
+<guid>https://cafef.vn/hpg-tang-manh-188261108205400001.chn</guid>
+<pubDate>Sun, 08 Nov 26 20:54:00 +0700</pubDate>
+<description><![CDATA[<a href="https://cafef.vn/hpg-tang-manh-188261108205400001.chn"><img src="https://cafef.vn/img/1.jpg" width="130" /></a>Phiên giao dịch hôm nay, mã <b>HPG</b> dẫn đầu thị trường. Vingroup cũng tăng nhẹ.]]></description>
+</item>
+<item>
+<title><![CDATA[Lãi suất huy động của các ngân hàng (VCB) giữ ổn định]]></title>
+<link>http://cafef.vn/lai-suat-huy-dong-188261108190000002.chn?utm_source=rss</link>
+<guid>http://cafef.vn/lai-suat-huy-dong-188261108190000002.chn?utm_source=rss</guid>
+<pubDate>Sun, 08 Nov 26 19:00:00 +0700</pubDate>
+<description><![CDATA[<img src="https://cafef.vn/img/2.jpg" />Ngân hàng Nhà nước giữ nguyên các mức lãi suất điều hành.]]></description>
+</item>
+<item>
+<title><![CDATA[VN-Index đi ngang trong phiên cuối tuần]]></title>
+<link>https://cafef.vn/vn-index-di-ngang-188261107150000003.chn</link>
+<guid>https://cafef.vn/vn-index-di-ngang-188261107150000003.chn</guid>
+<pubDate>Sat, 07 Nov 26 15:00:00 +0700</pubDate>
+<description><![CDATA[Chỉ số VN-Index đóng cửa gần tham chiếu. USD tăng nhẹ trên thị trường tự do.]]></description>
+</item>
+<item>
+<title><![CDATA[Vinamilk công bố kết quả kinh doanh quý 3]]></title>
+<link>https://cafef.vn/vinamilk-kqkd-188261107101500004.chn</link>
+<guid>https://cafef.vn/vinamilk-kqkd-188261107101500004.chn</guid>
+<pubDate>Sat, 07 Nov 26 10:15:00 +0700</pubDate>
+<description><![CDATA[<p>Doanh thu thuần đạt <i>16.000</i> tỷ đồng.</p><script>alert(1)</script>]]></description>
+</item>
+<item>
+<title><![CDATA[Tin tổng hợp doanh nghiệp]]></title>
+<link>https://cafef.vn/tin-tong-hop-188261106080000005.chn</link>
+<guid>https://cafef.vn/tin-tong-hop-188261106080000005.chn</guid>
+<pubDate>Fri, 06 Nov 26 08:00:00 +0700</pubDate>
+<description><![CDATA[]]></description>
+</item>
+</channel>
+</rss>

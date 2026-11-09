@@ -3,6 +3,8 @@ import type { Db } from '@stoktok/db';
 
 vi.mock('@stoktok/db', () => ({
   getEntrySettings: vi.fn(),
+  extendGaps: vi.fn(async () => undefined),
+  insertNews: vi.fn(async () => 4),
   getFirstPriceDates: vi.fn(async () => ({})),
   getLatestCloses: vi.fn(),
   getMarketRules: vi.fn(async () => ({})),
@@ -31,7 +33,7 @@ vi.mock('@stoktok/db', () => ({
 }));
 
 import * as dbMock from '@stoktok/db';
-import { createDbEodStore, createDbFinancialsStore, createDbFinancialStatementsStore, createDbHolidayGapsStore, createDbSignalsStore } from './store';
+import { createDbEodStore, createDbFinancialsStore, createDbFinancialStatementsStore, createDbHolidayGapsStore, createDbNewsStore, createDbSignalsStore } from './store';
 
 describe('createDbFinancialStatementsStore', () => {
   test('listFinancialLines chunks by linesSymbolChunk and concatenates', async () => {
@@ -135,5 +137,21 @@ describe('createDbHolidayGapsStore', () => {
     expect(dbMock.listAllOpenGaps).toHaveBeenCalledWith(db, 'prices_daily', { pageSize: 50 });
     await store.resolveGaps([1], 'T', 'non_trading_day');
     expect(dbMock.resolveGaps).toHaveBeenCalledWith(db, [1], 'T', 'non_trading_day');
+  });
+});
+
+describe('createDbNewsStore', () => {
+  test('wires insertNews / listAllOpenGaps(news, source) / extendGaps / resolveGaps', async () => {
+    const db = {} as Db;
+    const store = createDbNewsStore(db, { insertChunkSize: 200, gapsPageSize: 1000 });
+    expect(await store.insertNews([])).toBe(4);
+    expect(dbMock.insertNews).toHaveBeenCalledWith(db, [], { chunkSize: 200 });
+    await store.listOpenGaps('cafef');
+    expect(dbMock.listAllOpenGaps).toHaveBeenCalledWith(db, 'news', { pageSize: 1000, source: 'cafef' });
+    await store.extendGaps([3], 'T');
+    expect(dbMock.extendGaps).toHaveBeenCalledWith(db, [3], 'T');
+    await store.resolveGaps([3], 'T');
+    expect(dbMock.resolveGaps).toHaveBeenCalledWith(db, [3], 'T');
+    expect(await store.listWatchlistSymbols()).toEqual(['VNM', 'FPT']);
   });
 });

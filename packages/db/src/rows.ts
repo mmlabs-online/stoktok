@@ -110,12 +110,25 @@ export interface FinancialLineRow extends Omit<FinancialLineInsert, 'value'> {
 
 /** Insert payload; `detected_at` defaults in the database. */
 export interface DataGapInsert {
-  symbol: string;
+  /** null = market-wide gap. */
+  symbol: string | null;
   data_type: string;
   from_ts: string;
   to_ts: string;
   source: string;
   fetched_at: string;
+}
+
+/** Insert payload; `id` is generated. Text fields are untrusted plain text (R9). */
+export interface NewsInsert {
+  url: string;
+  title: string;
+  excerpt: string;
+  source: string;
+  credibility: 'official_disclosure' | 'established_outlet';
+  published_at: string;
+  fetched_at: string;
+  symbols: string[];
 }
 
 /** Selected columns only. */

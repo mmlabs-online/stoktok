@@ -55,7 +55,7 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-059 | Vietlott opportunity cost vs VN-Index | BACKLOG | P3 | finance, ui | 0 | 2026-11-05 |
 | STK-060 | Remove the allowlist check; any verified Supabase Auth user can sign in | DONE | P2 | security, architecture | 1 | 2026-11-07 |
 | STK-061 | Income statement and balance sheet lines for the AI layer | DONE | P2 | data, db, finance | 1 | 2026-11-08 |
-| STK-062 | News adapters (CafeF, Vietstock, VnExpress) and news store | BACKLOG | P2 | data, db, security | 0 | 2026-11-08 |
+| STK-062 | News adapters (CafeF, Vietstock, VnExpress) and news store | DONE | P2 | data, db, security | 1 | 2026-11-08 |
 | STK-063 | AI provider layer (Claude + Google AI) with budget cap and usage log | BACKLOG | P2 | architecture, security, db | 0 | 2026-11-08 |
 | STK-064 | Daily AI summaries per symbol and per portfolio (F5) | BACKLOG | P2 | data, ui, security | 0 | 2026-11-08 |
 | STK-065 | Rule-based suggestions with AI explanation, and the suggestion scorecard (F6 + F7) | BACKLOG | P2 | finance, db, ui | 0 | 2026-11-08 |

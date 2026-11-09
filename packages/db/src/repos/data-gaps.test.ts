@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
-import { insertGaps, listAllOpenGaps, listOpenGaps, listOpenMarketGaps, resolveGaps } from './data-gaps';
+import { extendGaps, insertGaps, listAllOpenGaps, listOpenGaps, listOpenMarketGaps, resolveGaps } from './data-gaps';
 
 const gap = { symbol: 'A', data_type: 'financials', from_ts: '2025-12-31T17:00:00.000Z', to_ts: '2026-03-31T16:59:59.000Z', source: 's', fetched_at: '2026-10-26T00:00:00.000Z' };
 
@@ -74,5 +74,30 @@ describe('data-gaps repo', () => {
     expect(f.methods('range').map((c) => c.args)).toEqual([[0, 1], [2, 3]]);
     expect(out.map((g) => g.id)).toEqual([1, 2, 3]);
     expect(out[1]?.symbol).toBeNull();
+  });
+  test('listAllOpenGaps with source filter pages past one full page (pageSize 2, 5 rows)', async () => {
+    const f = createFake();
+    const r = (id: number) => ({ id: String(id), symbol: null, from_ts: gap.from_ts, to_ts: gap.to_ts });
+    f.respond({ data: [r(1), r(2)] });
+    f.respond({ data: [r(3), r(4)] });
+    f.respond({ data: [r(5)] });
+    const out = await listAllOpenGaps(f.db, 'news', { pageSize: 2, source: 'cafef' });
+    expect(out.map((g) => g.id)).toEqual([1, 2, 3, 4, 5]);
+    expect(f.methods('eq').map((c) => c.args)).toEqual(Array(3).fill(null).flatMap(() => [['data_type', 'news'], ['source', 'cafef']]));
+    expect(f.methods('range').map((c) => c.args)).toEqual([[0, 1], [2, 3], [4, 5]]);
+  });
+  test('extendGaps updates to_ts only where resolved_at is null; empty -> no call', async () => {
+    const f = createFake();
+    f.respond({});
+    await extendGaps(f.db, [3], '2026-11-09T03:00:00.000Z');
+    expect(f.methods('update')[0]?.args[0]).toEqual({ to_ts: '2026-11-09T03:00:00.000Z' });
+    expect(f.methods('in')[0]?.args).toEqual(['id', [3]]);
+    expect(f.methods('is')[0]?.args).toEqual(['resolved_at', null]);
+    const g = createFake();
+    await extendGaps(g.db, [], 'x');
+    expect(g.calls).toHaveLength(0);
+    const h = createFake();
+    h.respond({ error: { code: '42501' } });
+    await expect(extendGaps(h.db, [1], 'x')).rejects.toMatchObject({ code: 'DB_ERROR' });
   });
 });

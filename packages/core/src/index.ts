@@ -300,3 +300,4 @@ export type {
 } from './market/refresh-view';
 export { floorDiv } from './money';
 export * from './lottery';
+export * from './news';

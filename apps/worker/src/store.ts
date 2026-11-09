@@ -1,4 +1,5 @@
 import {
+  extendGaps,
   getEntrySettings,
   getFirstPriceDates,
   getLatestCloses,
@@ -7,6 +8,7 @@ import {
   getSignalRules,
   getSymbolExchanges,
   insertGaps,
+  insertNews,
   listAllOpenGaps,
   listCorporateActions,
   listFinancialLines,
@@ -31,6 +33,8 @@ import type { EodStore } from './jobs/eod-sync';
 import type { FinancialStatementsStore } from './jobs/financial-statements-sync';
 import { FINANCIALS_GAP_TYPE } from './jobs/financials-sync';
 import type { FinancialsStore } from './jobs/financials-sync';
+import { NEWS_GAP_TYPE } from './jobs/news-sync';
+import type { NewsStore } from './jobs/news-sync';
 import type { HolidayGapsStore } from './jobs/resolve-holiday-gaps';
 import type { SignalsStore } from './jobs/medium-signals';
 
@@ -127,5 +131,19 @@ export function createDbSignalsStore(db: Db, opts: { upsertChunkSize: number; fi
     listOpenGaps: (dataType, symbols) => listOpenGaps(db, dataType, symbols),
     listOpenMarketGaps: (dataType) => listOpenMarketGaps(db, dataType),
     upsertSignals: (rows) => upsertSignals(db, rows, { chunkSize: opts.upsertChunkSize }),
+  };
+}
+
+/** Wiring only: all reads and writes go through @stoktok/db. Open gaps are read per source id, paged. */
+export function createDbNewsStore(db: Db, opts: { insertChunkSize: number; gapsPageSize: number }): NewsStore {
+  return {
+    getHolidays: async () => (await getEntrySettings(db)).settings.holidays,
+    listWatchlistSymbols: async () => (await listWatchlist(db)).map((w) => w.symbol),
+    listHeldSymbols: (asOf) => listHeldSymbols(db, asOf),
+    insertNews: (rows) => insertNews(db, rows, { chunkSize: opts.insertChunkSize }),
+    listOpenGaps: (source) => listAllOpenGaps(db, NEWS_GAP_TYPE, { pageSize: opts.gapsPageSize, source }),
+    insertGaps: (rows) => insertGaps(db, rows),
+    extendGaps: (ids, toTs) => extendGaps(db, ids, toTs),
+    resolveGaps: (ids, resolvedAt) => resolveGaps(db, ids, resolvedAt),
   };
 }
