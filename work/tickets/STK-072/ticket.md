@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P2 |
 | Areas | architecture, security |
-| Attempts | 2 |
+| Attempts | 3 |
 | Created | 2026-11-10 |
 | PR | — |
 
