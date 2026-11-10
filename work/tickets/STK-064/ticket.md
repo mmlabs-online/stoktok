@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P2 |
 | Areas | data, db, ui, security |
-| Attempts | 1 |
+| Attempts | 2 |
 | Created | 2026-11-08 |
 | PR | — |
 
@@ -32,3 +32,4 @@ docs/spec-v1.md §3 F5, §6.2 anti-hallucination rules, §7 schedule (after EOD)
   - First worker job to import the AI SDKs: add the worker-image SDK resolution probe to `scripts/check-image.sh` (STK-073 follow-up), and check `apps/worker` tsup externals.
   - Real provider behaviour (model IDs, prices, thinking, JSON mode) is still verify-before-go-live (see STK-070 impl-log).
 - 2026-11-10 (orchestrator): split per plan.md. This ticket is slice 1: `ai_summaries` migration/rollback/db:check, db repo, core input-ID grammar, body types/parser and `sanitizeSummaryOutput`. Worker job → STK-077, portfolio summary → STK-078, UI cards → STK-079.
+- 2026-11-10 (Ming, after review attempt 1 PASS): fix before the PR, from security-review.md attempt 1: all four 🟡 (allow-list plain-text check with NFKC + Default_Ignorable refusal on write and read; diacritic-insensitive deny-list with the extra phrases and the "sẽ/có thể tăng|giảm + number/%" forecast pattern; parseStoredSummaryBody re-runs the deny-list; read-path self-consistency of missing flags and cited ids ⊆ row input_ids, optionally symbol match) and the small 🟢 (providedIds validated → bad_context; AiSummaryInsert.body typed as AiSummaryBody). Keep "cam kết" as is. Slice-4 text-only rendering stays a STK-079 note.
