@@ -13,5 +13,8 @@ Set `DB_CHECK_URL` (host must be `localhost` or `127.0.0.1`) to run against an e
 
 Optional: `supabase db reset` with the Supabase CLI (needs Docker; there is no `config.toml` yet).
 
+## Vault
+`20261110000200_ai_keys.sql` requires the `supabase_vault` extension (it refuses to apply otherwise) and stores AI provider keys there. `pnpm db:check` runs on plain Postgres with a plaintext Vault stub from `scripts/db-check/bootstrap-roles.sql`, so real encryption and privileges are checked only by the manual smoke test in [ADR 0009](../docs/adr/0009-ai-provider-keys-in-vault.md). Rolling back that migration deletes the stored keys.
+
 ## No `lots` table
 Spec §5 lists `lots`, but lots are derived in `packages/core` (`buildLedger`) from transactions and corporate actions, so they are not stored. A snapshot, if needed, would be a rebuildable cache in its own ticket.
