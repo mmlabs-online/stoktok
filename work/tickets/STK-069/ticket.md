@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P2 |
 | Areas | architecture, security |
 | Attempts | 0 |
@@ -27,6 +27,7 @@ docs/spec-v1.md §2 (LLM provider), §6 Signal & AI design, §8 secrets. CLAUDE.
 ## Notes / answers from Ming
 - 2026-11-10 (orchestrator): split from STK-063 per its plan.md. Carry-overs from STK-063 review and security review:
   - Widen the db `Db` type to include `rpc` and drop the local `AiDb` type.
+  - Harden `ai_reserve` with a **new** migration (`create or replace function`; `20261109000100_ai_usage.sql` is merged and must not be edited): raise `22023` when the window does not contain the DB's `now()`, and when `p_reserve_micro_usd = 0`. Require prices > 0 in `validateAiConfig`. Add db-check cases: zero reserve under cap, past window, future window; the existing "reserve 0 at cap" case moves to reserve 1. Security review 🟡 items 1 and 3. (An in-place fix was pushed to PR #49 after it was merged, so it never reached `main`; it was reverted on the session branch.)
   - Harden `ai_reserve` with a new migration: reject a window that does not contain the DB's `now()`, and reject `p_reserve_micro_usd = 0` (and require prices > 0 in `validateAiConfig`). Security review 🟡 items 1 and 3.
   - Fix ADR 0008 wording: the cap is bounded by one call's estimation error, not "never exceeded".
   - Test that settled cost ≤ reserved cost, or log a breach as `error_code = 'over_reservation'`.

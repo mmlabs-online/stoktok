@@ -62,5 +62,5 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-066 | Free chat with a stock-analysis agent | BACKLOG | P2 | architecture, security, ui, finance | 0 | 2026-11-08 |
 | STK-067 | Financial ratios derived in core (margins, D/E, ROE, ROA, YoY, P/E, P/B) | BACKLOG | P2 | finance, db | 0 | 2026-11-08 |
 | STK-068 | Cash-flow statement lines and free cash flow | BLOCKED | P2 | data, finance | 0 | 2026-11-08 |
-| STK-069 | AI client, guards and secrets (STK-063 slice 2) | BACKLOG | P2 | architecture, security | 0 | 2026-11-10 |
+| STK-069 | AI client, guards and secrets (STK-063 slice 2) | PLANNING | P2 | architecture, security | 0 | 2026-11-10 |
 | STK-070 | Claude and Gemini adapters, wiring and AI usage card (STK-063 slice 3) | BACKLOG | P2 | architecture, security, ui | 0 | 2026-11-10 |
