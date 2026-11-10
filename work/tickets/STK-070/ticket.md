@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P2 |
 | Areas | architecture, security, ui |
 | Attempts | 0 |
@@ -24,3 +24,9 @@ docs/spec-v1.md §2 (LLM provider), §6, §8 secrets. CLAUDE.md R1, R3, R5. Depe
 ## Notes / answers from Ming
 - 2026-11-10 (orchestrator): split from STK-063 per its plan.md. STK-064, STK-065 and STK-066 wait for this ticket.
 - Before go-live: re-verify model IDs and prices in `packages/core/src/ai/config.ts`; add a manual sweep for stale `reserved` rows (follow-up).
+- 2026-11-10 (orchestrator): carry-overs from the STK-071 and STK-072 reviews:
+  - `apps/web/server/ai.ts` must start with `import 'server-only'` and be the only `apps/web` importer of `@stoktok/ai`; add an r3-guard check for it like the existing `server/db.ts` one.
+  - Adapters enforce `maxOutputTokens` and the thinking budget on the provider side (Gemini thinking budgets are soft), and only put valid integer usage into `ProviderError`.
+  - Measure or document the real per-provider overhead behind `providerOverheadTokens` (default 1000) and `maxToolCallsPerRound` (default 8).
+  - Map a `22023` from `ai_reserve` inside the ledger port adapter if convenient (the client already fails closed on any reserve throw).
+  - Keys reach both web and worker (STK-072); the deployment-repo copy of the workflow is updated by Ming by hand.
