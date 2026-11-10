@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-export type Db = Pick<SupabaseClient, 'from'>;
+export type Db = Pick<SupabaseClient, 'from' | 'rpc'>;
 
 /** Server-only (R3): reads the service role key from the given env object, never from a module global. */
 export function createServiceClient(env: Record<string, string | undefined>): SupabaseClient {

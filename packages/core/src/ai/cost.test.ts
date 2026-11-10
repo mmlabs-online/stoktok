@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { AI_CONFIG, type AiConfig } from './config';
+import { AI_CONFIG, AI_PROVIDERS, AI_TASKS, type AiConfig } from './config';
 import { AiConfigError, usageCostMicroUsd, utf8ByteLength, worstCaseCostMicroUsd } from './cost';
 
 describe('usageCostMicroUsd', () => {
@@ -49,6 +49,14 @@ describe('worstCaseCostMicroUsd', () => {
     cfg.thinkingBudgetTokensByTask.chat = 500;
     // chat: 2000 + 500 output tokens of sonnet at 15 micro-USD
     expect(worstCaseCostMicroUsd('chat', 'claude-sonnet-4-5', { inputUtf8Bytes: 0, messageCount: 0 }, cfg)).toBe(2500 * 15);
+  });
+  test('worst case is at least 1 micro-USD for every task and provider in AI_CONFIG', () => {
+    for (const p of AI_PROVIDERS) {
+      for (const t of AI_TASKS) {
+        const model = AI_CONFIG.modelsByTask[p][t];
+        expect(worstCaseCostMicroUsd(t, model, { inputUtf8Bytes: 0, messageCount: 0 })).toBeGreaterThanOrEqual(1);
+      }
+    }
   });
   test('worst case >= usageCostMicroUsd for any usage within the bounds', () => {
     const cases = [
