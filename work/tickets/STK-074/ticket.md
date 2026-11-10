@@ -1,13 +1,13 @@
-# STK-074: AI API keys entered on Settings and stored encrypted in Supabase Vault
+# STK-074: AI provider keys in Supabase Vault and key resolution (slice a)
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P2 |
 | Areas | security, db, architecture, ui |
-| Attempts | 0 |
+| Attempts | 3 |
 | Created | 2026-11-10 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/56 |
 
 ## Goal
 Let Ming enter the Anthropic and Google AI API keys on the Settings screen, store them encrypted in Supabase Vault, and have the server-side AI client use them (falling back to the STK-072 env keys), without a key ever reaching the browser or the logs.
@@ -28,3 +28,5 @@ docs/spec-v1.md §7 Deployment ("Secrets … LLM API key only in the deploy repo
 - 2026-11-10 (Ming): (1) UI = a "Khoá AI" card on Settings: paste, save, then show only the last 4 characters with replace and delete; the key is never sent back to the browser. (2) Storage = Supabase Vault (encrypted, service_role only, decrypted only on the server). (3) Precedence = UI key first, STK-072 env keys as fallback.
 - "như recotdin" — Ming referred to how Ricotdin handles keys (spec §9 Q6); the chosen UI is the Settings card above.
 - Spec/CLAUDE.md conflict flagged: both currently say LLM keys live only in the deploy repo's env handling. Ming's decision above overrides; this ticket updates both.
+- 2026-11-10 (orchestrator): split per plan.md. This ticket is slice (a): Vault storage, migration/rollback/db:check stub, repo, key resolver (UI → env → off), AiClient per-call resolution, web/worker wiring, r3-guard, ADR 0009, CLAUDE.md and spec §7. The Settings card and actions (AC1, AC3, no-echo part of AC7) moved to STK-076.
+- 2026-11-10 (Ming, after review attempt 1 PASS): fix before the PR, from security-review.md attempt 1: 🟡 F1 (ADR threat model: service-role leak now exposes the AI keys → rotate at providers; dashboard Vault UI and SQL editor history as decrypt paths; backups decryptable by whoever can restore into the project), 🟡 F2 (smoke test also checks log_min_duration_statement, log_parameter_max_length, log_parameter_max_length_on_error and pgaudit), 🟡 F3 (smoke steps for replace via ai_key_set and a positive service_role call to ai_key_secrets), and 🟢 F5 (null/empty decrypted secret → fail closed, with test), F6 (escape _ in LIKE patterns), F7 (r3-guard also restricts ai_key_set/ai_key_delete, or reword ADR), F8 (smoke step checking function owner = postgres). Also note F10 (never rpc with get:true) in the ADR.

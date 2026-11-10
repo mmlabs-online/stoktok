@@ -7,3 +7,5 @@ export { selectProvider } from './select-provider';
 export type { SelectProviderResult } from './select-provider';
 export { aiMessage, formatUsdMicro } from './messages-vi';
 export type { AiMessageCode, AiMessageParams } from './messages-vi';
+export { AI_KEY_LENGTH, validateAiKeyFormat } from './keys';
+export type { AiKeyFormatCode } from './keys';

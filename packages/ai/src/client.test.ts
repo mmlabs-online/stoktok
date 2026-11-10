@@ -464,3 +464,77 @@ describe('log hygiene', () => {
     for (const s of ['SYSSECRET', 'BLOCKSECRET', 'TOOLSECRET', 'OUTSECRET']) expect(logged).not.toContain(s);
   });
 });
+
+describe('resolveProviders', () => {
+  const SENTINEL = 'DUMMY-SENTINEL-not-a-real-key-0000';
+  const make = (resolveProviders: () => Promise<Partial<Record<AiProvider, FakeProvider>>>, ledger = new FakeLedger(CAP)) => {
+    const warns: unknown[] = [];
+    const client = new AiClient({ resolveProviders, ledger, log: { warn: (e) => void warns.push(e) }, clock: () => new Date('2026-11-10T00:00:00Z'), rng: seqRng() });
+    return { client, ledger, warns };
+  };
+
+  test('throws TypeError when both or neither of providers/resolveProviders are given', () => {
+    const common = { ledger: new FakeLedger(CAP), log: { warn: () => {} } };
+    const p = { anthropic: new FakeProvider('anthropic', []) };
+    expect(() => new AiClient({ ...common, providers: p, resolveProviders: async () => p } as never)).toThrow(TypeError);
+    expect(() => new AiClient({ ...common } as never)).toThrow(TypeError);
+  });
+
+  test('is called once per generate, even across tool rounds', async () => {
+    const provider = new FakeProvider('anthropic', [callTool('get_price', { symbol: 'FPT' }), answer('done')]);
+    let calls = 0;
+    const { client } = make(async () => {
+      calls++;
+      return { anthropic: provider };
+    });
+    const res = await client.generate(base({ tools: [priceTool()] }));
+    expect(res.ok).toBe(true);
+    expect(provider.calls).toHaveLength(2);
+    expect(calls).toBe(1);
+  });
+
+  test('picks up a changed key between two generate calls on one client (first google, then anthropic)', async () => {
+    const google = new FakeProvider('google', [answer('g')]);
+    const anthropic = new FakeProvider('anthropic', [answer('a')]);
+    let current: Partial<Record<AiProvider, FakeProvider>> = { google };
+    const { client } = make(async () => current);
+    const first = await client.generate(base());
+    current = { anthropic };
+    const second = await client.generate(base());
+    expect(first.ok && first.provider).toBe('google');
+    expect(second.ok && second.provider).toBe('anthropic');
+  });
+
+  test('a rejecting resolver gives provider_unavailable, no reserve, one warn, and no leak', async () => {
+    const { client, ledger, warns } = make(async () => {
+      throw new Error(`boom ${SENTINEL}`);
+    });
+    const res = await client.generate(base());
+    expect(!res.ok && res.reason).toBe('provider_unavailable');
+    expect(ledger.reserves).toEqual([]);
+    expect(warns).toEqual([{ event: 'ai_key_read_failed', code: 'key_read_failed' }]);
+    expect(JSON.stringify(warns)).not.toContain('SENTINEL');
+  });
+
+  test('an empty result is provider_unavailable without the key-read warning', async () => {
+    const { client, warns } = make(async () => ({}));
+    const res = await client.generate(base());
+    expect(!res.ok && res.reason).toBe('provider_unavailable');
+    expect(warns).toEqual([]);
+  });
+
+  test('a resolved provider registered under the wrong id throws', async () => {
+    const { client } = make(async () => ({ anthropic: new FakeProvider('google', []) }));
+    await expect(client.generate(base())).rejects.toThrow();
+  });
+
+  test('budgetStatus does not call resolveProviders', async () => {
+    let calls = 0;
+    const { client } = make(async () => {
+      calls++;
+      return {};
+    });
+    await client.budgetStatus();
+    expect(calls).toBe(0);
+  });
+});

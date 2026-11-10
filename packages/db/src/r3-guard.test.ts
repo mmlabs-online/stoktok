@@ -100,4 +100,30 @@ describe('R3 guard', () => {
     expect(hits).toEqual([]);
     expect(fakes.test(`import("@stoktok/ai/fakes")`)).toBe(true);
   });
+
+  test('the Vault entry points (ai_key_secrets, readAiKeySecrets) appear only in the allowed files', () => {
+    const allowed = new Set([
+      'packages/db/src/repos/ai-keys.ts',
+      'packages/db/src/repos/ai-keys.test.ts',
+      'packages/db/src/index.ts',
+      'apps/web/server/ai.ts',
+      'apps/web/server/ai.test.ts',
+      'apps/worker/src/ai.ts',
+      'apps/worker/src/ai.test.ts',
+    ]);
+    const hits = files.filter((f) => /ai_key_secrets|readAiKeySecrets/.test(f.text)).map((f) => f.path).filter((p) => !allowed.has(p));
+    expect(hits).toEqual([]);
+  });
+
+  test('the write wrappers (ai_key_set, ai_key_delete) appear only in the ai-keys repo and its test (STK-076 extends this list)', () => {
+    const allowed = new Set(['packages/db/src/repos/ai-keys.ts', 'packages/db/src/repos/ai-keys.test.ts']);
+    const hits = files.filter((f) => /ai_key_set|ai_key_delete/.test(f.text)).map((f) => f.path).filter((p) => !allowed.has(p));
+    expect(hits).toEqual([]);
+  });
+
+  test('no TS/JS file references Vault objects (Vault is reached only through the SQL wrappers)', () => {
+    const vault = /vault\.(secrets|decrypted_secrets|create_secret|update_secret)/;
+    expect(files.filter((f) => vault.test(f.text)).map((f) => f.path)).toEqual([]);
+    expect(vault.test('vault.decrypted_secrets')).toBe(true);
+  });
 });

@@ -35,8 +35,15 @@ import {
 } from './types';
 import { UNTRUSTED_DATA_RULE, newDelimiter, sanitizeForDelimiter, truncateUtf8, wrapUntrusted } from './untrusted';
 
-export interface AiClientOptions {
-  providers: Partial<Record<AiProvider, LlmProvider>>;
+type ProviderMap = Partial<Record<AiProvider, LlmProvider>>;
+
+/** Exactly one of `providers` (fixed) or `resolveProviders` (called once per generate(), so key changes apply without a restart). */
+export type AiClientOptions = (
+  | { providers: ProviderMap; resolveProviders?: never }
+  | { resolveProviders: () => Promise<ProviderMap>; providers?: never }
+) & AiClientCommonOptions;
+
+interface AiClientCommonOptions {
   ledger: UsageLedger;
   log: AiLog;
   cfg?: AiConfig;
@@ -62,7 +69,8 @@ interface Round {
  * so such refusals appear only in logs.
  */
 export class AiClient {
-  private readonly providers: Partial<Record<AiProvider, LlmProvider>>;
+  private readonly providers: ProviderMap | undefined;
+  private readonly resolveProviders: (() => Promise<ProviderMap>) | undefined;
   private readonly ledger: UsageLedger;
   private readonly log: AiLog;
   private readonly cfg: AiConfig;
@@ -74,10 +82,12 @@ export class AiClient {
     this.cfg = opts.cfg ?? AI_CONFIG;
     const errors = validateAiConfig(this.cfg);
     if (errors.length > 0) throw new AiConfigError(errors.join('; '));
-    for (const [key, provider] of Object.entries(opts.providers)) {
-      if (provider && provider.id !== key) throw new Error(`provider registered as ${key} has id ${provider.id}`);
+    if (Boolean(opts.providers) === Boolean(opts.resolveProviders)) {
+      throw new TypeError('AiClient needs exactly one of providers or resolveProviders');
     }
+    if (opts.providers) assertProviderIds(opts.providers);
     this.providers = opts.providers;
+    this.resolveProviders = opts.resolveProviders;
     this.ledger = opts.ledger;
     this.log = opts.log;
     this.clock = opts.clock ?? (() => new Date());
@@ -105,11 +115,21 @@ export class AiClient {
       usageIds,
     });
 
-    const enabled = (Object.keys(this.providers) as AiProvider[]).filter((p) => this.providers[p]);
+    let providers: ProviderMap;
+    try {
+      providers = this.resolveProviders ? await this.resolveProviders() : (this.providers as ProviderMap);
+    } catch {
+      // fixed event and code only: the error may carry key material
+      this.log.warn({ event: 'ai_key_read_failed', code: 'key_read_failed' });
+      return fail('provider_unavailable');
+    }
+    if (this.resolveProviders) assertProviderIds(providers);
+
+    const enabled = (Object.keys(providers) as AiProvider[]).filter((p) => providers[p]);
     const selected = selectProvider({ task: input.task, requested: input.provider, enabled }, this.cfg);
     if (!selected.ok) return fail('provider_unavailable');
     const { provider: providerId, model } = selected;
-    const provider = this.providers[providerId] as LlmProvider;
+    const provider = providers[providerId] as LlmProvider;
 
     const blocks = input.blocks ?? [];
     const delim = newDelimiter(this.rng, [...blocks.map((b) => b.text), input.system, ...input.messages.flatMap((m) => m.parts.map(partText))]);
@@ -315,6 +335,12 @@ export class AiClient {
     const parsed = schema.safeParse(raw);
     if (!parsed.success) return bad('invalid_output', 'schema_mismatch');
     return { settle: { status: 'ok', ...base }, calls: [], value: parsed.data };
+  }
+}
+
+function assertProviderIds(providers: ProviderMap): void {
+  for (const [key, provider] of Object.entries(providers)) {
+    if (provider && provider.id !== key) throw new Error(`provider registered as ${key} has id ${provider.id}`);
   }
 }
 

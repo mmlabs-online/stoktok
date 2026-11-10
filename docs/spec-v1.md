@@ -211,7 +211,7 @@ Holdings and P&L are **derived** from `transactions` + `corporate_actions` + `lo
   - App repo (private): CI and image build on GitHub-hosted runners, images pushed to the Docker Hub account used by other mmlabs apps.
   - Shared deploy repo: Compose definitions + env; deploy jobs on the self-hosted runner on the home server.
 - Subdomain under mmlabs.online, exposed via the existing Cloudflare Tunnel.
-- Secrets (Supabase keys, LLM API key) only in the deploy repo's env handling, never in the app repo.
+- Secrets: Supabase keys only in the deploy repo's env handling, never in the app repo. LLM API keys may be entered on Settings and are stored in Supabase Vault (service_role only, decrypted only on the server); env keys in the deploy repo are the fallback (ADR 0009). Never in the app repo.
 - `worker` must tolerate restarts: jobs are idempotent and resume from last successful run.
 - Operational note: the PC must be on during trading hours for intraday data; gaps are recorded in `data_gaps`.
 

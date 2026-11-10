@@ -5,6 +5,8 @@ export type { AnthropicMessagesClient } from './adapters/anthropic';
 export { createGoogleProvider } from './adapters/google';
 export type { GoogleModelsClient } from './adapters/google';
 export { buildProviders } from './providers';
+export { makeProviderResolver, resolveAiKeys } from './keys';
+export type { AiKeySource, StoredAiKeys } from './keys';
 export { readAiEnv } from './env';
 export type { AiEnv } from './env';
 export { UNTRUSTED_DATA_RULE } from './untrusted';
