@@ -30,6 +30,15 @@ describe('validateAiConfig rejects', () => {
     ['zero output price', (c: AiConfig) => (c.priceTable['claude-sonnet-4-5']!.outMicroUsdPerMTok = 0)],
     ['another time zone', (c: AiConfig) => (c.budget.timeZone = 'UTC')],
     ['maxOutputTokens <= 0', (c: AiConfig) => (c.maxOutputTokensByTask.chat = 0)],
+    ['maxToolRounds 0', (c: AiConfig) => (c.maxToolRounds = 0)],
+    ['maxToolRounds -1', (c: AiConfig) => (c.maxToolRounds = -1)],
+    ['maxToolRounds 1.5', (c: AiConfig) => (c.maxToolRounds = 1.5)],
+    ['maxToolRounds NaN', (c: AiConfig) => (c.maxToolRounds = Number.NaN)],
+    ['maxToolCallsPerRound 0', (c: AiConfig) => (c.maxToolCallsPerRound = 0)],
+    ['maxToolCallsPerRound 1.5', (c: AiConfig) => (c.maxToolCallsPerRound = 1.5)],
+    ['maxToolCallsPerRound NaN', (c: AiConfig) => (c.maxToolCallsPerRound = Number.NaN)],
+    ['negative providerOverheadTokens', (c: AiConfig) => (c.providerOverheadTokens.google = -1)],
+    ['fractional providerOverheadTokens', (c: AiConfig) => (c.providerOverheadTokens.google = 0.5)],
   ])('%s', (_name, mutate) => {
     const c = clone();
     mutate(c);

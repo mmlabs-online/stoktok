@@ -20,6 +20,10 @@ export interface AiConfig {
   thinkingBudgetTokensByTask: Record<AiTask, number>;
   perMessageOverheadTokens: number;
   maxToolRounds: number;
+  /** Most tool calls one provider response may contain. */
+  maxToolCallsPerRound: number;
+  /** Fixed input tokens per call that the provider adds beyond our payload (tool/system framing). */
+  providerOverheadTokens: Record<AiProvider, number>;
   budget: { capMicroUsd: number; warnPpm: number; timeZone: string };
 }
 
@@ -42,6 +46,9 @@ export const AI_CONFIG: AiConfig = {
   thinkingBudgetTokensByTask: { chat: 0, summary: 0, explanation: 0 },
   perMessageOverheadTokens: 16,
   maxToolRounds: 4,
+  maxToolCallsPerRound: 8,
+  // Default to verify before go-live; measure real overhead in STK-070.
+  providerOverheadTokens: { anthropic: 1000, google: 1000 },
   budget: { capMicroUsd: 5_000_000, warnPpm: 800_000, timeZone: VN_TIME_ZONE },
 };
 
@@ -68,6 +75,11 @@ export function validateAiConfig(cfg: AiConfig): string[] {
     if (!isNonNegInt(cfg.thinkingBudgetTokensByTask[task])) errors.push(`thinkingBudgetTokens for ${task} must be a non-negative integer`);
   }
   if (!isNonNegInt(cfg.perMessageOverheadTokens)) errors.push('perMessageOverheadTokens must be a non-negative integer');
+  if (!isPosInt(cfg.maxToolRounds)) errors.push('maxToolRounds must be a positive integer');
+  if (!isPosInt(cfg.maxToolCallsPerRound)) errors.push('maxToolCallsPerRound must be a positive integer');
+  for (const provider of AI_PROVIDERS) {
+    if (!isNonNegInt(cfg.providerOverheadTokens?.[provider])) errors.push(`providerOverheadTokens for ${provider} must be a non-negative integer`);
+  }
   const { capMicroUsd, warnPpm, timeZone } = cfg.budget;
   if (!isPosInt(capMicroUsd)) errors.push('budget cap must be a positive integer');
   if (!Number.isSafeInteger(warnPpm) || warnPpm < 1 || warnPpm > 999_999) errors.push('budget warnPpm must be an integer in 1..999999');

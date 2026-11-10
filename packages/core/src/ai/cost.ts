@@ -1,5 +1,5 @@
 import { ceilDiv, toSafe } from '../money';
-import { AI_CONFIG, type AiConfig, type AiTask } from './config';
+import { AI_CONFIG, type AiConfig, type AiProvider, type AiTask } from './config';
 
 export class AiConfigError extends Error {
   constructor(message: string) {
@@ -43,15 +43,17 @@ export function utf8ByteLength(...texts: readonly string[]): number {
 
 /**
  * Upper bound reserved before a call. Input tokens <= UTF-8 bytes (a byte-level tokenizer cannot emit more tokens
- * than bytes) plus per-message overhead; output = max output + thinking budget for the task.
+ * than bytes) plus per-message overhead (and the provider's fixed overhead when `provider` is given); output = max output + thinking budget for the task.
  */
 export function worstCaseCostMicroUsd(
   task: AiTask,
   model: string,
-  input: { inputUtf8Bytes: number; messageCount: number },
+  input: { inputUtf8Bytes: number; messageCount: number; provider?: AiProvider },
   cfg: AiConfig = AI_CONFIG,
 ): number {
-  const inputTokens = assertCount(input.inputUtf8Bytes, 'inputUtf8Bytes') + assertCount(input.messageCount, 'messageCount') * BigInt(cfg.perMessageOverheadTokens);
+  const overhead = input.provider ? BigInt(cfg.providerOverheadTokens[input.provider]) : 0n;
+  const inputTokens =
+    assertCount(input.inputUtf8Bytes, 'inputUtf8Bytes') + assertCount(input.messageCount, 'messageCount') * BigInt(cfg.perMessageOverheadTokens) + overhead;
   const outputTokens = cfg.maxOutputTokensByTask[task] + cfg.thinkingBudgetTokensByTask[task];
   return usageCostMicroUsd(model, { inputTokens: toSafe(inputTokens), outputTokens }, cfg);
 }

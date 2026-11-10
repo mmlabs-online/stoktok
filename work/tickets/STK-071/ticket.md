@@ -1,13 +1,13 @@
-# STK-071: AI client, guards and optional secrets (STK-063 slice 2b)
+# STK-071: AI client, untrusted blocks, tools and guards (STK-063 slice 2b-i)
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P2 |
 | Areas | architecture, security |
-| Attempts | 0 |
+| Attempts | 3 |
 | Created | 2026-11-10 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/51 |
 
 ## Goal
 Add the server-only `@stoktok/ai` package on top of the hardened STK-063/STK-069 budget foundation: the provider interface, the client that reserves budget before every provider round, prompt-injection defence, a read-only tool allowlist, zod output validation and the optional AI secret names. Split from STK-069 (slice b in work/tickets/STK-069/plan.md); design notes in work/tickets/STK-069/consult-software-architect.md.
@@ -30,3 +30,5 @@ docs/spec-v1.md §2 (LLM provider), §6 Signal & AI design, §8 secrets. CLAUDE.
 ## Notes / answers from Ming
 - 2026-11-10 (orchestrator): split from STK-069 per its plan.md. Open questions from the STK-069 consult for the planner: `providerOverheadTokens` in core `AiConfig` now or in STK-070; abort vs feed-back on a disallowed tool call; doc Service column `web, worker` now (recommended) or later.
 - Defaults to confirm (from STK-069): zero-price models are not supported in v1.
+- 2026-11-10 (orchestrator): split per plan.md. The deploy half of AC5 (`.env.example`, `docs/deploy.md`, deploy workflow, `check-deploy-env.sh`) moved to STK-072. `env.ts` and "a missing key disables that provider" stay here.
+- 2026-11-10 (Ming, after review attempt 1 PASS): fix all four 🟡 findings in security-review.md attempt 1 before the PR: (1) `callRound` must never throw (map classification failures to `provider_error`/`malformed`, settle the round); (2) the `@stoktok/ai` importer guard must catch double quotes, `import()` and `require()`; (3) `@stoktok/ai/fakes` may only be imported from test files; (4) a configurable per-round tool-call cap (`too_many_tool_calls`, checked before settle).
