@@ -79,3 +79,42 @@
 ### Open questions
 - The ADR (:3) calls slice (b) **STK-076**, but the plan proposes **STK-075**. Which ID is correct?
 - Has the manual smoke test (including step 7, `service_role` direct access to `vault.decrypted_secrets`) been run? `impl-log.md` should record the results. The ADR amendment is still pending.
+
+## STK-074 security re-review, attempt 2
+
+**Verdict:** No 🔴 findings. One 🟡 regression must be fixed before PASS: smoke step 3b is in the wrong place in the ADR. All the other targeted fixes are confirmed. I read the files directly and did not run any tests or checks.
+
+### Confirmed fixed
+- **F1, threat model:** `docs/adr/0009-ai-provider-keys-in-vault.md:22-24` now states that a leaked service role key exposes the AI keys, and tells Ming to rotate them at Anthropic and Google. It also lists the dashboard Vault UI, SQL editor history and the restore-decryptable backups.
+- **F2, logging checks:** smoke step 2 (`ADR:40`) and the threat model (`:25`) now cover `log_min_duration_statement`, `log_parameter_max_length`, `log_parameter_max_length_on_error` and pgaudit.
+- **F3, partly fixed:** step 5b, the positive `service_role` call, is at `ADR:44`. The replace step is misplaced (see N1).
+- **F5, null/empty secret:** `packages/db/src/repos/ai-keys.ts:69` throws `MAPPING` on a null or empty secret, and the test is at `ai-keys.test.ts:113-117`. The client's bare `catch` maps this to `provider_unavailable`, so it fails closed.
+- **F6, LIKE patterns:** the escaped pattern is used at `supabase/rollback/20261110000200_ai_keys.down.sql:12`, `scripts/db-check/checks.sql:681` and smoke step 9 (`ADR:49`). Step 5c also uses an escaped pattern.
+- **F7, guard scope:** `packages/db/src/r3-guard.test.ts:118-122` now restricts `ai_key_set` and `ai_key_delete` to the ai-keys repo and its test. ADR decision 7 (`:16`) now matches what the guard enforces. The guard only scans TS/JS files, so the SQL files are not affected.
+- **F8, ownership:** smoke step 5c (`ADR:45`) checks that all three functions are owned by `postgres`.
+- **F10, GET note:** recorded as ADR decision 8 (`:17`).
+
+### New findings
+🟡 **N1: Smoke step 3b is in the Decision list, not the smoke test.** (`docs/adr/0009-ai-provider-keys-in-vault.md:14`)
+- The "3b. Replace" text sits between decisions 5 and 6. The smoke procedure (`:37-49`) still has no replace step.
+- So `vault.update_secret` and the orphan-delete path in `ai_key_set` still never run as `postgres` on the real project. This was the main point of F3 and AC2.
+- Moving it to just after step 3 would also break the procedure. Steps 4 and 5 expect the value `…0000`, but after 3b the stored value would be `…1111`.
+- Fix: delete line 14 from Decisions and add the step to the smoke list after 5c, as "5d". It should:
+  - run `ai_key_set('google','DUMMY-not-a-real-key-1111')`;
+  - check that `key_last4 = '1111'` and that `secret_id` is unchanged from step 3;
+  - check that `ai_key_secrets()` returns the `…1111` value;
+  - optionally check that the Vault `description` was not blanked, which covers F4.
+
+🟢 **N2: Cosmetic.** The plan's smoke step 9 (`work/tickets/STK-074/plan.md:35`) still uses the unescaped `like`. The ADR is the authoritative procedure, so no code impact.
+
+### Still open from attempt 1
+- **F4, update_secret signature (🟢):** the real `vault.update_secret` signature is still unverified offline. It is checked once the N1 step is in the smoke procedure and Ming runs it.
+- **F9, stub guard (🟢):** not addressed. A `vault` stub could still be created on a non-local database that has no Vault. The migration guard still accepts any `vault` schema without checking `pg_extension` for `supabase_vault`. Low likelihood; acceptable as a follow-up.
+- **Manual smoke test:** not yet run on the real project. The step 7 amendment to the ADR is also still pending. It needs Ming.
+
+### Risks
+The real Vault grants for `postgres` stay unverified until the corrected smoke test is run. If one is missing, the feature fails closed (`DB_ERROR`) and nothing leaks.
+
+### Recommendations
+1. Fix N1 now (AC2 and the F3 intent). It is a docs-only change.
+2. Log F9 as a follow-up ticket (R7).
