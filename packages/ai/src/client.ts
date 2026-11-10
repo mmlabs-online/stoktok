@@ -259,6 +259,19 @@ export class AiClient {
       clearTimeout(timer);
     }
 
+    try {
+      return this.classify(res, model, final, tools, schema);
+    } catch {
+      return {
+        settle: { status: 'provider_error', inputTokens: 0, outputTokens: 0, costMicroUsd: null, errorCode: 'malformed' },
+        failure: 'provider_error',
+        calls: [],
+      };
+    }
+  }
+
+  /** May throw on a malformed provider response; callRound maps that to provider_error / malformed. */
+  private classify(res: ProviderResponse, model: string, final: boolean, tools: readonly ReadTool[], schema: GenerateInput['output']): Round {
     const base = {
       inputTokens: res.usage.inputTokens,
       outputTokens: res.usage.outputTokens,
@@ -274,6 +287,7 @@ export class AiClient {
     const calls = res.parts.filter((p): p is ToolCall => p.type === 'tool_call');
     if (calls.length > 0) {
       if (final) return bad('provider_error', 'tool_rounds_exceeded');
+      if (calls.length > this.cfg.maxToolCallsPerRound) return bad('provider_error', 'too_many_tool_calls');
       for (const call of calls) {
         const checked = checkToolCall(call, tools);
         if (!checked.ok) return bad('provider_error', checked.code);

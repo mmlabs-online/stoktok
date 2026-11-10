@@ -67,7 +67,23 @@ describe('R3 guard', () => {
   });
 
   test('apps/web importers of @stoktok/ai are only apps/web/server/ai.ts', () => {
-    const importers = files.filter((f) => /from '@stoktok\/ai(?:\/[\w-]+)?'/.test(f.text)).map((f) => f.path);
+    const importer = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"]@stoktok\/ai(?:\/[\w-]+)?['"]/;
+    const importers = files.filter((f) => importer.test(f.text)).map((f) => f.path);
     expect(importers.filter((p) => p.startsWith('apps/web/')).filter((p) => p !== 'apps/web/server/ai.ts')).toEqual([]);
+  });
+
+  test('importer regex catches single and double quotes, import() and require()', () => {
+    const importer = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"]@stoktok\/ai(?:\/[\w-]+)?['"]/;
+    for (const s of [`from '@stoktok/ai'`, `from "@stoktok/ai"`, `import('@stoktok/ai')`, `import("@stoktok/ai/fakes")`, `require('@stoktok/ai')`, `import '@stoktok/ai'`]) {
+      expect(importer.test(s), s).toBe(true);
+    }
+    expect(importer.test(`from '@stoktok/db'`)).toBe(false);
+  });
+
+  test('@stoktok/ai/fakes is imported only from test files', () => {
+    const fakes = /['"]@stoktok\/ai\/fakes['"]/;
+    const hits = files.filter((f) => fakes.test(f.text)).map((f) => f.path).filter((p) => !/\.test\.tsx?$/.test(p));
+    expect(hits).toEqual([]);
+    expect(fakes.test(`import("@stoktok/ai/fakes")`)).toBe(true);
   });
 });

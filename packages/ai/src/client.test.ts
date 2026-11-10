@@ -240,6 +240,21 @@ describe('prompt-injection defence', () => {
     expect(ledger.settles.at(-1)?.settle.errorCode).toBe('tool_rounds_exceeded');
   });
 
+  test('more tool calls than maxToolCallsPerRound: provider_error / too_many_tool_calls, nothing run, real cost', async () => {
+    const n = AI_CONFIG.maxToolCallsPerRound + 1;
+    const res: ProviderResponse = {
+      parts: Array.from({ length: n }, (_, i) => ({ type: 'tool_call' as const, id: `c${i}`, name: 'get_price', input: { symbol: 'FPT' } })),
+      stop: 'tool_use',
+      usage: usage(),
+    };
+    const tool = priceTool();
+    const { client, provider, ledger } = setup([res, answer('never')]);
+    expect(await client.generate(base({ tools: [tool] }))).toMatchObject({ ok: false, reason: 'provider_error' });
+    expect(tool.runs).toHaveLength(0);
+    expect(provider.calls).toHaveLength(1);
+    expect(ledger.settles[0]?.settle).toMatchObject({ status: 'provider_error', errorCode: 'too_many_tool_calls', costMicroUsd: usageCostMicroUsd('claude-sonnet-4-5', usage()) });
+  });
+
   test('tool run throws: provider_error, warn ai_tool_failed, no further provider call', async () => {
     const tool = priceTool({
       run: async () => {
@@ -308,6 +323,27 @@ describe('provider failures', () => {
     const c = setup([new Error('boom')]);
     await c.client.generate(base());
     expect(c.ledger.settles[0]?.settle.errorCode).toBe('http');
+  });
+
+  test.each([
+    ['missing usage', { parts: [{ type: 'text', text: 'x' }], stop: 'end' }],
+    ['missing parts', { stop: 'end', usage: usage() }],
+    ['fractional tokens', { parts: [{ type: 'text', text: 'x' }], stop: 'end', usage: usage(1.5, 2) }],
+    ['negative tokens', { parts: [{ type: 'text', text: 'x' }], stop: 'end', usage: usage(-1, 2) }],
+  ])('malformed provider response (%s) settles provider_error / malformed and does not throw', async (_n, bad) => {
+    const { client, ledger } = setup([bad as unknown as ProviderResponse]);
+    expect(await client.generate(base())).toMatchObject({ ok: false, reason: 'provider_error', usageIds: [1] });
+    expect(ledger.events).toEqual(['reserve', 'settle']);
+    expect(ledger.settles[0]?.settle).toEqual({ status: 'provider_error', inputTokens: 0, outputTokens: 0, costMicroUsd: null, errorCode: 'malformed' });
+  });
+
+  test('a schema whose parse throws settles malformed', async () => {
+    const schema = z.object({ a: z.number() }).refine(() => {
+      throw new Error('boom');
+    });
+    const { client, ledger } = setup([answer('{"a":1}')]);
+    expect(await client.generate(base({ output: schema }))).toMatchObject({ ok: false, reason: 'provider_error' });
+    expect(ledger.settles[0]?.settle.errorCode).toBe('malformed');
   });
 
   test('provider that never resolves is aborted after timeoutMs and settled as timeout', async () => {

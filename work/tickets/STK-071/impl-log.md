@@ -38,3 +38,23 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No; plan sized it as one surface.
 - Diff size: ~+1400 / -5 lines including tests and lockfile. Not committed (orchestrator commits).
+
+---
+
+## Attempt 2 (REWORK: four 🟡 findings from security-review.md attempt 1)
+
+### Files touched
+| File | Required because |
+|---|---|
+| packages/ai/src/client.ts | (1) classification moved to `classify()` inside try/catch in `callRound`: any throw settles `provider_error`/`malformed`, usage null; (4) `too_many_tool_calls` check before settle |
+| packages/core/src/ai/config.ts | (4) `maxToolCallsPerRound` (default 8) + positive-integer validation |
+| packages/core/src/ai/config.test.ts | (4) rejects 0, 1.5, NaN |
+| packages/ai/src/client.test.ts | (1) malformed usage/parts/fractional/negative tokens and throwing refine; (4) cap exceeded, nothing run |
+| packages/db/src/r3-guard.test.ts | (2) importer regex handles both quotes, `import()`, `require()`, bare import, with a self-test; (3) `@stoktok/ai/fakes` only from `*.test.ts(x)` |
+
+### Checks
+- typecheck: clean; lint: clean
+- test: core 776, ai 60, sources 35, db 169 (+1 todo), worker 292, web 302 passed
+
+### Out-of-plan files
+None (all four fixes were requested by Ming). Not committed.
