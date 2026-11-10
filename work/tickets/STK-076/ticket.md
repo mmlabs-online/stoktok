@@ -7,7 +7,7 @@
 | Areas | security, ui |
 | Attempts | 1 |
 | Created | 2026-11-10 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/57 |
 
 ## Goal
 Let Ming paste, replace and delete the Anthropic and Google AI keys from a "Khóa AI" card on Settings, using the STK-074 Vault storage, without the key ever being sent back to the browser. Split from STK-074 (see work/tickets/STK-074/plan.md "Split proposal"); UI design in work/tickets/STK-074/consult-data-visualization-engineer.md.
