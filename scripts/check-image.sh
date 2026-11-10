@@ -51,6 +51,9 @@ done
 docker logs "$NAME"
 if [ "$ok" -ne 1 ]; then echo "::error::web smoke failed: /healthz did not return 200"; exit 1; fi
 if ! probe / '0'; then echo "::error::web smoke failed: / did not answer"; exit 1; fi
+if ! docker exec -w /app/apps/web "$NAME" node -e "Promise.all([import('@anthropic-ai/sdk'),import('@google/genai')]).then(()=>process.exit(0),()=>process.exit(1))"; then
+  echo "::error::web smoke failed: AI SDKs do not resolve from /app/apps/web"; exit 1
+fi
 if docker logs "$NAME" 2>&1 | grep -E 'Cannot find module|MODULE_NOT_FOUND'; then
   echo "::error::web smoke failed: module not found"; exit 1
 fi

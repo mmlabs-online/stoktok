@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
 import type { Db } from '../client';
-import { getAiMonthSpend, reserveAiUsage, settleAiUsage } from './ai-usage';
+import { DataError } from '../errors';
+import { aiUsageLedger, getAiMonthSpend, reserveAiUsage, settleAiUsage } from './ai-usage';
 
 const window = { fromTs: '2026-10-31T17:00:00.000Z', toTs: '2026-11-30T17:00:00.000Z' };
 const req = { provider: 'google', model: 'gemini-2.5-flash', task: 'summary', reserveMicroUsd: 600, capMicroUsd: 5_000_000, window } as const;
@@ -90,5 +91,33 @@ describe('getAiMonthSpend', () => {
     const f = createFake();
     f.respond({ error: { code: '42501' } });
     await expect(getAiMonthSpend(f.db as unknown as Db, window)).rejects.toMatchObject({ code: 'DB_ERROR' });
+  });
+});
+
+describe('aiUsageLedger', () => {
+  const now = new Date('2026-11-10T01:00:00Z');
+  test('binds reserve, settle and monthSpend to db', async () => {
+    const f = createFake();
+    f.respond({ data: [{ usage_id: 3, granted: true, spent_micro_usd: 10 }] });
+    f.respond({ data: [{ id: 3 }] });
+    f.respond({ data: '4000000' });
+    const ledger = aiUsageLedger(f.db as unknown as Db);
+    expect(await ledger.reserve(req)).toEqual({ usageId: 3, granted: true, spentMicroUsd: 10 });
+    expect(await ledger.settle(3, { status: 'ok', inputTokens: 1, outputTokens: 2, costMicroUsd: 5 }, now)).toBe(true);
+    expect(await ledger.monthSpend(window)).toBe(4_000_000);
+    expect(f.methods('rpc').map((c) => c.table)).toEqual(['ai_reserve', 'ai_month_spend']);
+    expect(f.methods('update')).toHaveLength(1);
+  });
+  test('reserve passes a 22023 DataError through with pgCode intact', async () => {
+    const f = createFake();
+    f.respond({ error: { code: '22023' } });
+    const err = await aiUsageLedger(f.db as unknown as Db).reserve(req).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DataError);
+    expect((err as DataError).pgCode).toBe('22023');
+  });
+  test('monthSpend errors propagate (no zero)', async () => {
+    const f = createFake();
+    f.respond({ error: { code: '42501' } });
+    await expect(aiUsageLedger(f.db as unknown as Db).monthSpend(window)).rejects.toMatchObject({ code: 'DB_ERROR' });
   });
 });

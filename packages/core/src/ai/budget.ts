@@ -46,3 +46,22 @@ export function budgetStatus(spentMicroUsd: number, cfg: AiConfig = AI_CONFIG): 
     level: budgetLevel(spentMicroUsd, cfg),
   };
 }
+
+export interface AiBudgetMeter {
+  /** 0-100, clamped. */
+  fillPercent: number;
+  /** Position of the warn mark on the 0-100 scale. */
+  warnPercent: number;
+  /** "MM/YYYY" in Vietnam time. */
+  monthLabel: string;
+}
+
+/** Display geometry for the usage meter; the warn mark comes from config (R5). */
+export function aiBudgetMeter(status: BudgetStatus, now: Date, cfg: AiConfig = AI_CONFIG): AiBudgetMeter {
+  const [y, m] = vnDateOf(now).split('-') as [string, string];
+  return {
+    fillPercent: Math.min(Math.max(status.percent, 0), 100),
+    warnPercent: cfg.budget.warnPpm / 10_000,
+    monthLabel: `${m}/${y}`,
+  };
+}

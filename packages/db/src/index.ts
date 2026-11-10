@@ -70,6 +70,6 @@ export {
   updateLotteryTicket,
   upsertLotteryDraws,
 } from './repos/lottery';
-export { getAiMonthSpend, reserveAiUsage, settleAiUsage } from './repos/ai-usage';
+export { aiUsageLedger, getAiMonthSpend, reserveAiUsage, settleAiUsage } from './repos/ai-usage';
 export type { AiReserveRequest, AiReserveResult } from './repos/ai-usage';
 export type { AiUsageSettle } from './rows';
