@@ -7,7 +7,7 @@
 | Areas | data, db, ui, security |
 | Attempts | 3 |
 | Created | 2026-11-08 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/58 |
 
 ## Goal
 After EOD, generate a short Vietnamese summary for each holding and watchlist symbol, plus one for the whole portfolio. The summaries cover the day's price move, signals, new news and the latest financial statements. Every claim cites a stored input. Show them on the Tài sản screen and on the symbol screen.
