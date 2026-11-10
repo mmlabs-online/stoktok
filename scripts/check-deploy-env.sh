@@ -123,6 +123,12 @@ if [ -z "$optional" ]; then
   fail=1
 fi
 printf_line="$(grep -F "printf 'SUPABASE_URL=" "$WF" || true)"
+# Exactly one printf, and it is the plain `printf '<format>' "$VAR"... > "$tmp"` line (no second command on it, no other target).
+printf_shape="^[[:space:]]+printf '[^']*'( \"\\\$[A-Z][A-Z0-9_]*\")+ > \"\\\$tmp\"[[:space:]]*\$"
+if [ "$(grep -cF "printf 'SUPABASE_URL=" "$WF")" -ne 1 ] || ! echo "$printf_line" | grep -qE "$printf_shape"; then
+  echo "FAIL: workflow needs exactly one env-file printf of the form: printf '...' \"\$VAR\"... > \"\$tmp\"" >&2
+  fail=1
+fi
 written_keys="$(echo "$printf_line" | grep -oE '[A-Z][A-Z0-9_]*=%s' | sed 's/=%s//' | sort -u || true)"
 wanted_keys="$(printf '%s\n' $required $optional | grep . | sort -u || true)"
 if ! diff <(echo "$wanted_keys") <(echo "$written_keys"); then
@@ -154,12 +160,14 @@ for k in $optional; do
     echo "FAIL: optional key $k has a missing line in the workflow (an unset optional secret must not fail the run)" >&2
     fail=1
   fi
-  # The guard is a non-comment `if ! [[ ... ]]; then` with `exit 1` within 4 lines, in the secrets step, before mktemp.
+  # The guard is a whole non-comment line `if ! [[ ... ]]; then` with `exit 1` within 4 lines, in the secrets step, before mktemp and the printf.
   guard_ok="$(echo "$secrets_step" | awk -v k="$k" '
-    index($0, "if ! [[ \"$" k "\" =~ ^[A-Za-z0-9._-]*$ ]]; then") && !g { g = NR; next }
+    { l = $0; sub(/^[[:space:]]+/, "", l); sub(/[[:space:]]+$/, "", l) }
+    l == "if ! [[ \"$" k "\" =~ ^[A-Za-z0-9._-]*$ ]]; then" && !g { g = NR; next }
     g && !x && NR <= g + 4 && /^[[:space:]]*exit 1[[:space:]]*$/ { x = 1 }
     /mktemp/ && !m { m = NR }
-    END { print (g && x && m && g < m) ? "yes" : "no" }')"
+    /printf .SUPABASE_URL=/ && !p { p = NR }
+    END { print (g && x && m && p && g < m && g < p) ? "yes" : "no" }')"
   if [ "$guard_ok" != yes ]; then
     echo "FAIL: optional key $k lacks the guard 'if ! [[ \"\$$k\" =~ ^[A-Za-z0-9._-]*\$ ]]; then' + exit 1 before mktemp in the secrets step" >&2
     fail=1
@@ -167,7 +175,7 @@ for k in $optional; do
 done
 # The secrets step writes the env file only with the one printf; no other redirect to $tmp / $ENV_FILE, no tee.
 other_writers="$(echo "$secrets_step" | grep -vF "printf 'SUPABASE_URL=" \
-  | grep -E '>>?[[:space:]]*"?\$\{?(tmp|ENV_FILE)|(^|[^A-Za-z_])tee([^A-Za-z_]|$)' || true)"
+  | grep -E '>(>|\|)?[[:space:]]*"?\$\{?(tmp|ENV_FILE)|(^|[^A-Za-z_])tee([^A-Za-z_]|$)' || true)"
 if [ -n "$other_writers" ]; then
   echo "FAIL: secrets step writes to the env file outside the single printf: $other_writers" >&2
   fail=1

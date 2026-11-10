@@ -66,3 +66,29 @@ None (the script is in the plan's file list from attempt 1; workflow unchanged).
 ### Follow-ups
 - Not done (outside the two findings): pin the four required keys' `+` guards the same way; restrict `secrets.` mappings to the `secrets` step.
 - The writer check matches redirects to `$tmp`/`$ENV_FILE` and `tee` only; a writer using another path or `cp`/`mv` is not caught.
+
+## Attempt 3 (REWORK) — 2026-11-10
+
+Scope: review.md Attempt 2, Issues 1 and 2 plus the `>|` nit. Only `scripts/check-deploy-env.sh` changed.
+
+### Files touched
+| File | Required because |
+|---|---|
+| `scripts/check-deploy-env.sh` | Issue 1: the guard awk compares the whole trimmed line (no `index`). Issue 2: FAIL unless exactly one `printf 'SUPABASE_URL=` line exists and it matches the anchored `printf '...' "$VAR"... > "$tmp"` shape; the awk also records the printf line `p` and requires `g < m && g < p`. Nit: redirect pattern is now `>(>\|\|)?`. |
+
+### Tests (negative cases, each on a fresh scratch copy, repo untouched; script `neg3.sh` in the scratchpad)
+- Baseline OK exit 0; N1-N10, N11a-c, N12a-c unchanged (exit 1, same FAIL lines).
+- N11d (real guard line replaced by `^.*$` check with the pinned text in a trailing comment): exit 1, guard FAIL.
+- N12d (`; echo "X=$Y" >> "$tmp"` appended to the printf line): exit 1, printf-shape FAIL.
+- N12e (printf retargeted to `> "${ENV_FILE}"` and moved above the guards): exit 1, printf-shape FAIL plus both guard FAILs.
+- N12f (`echo X >| "$tmp"`): exit 1, other-writer FAIL.
+
+### Checks
+- check:deploy-env: `OK: deploy env lists consistent`
+- typecheck: exit 0; lint: exit 0; test: exit 0 (core 776, sources 35, ai 62, db 169, worker 292, web 302).
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+As listed in review.md Attempt 2 (required-key guards, `secrets.` confinement, other writers, committing the negative-case script).
