@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addVnd, applyRatePpm, assertVnd, floorDiv, mulDiv, roundDiv } from './money';
+import { addVnd, applyRatePpm, assertVnd, ceilDiv, floorDiv, mulDiv, roundDiv } from './money';
 
 describe('roundDiv half-up', () => {
   it('rounds half away from zero', () => {
@@ -63,5 +63,16 @@ describe('floorDiv', () => {
     expect(() => floorDiv(10, -2)).toThrow(RangeError);
     expect(() => floorDiv(1.5, 2)).toThrow(RangeError);
     expect(() => floorDiv(10, 0.5)).toThrow(RangeError);
+  });
+});
+
+describe('ceilDiv', () => {
+  it('exact, rounds up positive remainders, 0 stays 0, denom <= 0 throws', () => {
+    expect(ceilDiv(6n, 3n)).toBe(2n);
+    expect(ceilDiv(7n, 3n)).toBe(3n);
+    expect(ceilDiv(1n, 1_000_000n)).toBe(1n);
+    expect(ceilDiv(0n, 5n)).toBe(0n);
+    expect(() => ceilDiv(1n, 0n)).toThrow(RangeError);
+    expect(() => ceilDiv(1n, -2n)).toThrow(RangeError);
   });
 });
