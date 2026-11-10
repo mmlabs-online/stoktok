@@ -7,7 +7,7 @@
 | Areas | architecture, security |
 | Attempts | 3 |
 | Created | 2026-11-10 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/52 |
 
 ## Goal
 Make `ANTHROPIC_API_KEY` and `GOOGLE_AI_API_KEY` known to the deploy tooling as **optional** secrets, so Ming can set them once and a missing key just disables that provider. Split from STK-071 (deploy half of its AC5; see work/tickets/STK-071/plan.md "Split proposal").
