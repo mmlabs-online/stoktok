@@ -9,6 +9,7 @@ export interface GoogleModelsClient {
 
 export type GoogleProviderOptions = { client: GoogleModelsClient } | { apiKey: string; timeoutMs?: number };
 
+const GOOGLE_BASE_URL = 'https://generativelanguage.googleapis.com';
 const SYNTHETIC_ID = 'gsyn_';
 const REFUSED = new Set(['SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII']);
 
@@ -21,13 +22,15 @@ function toPart(p: Part): Record<string, unknown> | null {
   return { functionResponse: { name: p.name, response: { result: p.text }, ...withId(p.id) } };
 }
 
-function usageOf(raw: unknown): Usage | null {
+function usageOf(raw: unknown, hasOutput: boolean): Usage | null {
   if (!isObj(raw)) return null;
   const prompt = raw.promptTokenCount;
   const toolUse = raw.toolUsePromptTokenCount ?? 0;
-  const out = [raw.candidatesTokenCount ?? 0, raw.thoughtsTokenCount ?? 0];
   const ok = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
-  if (!ok(prompt) || !ok(toolUse) || !out.every(ok)) return null;
+  if (!ok(prompt) || !ok(toolUse)) return null;
+  // Output came back but the candidate count is missing: derive it (thoughts included) from the total, never settle 0.
+  const out = raw.candidatesTokenCount === undefined && hasOutput ? [raw.totalTokenCount === undefined ? NaN : (raw.totalTokenCount as number) - prompt - toolUse] : [raw.candidatesTokenCount ?? 0, raw.thoughtsTokenCount ?? 0];
+  if (!out.every(ok) || (raw.candidatesTokenCount === undefined && hasOutput && !ok(raw.totalTokenCount))) return null;
   return toUsage(prompt + toolUse, (out as number[]).reduce((a, b) => a + b, 0));
 }
 
@@ -61,9 +64,10 @@ function buildParams(req: ProviderRequest): Record<string, unknown> {
 
 function parseResponse(raw: unknown, req: ProviderRequest): ProviderResponse {
   if (!isObj(raw)) throw new ProviderError('malformed', null);
-  const usage = usageOf(raw.usageMetadata);
-  if (!usage) throw new ProviderError('malformed', null);
   const candidate = Array.isArray(raw.candidates) ? (raw.candidates as unknown[])[0] : undefined;
+  const cparts = isObj(candidate) && isObj(candidate.content) ? candidate.content.parts : undefined;
+  const usage = usageOf(raw.usageMetadata, Array.isArray(cparts) && cparts.length > 0);
+  if (!usage) throw new ProviderError('malformed', null);
   if (!isObj(candidate)) {
     const blocked = isObj(raw.promptFeedback) && raw.promptFeedback.blockReason;
     throw new ProviderError(blocked ? 'refused' : 'malformed', usage);
@@ -87,15 +91,16 @@ function parseResponse(raw: unknown, req: ProviderRequest): ProviderResponse {
       calls += 1;
     } else throw new ProviderError('malformed', usage);
   }
+  const reason = candidate.finishReason;
+  if (typeof reason === 'string' && REFUSED.has(reason)) throw new ProviderError('refused', usage);
+  if (reason !== 'STOP' && reason !== 'MAX_TOKENS') throw new ProviderError('malformed', usage);
   if (finalOutput) {
     if (calls > 1) throw new ProviderError('malformed', usage);
-    return { parts: [finalOutput], stop: 'end', usage };
+    // A truncated final_output is partial JSON: never hand it back.
+    return reason === 'MAX_TOKENS' ? { parts: [], stop: 'max_tokens', usage } : { parts: [finalOutput], stop: 'end', usage };
   }
-  const reason = candidate.finishReason;
-  if (reason === 'STOP') return { parts, stop: calls > 0 ? 'tool_use' : 'end', usage };
   if (reason === 'MAX_TOKENS') return { parts, stop: 'max_tokens', usage };
-  if (typeof reason === 'string' && REFUSED.has(reason)) throw new ProviderError('refused', usage);
-  throw new ProviderError('malformed', usage);
+  return { parts, stop: calls > 0 ? 'tool_use' : 'end', usage };
 }
 
 export function createGoogleProvider(opts: GoogleProviderOptions): LlmProvider {
@@ -103,7 +108,7 @@ export function createGoogleProvider(opts: GoogleProviderOptions): LlmProvider {
     'client' in opts
       ? opts.client
       : (() => {
-          const sdk = new GoogleGenAI({ apiKey: opts.apiKey, httpOptions: { timeout: opts.timeoutMs ?? 60_000, retryOptions: { attempts: 1 } } });
+          const sdk = new GoogleGenAI({ apiKey: opts.apiKey, vertexai: false, httpOptions: { baseUrl: GOOGLE_BASE_URL, timeout: opts.timeoutMs ?? 60_000, retryOptions: { attempts: 1 } } });
           return { models: { generateContent: (p) => sdk.models.generateContent(p as never) } };
         })();
 

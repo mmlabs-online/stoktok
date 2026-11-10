@@ -176,3 +176,21 @@ describe('anthropic through AiClient', () => {
     expect(ledger.settles.every((s) => s.settle.status === 'ok')).toBe(true);
   });
 });
+
+describe('anthropic final_output stop handling', () => {
+  const fo = (stop_reason: unknown, content: unknown[] = anthropicFinalOutput.content as never) => ({ ...anthropicText, content, stop_reason });
+  test('truncated final_output -> max_tokens, no parts', async () => {
+    const r = await fake(fo('max_tokens')).provider.generate(req({ output: out }));
+    expect(r).toMatchObject({ parts: [], stop: 'max_tokens', usage: { inputTokens: 120, outputTokens: 40 } });
+  });
+  test('refusal with final_output -> refused with usage', async () => {
+    await expect(fake(fo('refusal')).provider.generate(req({ output: out }))).rejects.toMatchObject({ code: 'refused', usage: { inputTokens: 120 } });
+  });
+  test('malformed stop reason with final_output -> malformed', async () => {
+    await expect(fake(fo('weird')).provider.generate(req({ output: out }))).rejects.toMatchObject({ code: 'malformed', usage: { inputTokens: 120 } });
+  });
+  test('second final_output -> malformed with usage', async () => {
+    const two = fo('tool_use', [...anthropicFinalOutput.content, { type: 'tool_use', id: 'toolu_g', name: 'final_output', input: { summary: 'again' } }]);
+    await expect(fake(two).provider.generate(req({ output: out }))).rejects.toMatchObject({ code: 'malformed', usage: { inputTokens: 120 } });
+  });
+});

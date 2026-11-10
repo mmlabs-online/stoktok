@@ -9,6 +9,7 @@ export interface AnthropicMessagesClient {
 
 export type AnthropicProviderOptions = { client: AnthropicMessagesClient } | { apiKey: string; timeoutMs?: number };
 
+const ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null;
 
 function toBlock(p: Part): Record<string, unknown> | null {
@@ -54,28 +55,36 @@ function parseResponse(raw: unknown, req: ProviderRequest): ProviderResponse {
     if (!isObj(b)) throw new ProviderError('malformed', usage);
     if (b.type === 'text' && typeof b.text === 'string') parts.push({ type: 'text', text: b.text });
     else if (b.type === 'tool_use' && typeof b.id === 'string' && typeof b.name === 'string') {
-      if (b.name === FINAL_OUTPUT_TOOL) finalOutput = { type: 'json', value: unwrapOutput(b.input, wrapped) };
-      else parts.push({ type: 'tool_call', id: b.id, name: b.name, input: b.input });
+      if (b.name === FINAL_OUTPUT_TOOL) {
+        if (finalOutput) throw new ProviderError('malformed', usage);
+        finalOutput = { type: 'json', value: unwrapOutput(b.input, wrapped) };
+      } else parts.push({ type: 'tool_call', id: b.id, name: b.name, input: b.input });
     } else throw new ProviderError('malformed', usage);
   }
-  if (finalOutput) {
-    if (parts.some((p) => p.type === 'tool_call')) throw new ProviderError('malformed', usage);
-    return { parts: [finalOutput], stop: 'end', usage };
-  }
+  let stop: ProviderResponse['stop'];
   switch (raw.stop_reason) {
     case 'end_turn':
     case 'stop_sequence':
-      return { parts, stop: 'end', usage };
+      stop = 'end';
+      break;
     case 'tool_use':
-      return { parts, stop: 'tool_use', usage };
+      stop = 'tool_use';
+      break;
     case 'max_tokens':
     case 'model_context_window_exceeded':
-      return { parts, stop: 'max_tokens', usage };
+      stop = 'max_tokens';
+      break;
     case 'refusal':
       throw new ProviderError('refused', usage);
     default:
       throw new ProviderError('malformed', usage);
   }
+  if (finalOutput) {
+    if (parts.some((p) => p.type === 'tool_call')) throw new ProviderError('malformed', usage);
+    // A truncated final_output is partial JSON: never hand it back.
+    return stop === 'max_tokens' ? { parts: [], stop, usage } : { parts: [finalOutput], stop: 'end', usage };
+  }
+  return { parts, stop, usage };
 }
 
 export function createAnthropicProvider(opts: AnthropicProviderOptions): LlmProvider {
@@ -83,7 +92,7 @@ export function createAnthropicProvider(opts: AnthropicProviderOptions): LlmProv
     'client' in opts
       ? opts.client
       : (() => {
-          const sdk = new Anthropic({ apiKey: opts.apiKey, maxRetries: 0, timeout: opts.timeoutMs ?? 60_000 });
+          const sdk = new Anthropic({ apiKey: opts.apiKey, baseURL: ANTHROPIC_BASE_URL, authToken: null, logLevel: 'off', maxRetries: 0, timeout: opts.timeoutMs ?? 60_000 });
           return { messages: { create: (p, o) => sdk.messages.create(p as never, o) } };
         })();
 

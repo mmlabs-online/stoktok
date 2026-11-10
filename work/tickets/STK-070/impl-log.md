@@ -53,3 +53,20 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No; every file is in the plan list.
 - Diff size: ~+390/-17 in tracked files (mostly pnpm-lock.yaml) plus new adapter, fixture and test files.
+
+## Attempt 2 (REWORK: security-review attempt 1 findings 1-4)
+
+### Files touched
+- `packages/ai/src/adapters/anthropic.ts`: stop-reason mapping now runs before `final_output` is returned (truncated -> `max_tokens` with no parts, refusal -> `refused`, unknown -> `malformed`); a second `final_output` block -> `malformed` with usage; SDK pinned with `baseURL`, `authToken: null`, `logLevel: 'off'`.
+- `packages/ai/src/adapters/google.ts`: finish-reason mapping before `final_output` (same rules); when output parts came back and `candidatesTokenCount` is missing, output tokens = `totalTokenCount - prompt - toolUsePrompt` (thoughts included), otherwise `malformed` with null usage; SDK pinned with `vertexai: false`, `httpOptions.baseUrl`.
+- `packages/ai/src/adapters/anthropic.test.ts`, `google.test.ts`: new cases for each finding; one old Google assertion (text output with only `promptTokenCount` -> 0 output) changed to use no output parts, since that case is now `malformed`.
+- `packages/ai/src/adapters/sdk-pins.test.ts` (new): mocks both SDK constructors and asserts the pinned options.
+
+Shared helpers unchanged. SDK option names confirmed in installed .d.ts (`ClientOptions.baseURL/authToken/logLevel` incl. `'off'`; `GoogleGenAIOptions.vertexai`, `HttpOptions.baseUrl`).
+
+### Checks
+- typecheck, lint: all workspaces pass
+- test: ai 165 passed (9 files); core 776; sources 35; db 169 + 1 todo; worker 292; web 302
+
+### Out-of-plan files
+None. Not committed (as instructed).

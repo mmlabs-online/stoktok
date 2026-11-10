@@ -125,7 +125,7 @@ describe('google response', () => {
   test('usage = prompt + toolUsePrompt; output = candidates + thoughts', async () => {
     const meta = { promptTokenCount: 10, toolUsePromptTokenCount: 5, candidatesTokenCount: 7, thoughtsTokenCount: 3, cachedContentTokenCount: 99 };
     expect((await fake(googleWith([{ text: 'a' }], 'STOP', meta)).provider.generate(req())).usage).toEqual({ inputTokens: 15, outputTokens: 10 });
-    expect((await fake(googleWith([{ text: 'a' }], 'STOP', { promptTokenCount: 4 })).provider.generate(req())).usage).toEqual({ inputTokens: 4, outputTokens: 0 });
+    expect((await fake(googleWith([], 'STOP', { promptTokenCount: 4 })).provider.generate(req())).usage).toEqual({ inputTokens: 4, outputTokens: 0 });
   });
   test.each([[undefined], [{}], [{ promptTokenCount: 1.5 }], [{ promptTokenCount: 1, candidatesTokenCount: -1 }]])('missing or invalid usageMetadata %j -> malformed with null usage', async (meta) => {
     await expect(fake({ ...googleWith([{ text: 'a' }]), usageMetadata: meta }).provider.generate(req())).rejects.toMatchObject({ code: 'malformed', usage: null });
@@ -157,5 +157,38 @@ describe('google through AiClient', () => {
     const r = await client.generate({ task: 'chat', system: 's', messages: [{ role: 'user', parts: [{ type: 'text', text: 'hi' }] }], tools: [priceTool], output: z.object({ summary: z.string() }), provider: 'google' });
     expect(r).toMatchObject({ ok: true, value: { summary: 'ok' }, provider: 'google' });
     expect(calls).toHaveLength(2);
+  });
+});
+
+describe('google final_output stop handling', () => {
+  const fo = [{ functionCall: { name: 'final_output', args: { summary: 'ok' } } }];
+  test('truncated final_output -> max_tokens, no parts', async () => {
+    const r = await fake(googleWith(fo, 'MAX_TOKENS')).provider.generate(req({ output: out }));
+    expect(r).toMatchObject({ parts: [], stop: 'max_tokens', usage: { inputTokens: 120, outputTokens: 40 } });
+  });
+  test('safety with final_output -> refused with usage', async () => {
+    await expect(fake(googleWith(fo, 'SAFETY')).provider.generate(req({ output: out }))).rejects.toMatchObject({ code: 'refused', usage: { inputTokens: 120 } });
+  });
+  test.each([['OTHER'], [null]])('finish reason %s with final_output -> malformed', async (reason) => {
+    await expect(fake(googleWith(fo, reason)).provider.generate(req({ output: out }))).rejects.toMatchObject({ code: 'malformed', usage: { inputTokens: 120 } });
+  });
+});
+
+describe('google missing candidatesTokenCount', () => {
+  const text = [{ text: 'hi' }];
+  test('derives output from total minus prompt and tool-use prompt', async () => {
+    const r = await fake(googleWith(text, 'STOP', { promptTokenCount: 100, toolUsePromptTokenCount: 20, totalTokenCount: 170 })).provider.generate(req());
+    expect(r.usage).toEqual({ inputTokens: 120, outputTokens: 50 });
+  });
+  test.each([
+    ['no total', { promptTokenCount: 100 }],
+    ['total below prompt', { promptTokenCount: 100, totalTokenCount: 50 }],
+    ['invalid total', { promptTokenCount: 100, totalTokenCount: 1.5 }],
+  ])('%s -> malformed with null usage', async (_n, meta) => {
+    await expect(fake(googleWith(text, 'STOP', meta)).provider.generate(req())).rejects.toMatchObject({ code: 'malformed', usage: null });
+  });
+  test('no output parts keeps 0', async () => {
+    const r = await fake(googleWith([], 'MAX_TOKENS', { promptTokenCount: 100 })).provider.generate(req());
+    expect(r.usage).toEqual({ inputTokens: 100, outputTokens: 0 });
   });
 });
