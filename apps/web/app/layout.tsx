@@ -1,13 +1,17 @@
 import type { Metadata } from 'next';
-import { Nunito } from 'next/font/google';
+import localFont from 'next/font/local';
 import type { ReactNode } from 'react';
 import { THEME_INIT_SCRIPT } from '../components/shell/theme';
 import './globals.css';
 
-// Self-hosted at build time by next/font: no request to Google at runtime.
-const nunito = Nunito({
-  subsets: ['latin', 'vietnamese'],
-  weight: ['400', '600', '700', '800'],
+// Nunito is committed in app/fonts (SIL OFL 1.1), so builds need no network.
+const nunito = localFont({
+  src: [
+    { path: './fonts/Nunito-400.woff2', weight: '400', style: 'normal' },
+    { path: './fonts/Nunito-600.woff2', weight: '600', style: 'normal' },
+    { path: './fonts/Nunito-700.woff2', weight: '700', style: 'normal' },
+    { path: './fonts/Nunito-800.woff2', weight: '800', style: 'normal' },
+  ],
   variable: '--font-nunito',
   display: 'swap',
 });
