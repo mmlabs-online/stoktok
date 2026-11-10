@@ -46,3 +46,25 @@ None. Deviations inside planned files:
 ### Scope self-check
 - Could the diff be smaller? No; every file is in the plan.
 - Diff size: about +1,000 lines new, 153 added / 17 removed in modified files.
+
+## Attempt 2 — 2026-11-10 (REWORK: review attempt 1, Issue 1)
+
+### Files touched
+| File | Required because |
+|---|---|
+| supabase/migrations/20261109000100_ai_usage.sql | Issue 1: `ai_reserve` argument guard now raises 22023 on any NULL argument (fails closed) |
+| scripts/db-check/checks.sql | Issue 1: `ai_reserve_gate` block gains expect_fail cases (service_role) for NULL from/to/cap/reserve, from >= to, reserve < 0, each expecting 22023 |
+
+### Checks
+- typecheck, lint: green.
+- test: core 763, db 164 (1 todo), sources 35, worker 292, web 302; all passed.
+- db:check: "db:check OK".
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+None new. Review nits left untouched (out of rework scope).
+
+### Scope self-check
+Only the two files named in Issue 1 changed.

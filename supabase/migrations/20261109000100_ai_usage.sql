@@ -49,7 +49,9 @@ declare
   v_id bigint;
   v_granted boolean;
 begin
-  if p_reserve_micro_usd < 0 or p_cap_micro_usd <= 0 or p_from >= p_to then
+  if p_provider is null or p_model is null or p_task is null
+     or p_reserve_micro_usd is null or p_cap_micro_usd is null or p_from is null or p_to is null
+     or p_reserve_micro_usd < 0 or p_cap_micro_usd <= 0 or p_from >= p_to then
     raise exception 'invalid ai_reserve arguments' using errcode = '22023';
   end if;
 

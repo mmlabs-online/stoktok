@@ -567,6 +567,12 @@ begin
   insert into public.ai_usage (created_at, provider, model, task, status, reserved_micro_usd, cost_micro_usd, settled_at)
     values (now() - interval '40 days', 'google', 'gemini-2.5-flash', 'summary', 'ok', 999, 999, now() - interval '40 days');
   if public.ai_month_spend(w_from, w_to) <> 1000 then raise exception 'CHECK FAILED: ai_reserve_gate (month spend / previous month counted)'; end if;
+  perform pg_temp.expect_fail('ai_reserve null from', 'select public.ai_reserve(''google'', ''m'', ''summary'', 1, 1000, null, now())', array['22023']);
+  perform pg_temp.expect_fail('ai_reserve null to', 'select public.ai_reserve(''google'', ''m'', ''summary'', 1, 1000, now() - interval ''1 day'', null)', array['22023']);
+  perform pg_temp.expect_fail('ai_reserve null cap', 'select public.ai_reserve(''google'', ''m'', ''summary'', 1, null, now() - interval ''1 day'', now())', array['22023']);
+  perform pg_temp.expect_fail('ai_reserve null reserve', 'select public.ai_reserve(''google'', ''m'', ''summary'', null, 1000, now() - interval ''1 day'', now())', array['22023']);
+  perform pg_temp.expect_fail('ai_reserve from >= to', 'select public.ai_reserve(''google'', ''m'', ''summary'', 1, 1000, now(), now())', array['22023']);
+  perform pg_temp.expect_fail('ai_reserve negative reserve', 'select public.ai_reserve(''google'', ''m'', ''summary'', -1, 1000, now() - interval ''1 day'', now())', array['22023']);
   reset role;
   delete from public.ai_usage;
 end $$;
