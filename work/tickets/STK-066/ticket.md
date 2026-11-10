@@ -27,3 +27,4 @@ docs/spec-v1.md §6 (changed by this ticket), §3 F5–F7, §1.3 non-goals. CLAU
 ## Notes / answers from Ming
 - 2026-11-08: Chat is free ("tự do"), not cited-only. The model may use general knowledge and suggest investments. Providers are Claude API and Google AI API, with a budget of 5 USD/month.
 - Planner default to confirm: no live web search in this ticket (the agent sees stored data plus model knowledge). Live web search can be a follow-up.
+- 2026-11-10 (orchestrator): waits for STK-070 (the AI layer was split from STK-063 into STK-063, STK-069 and STK-070).

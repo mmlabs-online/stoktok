@@ -56,9 +56,11 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-060 | Remove the allowlist check; any verified Supabase Auth user can sign in | DONE | P2 | security, architecture | 1 | 2026-11-07 |
 | STK-061 | Income statement and balance sheet lines for the AI layer | DONE | P2 | data, db, finance | 1 | 2026-11-08 |
 | STK-062 | News adapters (CafeF, Vietstock, VnExpress) and news store | DONE | P2 | data, db, security | 1 | 2026-11-08 |
-| STK-063 | AI provider layer (Claude + Google AI) with budget cap and usage log | REVIEW | P2 | architecture, security, db | 2 | 2026-11-10 |
+| STK-063 | AI budget and usage foundation (slice 1 of 3: config, cost, budget gate, ai_usage) | DONE | P2 | architecture, security, db | 2 | 2026-11-10 |
 | STK-064 | Daily AI summaries per symbol and per portfolio (F5) | BACKLOG | P2 | data, ui, security | 0 | 2026-11-08 |
 | STK-065 | Rule-based suggestions with AI explanation, and the suggestion scorecard (F6 + F7) | BACKLOG | P2 | finance, db, ui | 0 | 2026-11-08 |
 | STK-066 | Free chat with a stock-analysis agent | BACKLOG | P2 | architecture, security, ui, finance | 0 | 2026-11-08 |
 | STK-067 | Financial ratios derived in core (margins, D/E, ROE, ROA, YoY, P/E, P/B) | BACKLOG | P2 | finance, db | 0 | 2026-11-08 |
 | STK-068 | Cash-flow statement lines and free cash flow | BLOCKED | P2 | data, finance | 0 | 2026-11-08 |
+| STK-069 | AI client, guards and secrets (STK-063 slice 2) | BACKLOG | P2 | architecture, security | 0 | 2026-11-10 |
+| STK-070 | Claude and Gemini adapters, wiring and AI usage card (STK-063 slice 3) | BACKLOG | P2 | architecture, security, ui | 0 | 2026-11-10 |
