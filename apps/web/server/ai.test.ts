@@ -62,4 +62,12 @@ describe('server/ai', () => {
     expect(JSON.stringify(spies.flatMap((s) => s.mock.calls))).not.toContain('SENTINEL');
     spies.forEach((s) => s.mockRestore());
   });
+  test('aiEnvPresence returns booleans only', async () => {
+    const { aiEnvPresence } = await import('./ai');
+    const sentinel = 'DUMMY-SENTINEL-not-a-real-key';
+    const r = aiEnvPresence({ anthropicApiKey: sentinel });
+    expect(r).toEqual({ anthropic: true, google: false });
+    expect(JSON.stringify(r)).not.toContain('SENTINEL');
+    expect(aiEnvPresence({})).toEqual({ anthropic: false, google: false });
+  });
 });

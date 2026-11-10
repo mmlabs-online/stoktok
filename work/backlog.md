@@ -69,4 +69,4 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-073 | AI wiring and AI usage card (STK-063 slice 3b) | DONE | P2 | architecture, security, ui | 2 | 2026-11-10 |
 | STK-074 | AI provider keys in Supabase Vault and key resolution (slice a) | DONE | P2 | security, db, architecture, ui | 3 | 2026-11-10 |
 | STK-075 | Self-host the Nunito font so web builds need no network | DONE | P1 | ui | 1 | 2026-11-10 |
-| STK-076 | Settings "Khóa AI" card and key save/delete actions (STK-074 slice b) | BACKLOG | P2 | security, ui | 0 | 2026-11-10 |
+| STK-076 | Settings "Khóa AI" card and key save/delete actions (STK-074 slice b) | DONE | P2 | security, ui | 1 | 2026-11-10 |
