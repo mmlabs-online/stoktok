@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P2 |
 | Areas | architecture, security |
-| Attempts | 1 |
+| Attempts | 2 |
 | Created | 2026-11-10 |
 | PR | — |
 
@@ -24,3 +24,4 @@ docs/spec-v1.md §8 secrets. CLAUDE.md R3, conventions (secrets). Design: work/t
 ## Notes / answers from Ming
 - 2026-11-10 (orchestrator): split from STK-071 per its plan.md. Independent of STK-071; STK-070 depends on both.
 - Human step: Ming adds `STOKTOK_ANTHROPIC_API_KEY` and `STOKTOK_GOOGLE_AI_API_KEY` to the deployment repo's `stoktok` environment.
+- 2026-11-10 (Ming, after review attempt 1 PASS): fix both 🟡 findings in security-review.md attempt 1 before the PR: (1) `check-deploy-env.sh` must pin the real guard, not just its text: the negated `if ! [[ "$K" =~ ... ]]; then` line (not a comment) followed by `exit 1`, inside the `secrets` step and before `mktemp`, for both optional keys; (2) fail if anything other than the one printf writes to `$tmp` or `$ENV_FILE`. Add matching negative cases (N11, N12, including the comment-line case the reviewer found) and run them against a scratch copy.
