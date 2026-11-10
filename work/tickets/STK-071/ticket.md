@@ -1,8 +1,8 @@
-# STK-071: AI client, guards and optional secrets (STK-063 slice 2b)
+# STK-071: AI client, untrusted blocks, tools and guards (STK-063 slice 2b-i)
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P2 |
 | Areas | architecture, security |
 | Attempts | 0 |
@@ -30,3 +30,4 @@ docs/spec-v1.md §2 (LLM provider), §6 Signal & AI design, §8 secrets. CLAUDE.
 ## Notes / answers from Ming
 - 2026-11-10 (orchestrator): split from STK-069 per its plan.md. Open questions from the STK-069 consult for the planner: `providerOverheadTokens` in core `AiConfig` now or in STK-070; abort vs feed-back on a disallowed tool call; doc Service column `web, worker` now (recommended) or later.
 - Defaults to confirm (from STK-069): zero-price models are not supported in v1.
+- 2026-11-10 (orchestrator): split per plan.md. The deploy half of AC5 (`.env.example`, `docs/deploy.md`, deploy workflow, `check-deploy-env.sh`) moved to STK-072. `env.ts` and "a missing key disables that provider" stay here.
