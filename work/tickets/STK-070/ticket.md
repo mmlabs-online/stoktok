@@ -13,7 +13,7 @@
 Add the real Anthropic (Claude) and Google AI (Gemini) adapters to `@stoktok/ai`, wire the AI client into the web server and the worker, and show this month's AI spend with the 80% warning on Settings. This is slice 3 of the original STK-063 (see work/tickets/STK-063/plan.md "Split proposal").
 
 ## Spec reference
-docs/spec-v1.md §2 (LLM provider), §6, §8 secrets. CLAUDE.md R1, R3, R5. Depends on STK-069.
+docs/spec-v1.md §2 (LLM provider), §6, §8 secrets. CLAUDE.md R1, R3, R5. Depends on STK-071.
 
 ## Acceptance criteria
 - [ ] Anthropic (`@anthropic-ai/sdk`) and Google (`@google/genai`) adapters inside `packages/ai`, tested with recorded responses and an injected client or fetch (no network in CI). Each adapter sets `maxOutputTokens` and the thinking budget explicitly from config.

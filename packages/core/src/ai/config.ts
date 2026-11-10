@@ -59,8 +59,8 @@ export function validateAiConfig(cfg: AiConfig): string[] {
     }
   }
   for (const [model, row] of Object.entries(cfg.priceTable)) {
-    if (!isNonNegInt(row.inMicroUsdPerMTok) || !isNonNegInt(row.outMicroUsdPerMTok)) {
-      errors.push(`price of ${model} must be non-negative integers`);
+    if (!isPosInt(row.inMicroUsdPerMTok) || !isPosInt(row.outMicroUsdPerMTok)) {
+      errors.push(`price of ${model} must be positive integers`);
     }
   }
   for (const task of AI_TASKS) {
