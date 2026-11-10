@@ -46,8 +46,12 @@ export const AI_CONFIG: AiConfig = {
   thinkingBudgetTokensByTask: { chat: 0, summary: 0, explanation: 0 },
   perMessageOverheadTokens: 16,
   maxToolRounds: 4,
+  // Bounds tool runs and result bytes per round. Claude and Gemini both emit parallel calls; 8 covers the expected read tools (verify against real traffic).
   maxToolCallsPerRound: 8,
-  // Default to verify before go-live; measure real overhead in STK-070.
+  // Covers what the provider adds beyond our UTF-8 byte estimate: hidden tool-use system prompt and message/tool framing
+  // (incl. the synthetic final_output tool). Anthropic publishes roughly 300-350 tokens of tool-use prompt for Claude 4.x;
+  // Google publishes no figure. 1000 is a conservative upper bound (verify before go-live) until measured with each
+  // provider's countTokens (follow-up script).
   providerOverheadTokens: { anthropic: 1000, google: 1000 },
   budget: { capMicroUsd: 5_000_000, warnPpm: 800_000, timeZone: VN_TIME_ZONE },
 };
