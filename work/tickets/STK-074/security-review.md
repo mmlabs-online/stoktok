@@ -118,3 +118,42 @@ The real Vault grants for `postgres` stay unverified until the corrected smoke t
 ### Recommendations
 1. Fix N1 now (AC2 and the F3 intent). It is a docs-only change.
 2. Log F9 as a follow-up ticket (R7).
+
+## STK-074 security re-review, attempt 3
+
+**Verdict:** No 🔴. N1 is closed. I found one new 🟡: the step-2 logging check reads only the SQL editor's own session settings, so it does not fully show whether bind parameters get logged. Everything else is 🟢. I read the files directly and had no Bash, so I could not run `git diff`. "No code changed" is based on impl-log attempt 3 (`work/tickets/STK-074/impl-log.md:66-85`, docs only), not on a diff.
+
+### Confirmed
+- **N1 closed.** The Decision list in `docs/adr/0009-ai-provider-keys-in-vault.md:9-17` is numbered 1-9 again, with no stray "3b". Step 5d (`:45`) sits after 5c.
+  - 5d calls `ai_key_set` with `…1111` and checks `key_last4='1111'`, the same `secret_id` as step 3, `ai_key_secrets()` returning `…1111`, and exactly one stoktok row in Vault.
+  - This makes `vault.update_secret` (migration `:55`) run as `postgres` on the real project, which was the point of F3. The optional description check covers F4.
+- **The smoke procedure works end to end.**
+  - Step 3 creates the `…0000` dummy and records `secret_id`. Steps 4, 5 and 5b expect `…0000`. 5c checks ownership. 5d replaces the key with `…1111`, which no earlier step depends on.
+  - Steps 6 and 7 do not depend on the stored value.
+  - Step 9 cleans up: `ai_key_delete` returns `true` and the escaped `like` count returns `0`.
+  - Every step states its expected value.
+
+### Findings
+🟡 **S1: Step 2's `show` checks only the SQL editor session (`postgres`), not the role PostgREST uses.** (`docs/adr/0009-ai-provider-keys-in-vault.md:39`)
+- PostgREST connects as `authenticator` and switches to `service_role`.
+- Settings set per role or per database (`alter role … set log_statement`, `pgaudit.log`, `log_min_duration_statement`) live in `pg_db_role_setting` and apply to that path. `show` in the editor does not report them.
+- So step 2 can pass while the RPC path still logs the key's bind parameter.
+- Fix: add `select setrole::regrole, setdatabase, setconfig from pg_db_role_setting where array_to_string(setconfig, ',') ~ '(log_|pgaudit|auto_explain)';` and expect no entry that enables statement, duration or parameter logging. If any does, stop.
+- Ties to AC2 and the threat-model line at `:24`.
+
+🟢 **S2: Step 2 is internally inconsistent.** (`:39`)
+- Step 2 says `log_min_duration_statement` "must be `-1`", and then that `log_parameter_max_length` "must be `0` if `log_min_duration_statement` is not `-1`". That condition can only be met after step 2 has already failed, so the second clause never applies.
+- The check is still safe as written: a stricter reading never lets parameters through. To match the "logs in full unless limited" note at `:24`, reword it to "`log_min_duration_statement` is `-1`, **or** `log_parameter_max_length` is `0`".
+
+🟢 **S3: `auto_explain` is not checked.** If it is loaded with `auto_explain.log_min_duration >= 0`, its `log_parameter_max_length` defaults to `-1` (log in full) on PG16. Add `show auto_explain.log_min_duration;` to step 2. An "unrecognized parameter" error means it is not loaded, which is fine. Also add it to the list at `:24`.
+
+🟢 **S4: The "no orphan row" label in 5d is slightly misleading.** (`:45`)
+- 5d takes the update branch (migration `:54-55`), not the orphan-delete branch (`:57`). That branch's `delete from vault.secrets` runs, and its privilege is checked, in step 3 on a fresh project. So it is covered, just not by 5d.
+- The count check is still worth keeping. Optionally reword it as "no duplicate row".
+
+### Still open (unchanged)
+- F9 (🟢): the migration guard still accepts any `vault` schema without checking for `supabase_vault`. Log it as a follow-up (R7).
+- Ming has not yet run the manual smoke test on the real project, and the step 7 result has not been added to the ADR (`:34`).
+
+### Recommendation
+S1 is a one-line, docs-only addition to step 2 that makes the "never reach the logs" check actually hold for the path PostgREST uses. Fold in S2 and S3 at the same time. None of these block on code.
