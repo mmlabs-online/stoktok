@@ -7,7 +7,7 @@
 | Areas | architecture, security, ui |
 | Attempts | 2 |
 | Created | 2026-11-10 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/54 |
 
 ## Goal
 Wire the `@stoktok/ai` client (with the STK-070 adapters) into the web server and the worker, keep the SDKs and keys out of client bundles, and show this month's AI spend with the 80% warning on Settings. Split from STK-070 (see work/tickets/STK-070/plan.md "Split proposal"); design notes in work/tickets/STK-070/consult-software-architect.md (items E–J) and consult-data-visualization-engineer.md.
