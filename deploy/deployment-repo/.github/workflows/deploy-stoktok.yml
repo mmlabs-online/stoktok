@@ -16,7 +16,8 @@ name: deploy-stoktok
 # STOKTOK_AUTHEN_SUPABASE_ANON_KEY (prefixed: this repo is shared by every mmlabs app) come from the
 # `stoktok` environment (main only); the `secrets` step writes them to $ENV_FILE as SUPABASE_URL /
 # SUPABASE_SERVICE_ROLE_KEY / AUTHEN_SUPABASE_URL / AUTHEN_SUPABASE_ANON_KEY, the names the app reads,
-# on every run. Values are never printed.
+# on every run. Optional STOKTOK_ANTHROPIC_API_KEY and STOKTOK_GOOGLE_AI_API_KEY (STK-072) are written as
+# ANTHROPIC_API_KEY / GOOGLE_AI_API_KEY; unset means empty (provider off). Values are never printed.
 #
 # No migrate step: schema changes are human. Every migration must stay compatible with the
 # previous release's images, because a restore never touches the database.
@@ -160,6 +161,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STOKTOK_SUPABASE_SERVICE_ROLE_KEY }}
           AUTHEN_SUPABASE_URL: ${{ secrets.STOKTOK_AUTHEN_SUPABASE_URL }}
           AUTHEN_SUPABASE_ANON_KEY: ${{ secrets.STOKTOK_AUTHEN_SUPABASE_ANON_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.STOKTOK_ANTHROPIC_API_KEY }}
+          GOOGLE_AI_API_KEY: ${{ secrets.STOKTOK_GOOGLE_AI_API_KEY }}
         run: |
           umask 077
           [[ "$ENV_FILE" == "$HOME/"* ]] || { echo "::error::ENV_FILE $ENV_FILE is not under the runner user's home $HOME ($(id -un)). Nothing was started; $ENV_FILE was not changed."; exit 1; }
@@ -188,12 +191,20 @@ jobs:
             echo "::error::Secret STOKTOK_AUTHEN_SUPABASE_ANON_KEY has unexpected characters. Nothing was started; $ENV_FILE was not changed."
             exit 1
           fi
+          if ! [[ "$ANTHROPIC_API_KEY" =~ ^[A-Za-z0-9._-]*$ ]]; then
+            echo "::error::Secret STOKTOK_ANTHROPIC_API_KEY has unexpected characters. Nothing was started; $ENV_FILE was not changed."
+            exit 1
+          fi
+          if ! [[ "$GOOGLE_AI_API_KEY" =~ ^[A-Za-z0-9._-]*$ ]]; then
+            echo "::error::Secret STOKTOK_GOOGLE_AI_API_KEY has unexpected characters. Nothing was started; $ENV_FILE was not changed."
+            exit 1
+          fi
           dir="$(dirname "$ENV_FILE")"
           mkdir -p "$dir"
           chmod 700 "$dir"
           tmp="$(mktemp "$dir/.stoktok.env.XXXXXX")"
           trap 'rm -f "$tmp"' EXIT
-          printf 'SUPABASE_URL=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\nAUTHEN_SUPABASE_URL=%s\nAUTHEN_SUPABASE_ANON_KEY=%s\n' "$SUPABASE_URL" "$SUPABASE_SERVICE_ROLE_KEY" "$AUTHEN_SUPABASE_URL" "$AUTHEN_SUPABASE_ANON_KEY" > "$tmp"
+          printf 'SUPABASE_URL=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\nAUTHEN_SUPABASE_URL=%s\nAUTHEN_SUPABASE_ANON_KEY=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_AI_API_KEY=%s\n' "$SUPABASE_URL" "$SUPABASE_SERVICE_ROLE_KEY" "$AUTHEN_SUPABASE_URL" "$AUTHEN_SUPABASE_ANON_KEY" "$ANTHROPIC_API_KEY" "$GOOGLE_AI_API_KEY" > "$tmp"
           chmod 600 "$tmp"
           if cmp -s "$tmp" "$ENV_FILE"; then changed=false; else changed=true; fi
           mv -f "$tmp" "$ENV_FILE"

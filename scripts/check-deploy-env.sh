@@ -106,19 +106,54 @@ if ! grep -qF "printf 'SUPABASE_URL=" "$WF" \
   fail=1
 fi
 
-# STK-004: every `required now` row of the doc table is written by the workflow (printf NAME=, env mapping
-# STOKTOK_NAME), and the workflow writes nothing else.
-required="$(sed -n '/<!-- env-list:start -->/,/<!-- env-list:end -->/p' "$DOC" \
-  | grep -E '^\| `[A-Z][A-Z0-9_]*` \|.*\| required now \|' | sed -E 's/^\| `([A-Z0-9_]+)`.*/\1/' | sort -u)"
-printf_line="$(grep -F "printf 'SUPABASE_URL=" "$WF" || true)"
-written_keys="$(echo "$printf_line" | grep -oE '[A-Z][A-Z0-9_]*=%s' | sed 's/=%s//' | sort -u)"
-if ! diff <(echo "$required") <(echo "$written_keys"); then
-  echo "FAIL: 'required now' keys in docs/deploy.md differ from keys the workflow writes (< doc, > workflow)" >&2
+# STK-004/STK-072: every `required` and `optional` row of the doc table is written by the workflow (printf NAME=,
+# env mapping STOKTOK_NAME) and the workflow writes nothing else. Required keys have a `missing` line, optional
+# keys have none and an empty-allowed charset check.
+env_table="$(sed -n '/<!-- env-list:start -->/,/<!-- env-list:end -->/p' "$DOC")"
+bad_status="$(echo "$env_table" | grep -E '^\| `[A-Z][A-Z0-9_]*`' \
+  | awk -F'|' '{ s = $4; gsub(/^ +| +$/, "", s); if (s != "required now" && s != "optional" && s != "reserved") print $2 "-> " s }' || true)"
+if [ -n "$bad_status" ]; then
+  echo "FAIL: docs/deploy.md env row has unknown status (allowed: required now, optional, reserved): $bad_status" >&2
   fail=1
 fi
-for k in $required; do
+required="$(echo "$env_table" | grep -E '^\| `[A-Z][A-Z0-9_]*` \|.*\| required now \|' | sed -E 's/^\| `([A-Z0-9_]+)`.*/\1/' | sort -u || true)"
+optional="$(echo "$env_table" | grep -E '^\| `[A-Z][A-Z0-9_]*` \|.*\| optional \|' | sed -E 's/^\| `([A-Z0-9_]+)`.*/\1/' | sort -u || true)"
+if [ -z "$optional" ]; then
+  echo "FAIL: no optional keys in the doc table of docs/deploy.md (expected the AI keys)" >&2
+  fail=1
+fi
+printf_line="$(grep -F "printf 'SUPABASE_URL=" "$WF" || true)"
+written_keys="$(echo "$printf_line" | grep -oE '[A-Z][A-Z0-9_]*=%s' | sed 's/=%s//' | sort -u || true)"
+wanted_keys="$(printf '%s\n' $required $optional | grep . | sort -u || true)"
+if ! diff <(echo "$wanted_keys") <(echo "$written_keys"); then
+  echo "FAIL: printf keys in the workflow differ from required + optional keys in docs/deploy.md (< doc, > workflow)" >&2
+  fail=1
+fi
+format_order="$(echo "$printf_line" | grep -oE '[A-Z][A-Z0-9_]*=%s' | sed 's/=%s//' || true)"
+argument_order="$(echo "$printf_line" | grep -oE '"\$[A-Z][A-Z0-9_]*"' | tr -d '"$' || true)"
+if ! diff <(echo "$format_order") <(echo "$argument_order"); then
+  echo "FAIL: printf argument order differs from format key order (< format, > arguments)" >&2
+  fail=1
+fi
+for k in $required $optional; do
   if ! grep -qE "^\s+$k: \\$\{\{ secrets\.STOKTOK_$k \}\}\s*$" "$WF"; then
     echo "FAIL: workflow lacks '$k: \${{ secrets.STOKTOK_$k }}'" >&2
+    fail=1
+  fi
+done
+for k in $required; do
+  if ! grep -qF "[ -n \"\$$k\" ] || missing=\"\$missing STOKTOK_$k\"" "$WF"; then
+    echo "FAIL: required key $k lacks its missing line in the workflow" >&2
+    fail=1
+  fi
+done
+for k in $optional; do
+  if grep -qE "missing=.*STOKTOK_$k([^A-Z0-9_]|\$)" "$WF"; then
+    echo "FAIL: optional key $k has a missing line in the workflow (an unset optional secret must not fail the run)" >&2
+    fail=1
+  fi
+  if ! grep -qF "[[ \"\$$k\" =~ ^[A-Za-z0-9._-]*\$ ]]" "$WF"; then
+    echo "FAIL: optional key $k lacks the pinned empty-allowed charset check ^[A-Za-z0-9._-]*\$ in the workflow" >&2
     fail=1
   fi
 done
