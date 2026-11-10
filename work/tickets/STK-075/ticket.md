@@ -7,7 +7,7 @@
 | Areas | ui |
 | Attempts | 1 |
 | Created | 2026-11-10 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/55 |
 
 ## Goal
 Make `next build` for web independent of Google Fonts by shipping the Nunito font files in the repo and loading them with `next/font/local`, so CI and the web image build stop failing at random on the font download.
