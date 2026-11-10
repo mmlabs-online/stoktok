@@ -155,3 +155,49 @@ Files reviewed:
 - `/home/user/stoktok/packages/core/src/ai/summary/sanitize.test.ts`
 - `/home/user/stoktok/packages/db/src/{mappers,rows}.ts`
 - `/home/user/stoktok/work/tickets/STK-064/impl-log.md`
+
+## Security review: STK-064 slice 1, attempt 3
+
+I only read the code. I can't run commands here, so the green typecheck, lint and test results are taken from `impl-log.md` as reported. No SQL changed.
+
+**Verdict: no 🔴 and no 🟡.** All four items Ming asked for are fixed. I found two new 🟢 items; neither blocks.
+
+### Requested items
+
+| Item | Status |
+|---|---|
+| 🟡 Vietnamese-only allow-list | **Fixed.** `body.ts:48` now allows only `A-Za-z`, the precomposed Vietnamese letters (`À-Ã È-Ê Ì Í Ò-Õ Ù Ú Ý`, their lower-case forms, `Ă ă Đ đ Ĩ ĩ Ũ ũ Ơ ơ Ư ư`, and `Ạ-ỹ`, which is U+1EA0–U+1EF9, all Vietnamese), ASCII `0-9`, punctuation and `₫`. `\p{Script=Latin}`, `\p{M}` and `\p{N}` are gone. Combined with the NFKC check at `body.ts:59`, every combining mark is now refused. U+0251, U+0261, U+0336 and U+0662 are rejected, and tests cover them at `body.test.ts:84-91`. Tests at `body.test.ts:93-109` show that real Vietnamese still passes, with every tone mark in upper and lower case. |
+| 🟢 Punctuation collapse in the deny copies | **Fixed.** `body.ts:70`, `75-76`: both the copy as written and the copy without diacritics turn every run of characters other than `\p{L}\p{N}%` into one space before matching. None of the deny patterns in `config.ts:30-51` depend on punctuation other than `%`, so collapsing breaks none of them. `"Nên – mua"`, `"nên/mua"` and `"nên: mua"` are tested at `body.test.ts:80`. |
+| 🟢 Required `StoredBodyContext` | **Fixed.** `body.ts:82-90`, `96`: `ctx`, `inputIds` and `subject` are now required, so leaving the context out is a compile error. The only production caller, `packages/db/src/mappers.ts:406`, passes it. |
+| 🟢 Topic vs scope on read | **Fixed.** `body.ts:99`, `114`: `PORTFOLIO` rows accept only `portfolio`, and symbol rows accept only `SYMBOL_SUMMARY_TOPICS`. Both directions are tested at `body.test.ts:130-140`, including a `missing:PORTFOLIO:price` body. |
+
+### New findings
+
+**🟢 The write path does not check topic against scope.** `sanitize.ts:55`
+- `sanitizeSummaryOutput` accepts whatever `ctx.topics` the caller passes. A symbol caller that passes `portfolio` would store a body that the read path always turns into `null`.
+- This fails closed, so it is not a security hole, only a silent bug that is hard to spot.
+- Optional fix: in sanitize, apply the same rule as `body.ts:99` and return `bad_context`.
+
+**🟢 `\p{Zs}` still allows U+1680 (Ogham space mark).** `body.ts:48`
+- NFKC leaves this character as it is. In some fonts it is drawn as a dash, not a gap.
+- It cannot be used to dodge the deny-list, because `collapseSeparators` turns it into a space before matching.
+- Every other `Zs` character is already refused by the NFKC check, since NFKC turns them into a plain space. Replacing `\p{Zs}` with a literal space therefore changes nothing else, and it removes this last odd case.
+
+### Deferred (per Ming, not re-raised)
+- False positives and the remaining deny-list gaps go to STK-077.
+- Still open from attempt 1, for slice 4: keep the summary text-only with no linkifier, only link `news:` ids tied to the row's symbol, and the input-id cap is enforced late by the SQL guard.
+
+### Risks
+- As noted in the impl-log, sentences containing Latin letters that are not Vietnamese (ç, ñ) are now dropped. This is intended and fails safe.
+
+### Open questions
+- None new.
+
+Files reviewed:
+- /home/user/stoktok/packages/core/src/ai/summary/body.ts
+- /home/user/stoktok/packages/core/src/ai/summary/body.test.ts
+- /home/user/stoktok/packages/core/src/ai/summary/config.ts
+- /home/user/stoktok/packages/core/src/ai/summary/sanitize.ts
+- /home/user/stoktok/packages/db/src/mappers.ts
+- /home/user/stoktok/packages/db/src/rows.ts
+- /home/user/stoktok/work/tickets/STK-064/impl-log.md
