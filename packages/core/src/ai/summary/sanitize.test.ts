@@ -35,7 +35,7 @@ describe('sanitizeSummaryOutput', () => {
     const r = run([out('price', s('Giá đóng cửa tăng nhẹ.', ['px:VNM:2026-11-10', 'sig:VNM:trend_ma:2026-11-10']))]);
     expect(texts(r, 'price')).toEqual(['Giá đóng cửa tăng nhẹ.']);
     expect(r.stripped).toMatchObject({ no_ids: 0, unknown_id: 0 });
-    expect(parseStoredSummaryBody(r.body)).toEqual(r.body);
+    expect(parseStoredSummaryBody(r.body, undefined, { inputIds: r.inputIds, subject: 'VNM' })).toEqual(r.body);
   });
 
   test('drops sentences with no inputIds', () => {

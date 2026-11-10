@@ -41,8 +41,11 @@ export function noDataBody(subject: string, topics: readonly SummaryTopic[], cfg
 
 const MARKUP_RE = /[<>`*#|[\]{}\\]|https?:\/\/|www\./i;
 
-/** Allow-list: Latin letters (Vietnamese included), marks, numbers, spaces, basic punctuation, the dong sign. */
-const ALLOWED_TEXT_RE = /^[\p{Script=Latin}\p{M}\p{N}\p{Zs}.,;:!?%()'"/+\-–—‘’“”₫]+$/u;
+/**
+ * Allow-list: the Vietnamese alphabet (precomposed, so no combining marks), ASCII digits, spaces, basic punctuation,
+ * the dong sign. Other Latin-script letters (IPA lookalikes), other scripts' digits and combining marks are refused.
+ */
+const ALLOWED_TEXT_RE = /^[A-Za-zÀ-ÃÈ-ÊÌÍÒ-ÕÙÚÝà-ãè-êìíò-õùúýĂăĐđĨĩŨũƠơƯưẠ-ỹ0-9\p{Zs}.,;:!?%()'"/+\-–—‘’“”₫]+$/u;
 const IGNORABLE_RE = /\p{Default_Ignorable_Code_Point}/u;
 
 /**
@@ -63,10 +66,14 @@ export function isPlainSummaryText(text: string, cfg: AiSummaryConfig = AI_SUMMA
 /** Lower-cases and removes diacritics (NFD, strip marks, đ to d). */
 const stripDiacritics = (s: string): string => s.normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/g, 'd');
 
+/** Every run of characters other than letters, digits and % becomes one space, so punctuation cannot split a phrase. */
+const collapseSeparators = (s: string): string => s.replace(/[^\p{L}\p{N}%]+/gu, ' ');
+
 /** True when `text` matches a deny pattern, either as written or with diacritics removed. Same check on write and read. */
 export function isDenyListed(text: string, cfg: AiSummaryConfig = AI_SUMMARY_CONFIG): boolean {
-  const lower = text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ');
-  const plain = stripDiacritics(lower);
+  const folded = text.normalize('NFKC').toLowerCase();
+  const plain = collapseSeparators(stripDiacritics(folded));
+  const lower = collapseSeparators(folded);
   return cfg.denyPatterns.some((p) => new RegExp(p, 'u').test(lower) || new RegExp(stripDiacritics(p), 'u').test(plain));
 }
 
@@ -74,17 +81,22 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 
 export interface StoredBodyContext {
   /** The row's input_ids: every cited id must be one of them. */
-  inputIds?: readonly string[];
-  /** 'PORTFOLIO' or the row's symbol: missing markers must name it, and for a symbol every symbol-scoped id must match it. */
-  subject?: string;
+  inputIds: readonly string[];
+  /**
+   * 'PORTFOLIO' or the row's symbol: missing markers must name it, and for a symbol every symbol-scoped id must match it.
+   * 'PORTFOLIO' rows may only hold the portfolio topic; symbol rows only SYMBOL_SUMMARY_TOPICS.
+   */
+  subject: string;
 }
 
 /**
  * Re-validates a stored body: format, plain text, deny-list, and (with `ctx`) consistency with its row.
  * Returns a rebuilt body (unknown keys dropped), or null when anything is off.
  */
-export function parseStoredSummaryBody(raw: unknown, cfg: AiSummaryConfig = AI_SUMMARY_CONFIG, ctx: StoredBodyContext = {}): AiSummaryBody | null {
-  const allowed = ctx.inputIds === undefined ? null : new Set(ctx.inputIds);
+export function parseStoredSummaryBody(raw: unknown, cfg: AiSummaryConfig | undefined, ctx: StoredBodyContext): AiSummaryBody | null {
+  cfg ??= AI_SUMMARY_CONFIG;
+  const allowed = new Set(ctx.inputIds);
+  const scopeTopics: readonly SummaryTopic[] = ctx.subject === 'PORTFOLIO' ? ['portfolio'] : SYMBOL_SUMMARY_TOPICS;
   try {
     if (utf8ByteLength(JSON.stringify(raw)) > cfg.maxBodyBytes) return null;
   } catch {
@@ -99,6 +111,7 @@ export function parseStoredSummaryBody(raw: unknown, cfg: AiSummaryConfig = AI_S
     if (!isRecord(s) || typeof s.missing !== 'boolean' || !Array.isArray(s.sentences)) return null;
     const topic = s.topic;
     if (!SUMMARY_TOPICS.includes(topic as SummaryTopic) || out.some((o) => o.topic === topic)) return null;
+    if (!scopeTopics.includes(topic as SummaryTopic)) return null;
     if (s.sentences.length < 1 || s.sentences.length > cfg.maxSentencesPerSection) return null;
     const sentences: AiSummarySentence[] = [];
     for (const x of s.sentences) {
@@ -109,11 +122,11 @@ export function parseStoredSummaryBody(raw: unknown, cfg: AiSummaryConfig = AI_S
       for (const id of ids) {
         const ref = typeof id === 'string' ? parseInputId(id) : null;
         if (ref === null) return null;
-        if (allowed !== null && !allowed.has(id as string)) return null;
+        if (!allowed.has(id as string)) return null;
         if ((ref.kind === 'missing') !== (s.missing === true)) return null;
         if (ref.kind === 'missing') {
-          if (ref.topic !== topic || (ctx.subject !== undefined && ref.subject !== ctx.subject)) return null;
-        } else if (ctx.subject !== undefined && ctx.subject !== 'PORTFOLIO' && 'symbol' in ref && ref.symbol !== ctx.subject) {
+          if (ref.topic !== topic || ref.subject !== ctx.subject) return null;
+        } else if (ctx.subject !== 'PORTFOLIO' && 'symbol' in ref && ref.symbol !== ctx.subject) {
           return null;
         }
       }

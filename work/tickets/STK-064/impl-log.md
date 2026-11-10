@@ -62,3 +62,15 @@ Behaviour notes: stored text must now already be NFKC (write path normalises; re
 Out-of-plan files: none.
 Follow-ups: DB-level optional guards (`body::text !~ '[<>]'`, body_version match) not added (SQL untouched).
 Scope self-check: only the listed items changed; nothing committed.
+
+## Attempt 3 (REWORK: security review attempt 2 fixes, Ming 2026-11-10)
+
+Files touched:
+- `packages/core/src/ai/summary/body.ts`: (1) `ALLOWED_TEXT_RE` now the Vietnamese alphabet (A-Za-z, precomposed À-Ã È-Ê Ì Í Ò-Õ Ù Ú Ý and lower case, Ă ă Đ đ Ĩ ĩ Ũ ũ Ơ ơ Ư ư, U+1EA0-U+1EF9) + ASCII digits + existing punctuation/Zs/₫; no `\p{Script=Latin}`, `\p{M}`, `\p{N}`. (2) `isDenyListed` collapses every run of non-`\p{L}\p{N}%` into one space in both copies (as written; diacritics stripped first, then collapsed). Deny patterns untouched. (3) `parseStoredSummaryBody(raw, cfg | undefined, ctx)`: `ctx` required, `inputIds` and `subject` required. (4) topic checked against scope on read: `PORTFOLIO` rows only `['portfolio']`, symbol rows only `SYMBOL_SUMMARY_TOPICS`.
+- Tests: `body.test.ts` (helper with row ctx; new cases: Nên – mua, nên/mua, nên: mua; U+0251 "muɑ", U+0336, U+0662; real Vietnamese covering all tone marks upper/lower; topic vs scope both ways), `sanitize.test.ts` (round-trip now passes ctx).
+- `packages/db/src/mappers.ts` already passed ctx; unchanged.
+
+Checks: `pnpm typecheck` clean; `pnpm lint` clean; `pnpm test` core 834, sources 35, ai 184, db 195 (+1 todo), worker 295, web 349, all passed. Round trip: `sanitizeSummaryOutput` body reads back unchanged via `parseStoredSummaryBody(body, undefined, { inputIds: r.inputIds, subject })` (sanitize.test.ts, passing).
+
+Behaviour note: `cfg` stays before `ctx`, so callers pass `undefined` for the default config. Sentences with non-Vietnamese Latin letters (ç, ñ) are now dropped.
+Out-of-plan files: none. Follow-ups: false-positive deny exceptions and extra deny phrases still await Ming's decision (unchanged, as instructed). Not committed.
