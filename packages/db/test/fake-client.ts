@@ -17,22 +17,27 @@ const METHODS = ['select', 'eq', 'in', 'gte', 'lte', 'is', 'order', 'limit', 'ra
 export function createFake() {
   const calls: Call[] = [];
   const queue: Res[] = [];
-  const db = {
-    from(table: string) {
-      const builder: Record<string, unknown> = {
-        then(resolve: (r: Res) => unknown, reject?: (e: unknown) => unknown) {
-          const res = queue.shift();
-          if (!res) return Promise.reject(new Error('fake: no response queued')).then(resolve, reject);
-          return Promise.resolve(res).then(resolve, reject);
-        },
+  const makeBuilder = (table: string) => {
+    const builder: Record<string, unknown> = {
+      then(resolve: (r: Res) => unknown, reject?: (e: unknown) => unknown) {
+        const res = queue.shift();
+        if (!res) return Promise.reject(new Error('fake: no response queued')).then(resolve, reject);
+        return Promise.resolve(res).then(resolve, reject);
+      },
+    };
+    for (const method of METHODS) {
+      builder[method] = (...args: unknown[]) => {
+        calls.push({ table, method, args });
+        return builder;
       };
-      for (const method of METHODS) {
-        builder[method] = (...args: unknown[]) => {
-          calls.push({ table, method, args });
-          return builder;
-        };
-      }
-      return builder;
+    }
+    return builder;
+  };
+  const db = {
+    from: makeBuilder,
+    rpc(fn: string, args: unknown) {
+      calls.push({ table: fn, method: 'rpc', args: [args] });
+      return makeBuilder(fn);
     },
   } as unknown as Db;
   return {

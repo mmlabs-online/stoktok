@@ -239,3 +239,19 @@ export interface LotteryTicketInsert {
   purchased_at: string;
   raw_text: string | null;
 }
+
+/** Row returned by the ai_reserve function; bigint columns may arrive as strings. */
+export interface AiReserveRow {
+  usage_id: Int8;
+  granted: boolean;
+  spent_micro_usd: Int8;
+}
+
+/** Settlement update for a reserved ai_usage row. Counts and costs are integers; cost null = unknown. */
+export interface AiUsageSettle {
+  status: 'ok' | 'provider_error' | 'invalid_output';
+  inputTokens: number;
+  outputTokens: number;
+  costMicroUsd: number | null;
+  errorCode?: string;
+}

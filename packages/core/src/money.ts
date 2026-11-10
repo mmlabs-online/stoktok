@@ -27,6 +27,13 @@ export function roundDiv(numer: bigint, denom: bigint): bigint {
   return negative ? -q : q;
 }
 
+/** numer / denom rounded up (toward +infinity). denom must be positive. Used where over-estimating is the safe side. */
+export function ceilDiv(numer: bigint, denom: bigint): bigint {
+  if (denom <= 0n) throw new RangeError('denominator must be positive');
+  const q = numer / denom;
+  return numer % denom > 0n ? q + 1n : q;
+}
+
 export function toSafe(value: bigint): number {
   const n = Number(value);
   if (!Number.isSafeInteger(n)) throw new RangeError('result exceeds safe integer range');

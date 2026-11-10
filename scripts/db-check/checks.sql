@@ -31,7 +31,7 @@ do $$ -- tables_exist
 declare got text[];
 begin
   select array_agg(tablename order by tablename) into got from pg_tables where schemaname = 'public';
-  if got is distinct from array['assets','corporate_actions','data_gaps','financial_lines','financials','lottery_draws','lottery_tickets','news','prices_daily','prices_intraday','settings','signals','symbols','transactions','watchlist'] then
+  if got is distinct from array['ai_usage','assets','corporate_actions','data_gaps','financial_lines','financials','lottery_draws','lottery_tickets','news','prices_daily','prices_intraday','settings','signals','symbols','transactions','watchlist'] then
     raise exception 'CHECK FAILED: tables_exist (got %)', got;
   end if;
 end $$;
@@ -496,6 +496,105 @@ begin
   insert into public.news (url, title, source, credibility, published_at, fetched_at)
     values ('https://a.vn/1', 't', 's', 'established_outlet', now(), now());
   perform pg_temp.expect_fail('news duplicate url', nw || '(''https://a.vn/1'',''t2'',''s'',''established_outlet'',now(),now(),''{}'')', array['23505']);
+end $$;
+
+do $$ -- ai_usage_columns
+begin
+  perform pg_temp.assert_col('ai_usage', 'id', 'bigint', true);
+  perform pg_temp.assert_col('ai_usage', 'created_at', 'timestamp with time zone', true);
+  perform pg_temp.assert_col('ai_usage', 'settled_at', 'timestamp with time zone', false);
+  perform pg_temp.assert_col('ai_usage', 'provider', 'text', true);
+  perform pg_temp.assert_col('ai_usage', 'model', 'text', true);
+  perform pg_temp.assert_col('ai_usage', 'task', 'text', true);
+  perform pg_temp.assert_col('ai_usage', 'status', 'text', true);
+  perform pg_temp.assert_col('ai_usage', 'input_tokens', 'integer', true);
+  perform pg_temp.assert_col('ai_usage', 'output_tokens', 'integer', true);
+  perform pg_temp.assert_col('ai_usage', 'reserved_micro_usd', 'bigint', true);
+  perform pg_temp.assert_col('ai_usage', 'cost_micro_usd', 'bigint', false);
+  perform pg_temp.assert_col('ai_usage', 'error_code', 'text', false);
+end $$;
+
+do $$ -- service_role_can_read_write_ai_usage
+declare n int;
+begin
+  set local role service_role;
+  insert into public.ai_usage (provider, model, task, status, reserved_micro_usd)
+    values ('google', 'gemini-2.5-flash', 'summary', 'reserved', 100);
+  select count(*) into n from public.ai_usage where task = 'summary';
+  delete from public.ai_usage where task = 'summary';
+  reset role;
+  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_ai_usage'; end if;
+end $$;
+
+do $$ -- ai_usage_negatives
+declare au text := 'insert into public.ai_usage (provider, model, task, status, input_tokens, output_tokens, reserved_micro_usd, cost_micro_usd, settled_at) values ';
+begin
+  perform pg_temp.expect_fail('ai bad provider', au || '(''openai'',''m'',''chat'',''reserved'',0,0,1,null,null)', array['23514']);
+  perform pg_temp.expect_fail('ai empty model', au || '(''google'','''',''chat'',''reserved'',0,0,1,null,null)', array['23514']);
+  perform pg_temp.expect_fail('ai bad task', au || '(''google'',''m'',''Chat!'',''reserved'',0,0,1,null,null)', array['23514']);
+  perform pg_temp.expect_fail('ai bad status', au || '(''google'',''m'',''chat'',''done'',0,0,1,null,null)', array['23514']);
+  perform pg_temp.expect_fail('ai negative input tokens', au || '(''google'',''m'',''chat'',''reserved'',-1,0,1,null,null)', array['23514']);
+  perform pg_temp.expect_fail('ai negative output tokens', au || '(''google'',''m'',''chat'',''reserved'',0,-1,1,null,null)', array['23514']);
+  perform pg_temp.expect_fail('ai negative reserve', au || '(''google'',''m'',''chat'',''reserved'',0,0,-1,null,null)', array['23514']);
+  perform pg_temp.expect_fail('ai negative cost', au || '(''google'',''m'',''chat'',''ok'',0,0,1,-1,now())', array['23514']);
+  perform pg_temp.expect_fail('ai ok with null cost', au || '(''google'',''m'',''chat'',''ok'',0,0,1,null,now())', array['23514']);
+  perform pg_temp.expect_fail('ai reserved with cost', au || '(''google'',''m'',''chat'',''reserved'',0,0,1,5,null)', array['23514']);
+  perform pg_temp.expect_fail('ai refused with cost > 0', au || '(''google'',''m'',''chat'',''refused'',0,0,1,5,now())', array['23514']);
+  perform pg_temp.expect_fail('ai provider_error without settled_at', au || '(''google'',''m'',''chat'',''provider_error'',0,0,1,null,null)', array['23514']);
+end $$;
+
+do $$ -- ai_reserve_gate
+declare
+  r record;
+  n int;
+  first_id bigint;
+  w_from timestamptz := now() - interval '1 day';
+  w_to timestamptz := now() + interval '1 day';
+begin
+  set local role service_role;
+  select * into r from public.ai_reserve('google', 'gemini-2.5-flash', 'summary', 600, 1000, w_from, w_to);
+  if not r.granted or r.spent_micro_usd <> 0 then raise exception 'CHECK FAILED: ai_reserve_gate (under cap: %)', r; end if;
+  first_id := r.usage_id;
+  select * into r from public.ai_reserve('google', 'gemini-2.5-flash', 'summary', 500, 1000, w_from, w_to);
+  if r.granted or r.spent_micro_usd <> 600 then raise exception 'CHECK FAILED: ai_reserve_gate (second over cap: %)', r; end if;
+  select count(*) into n from public.ai_usage where id = r.usage_id and status = 'refused' and cost_micro_usd = 0;
+  if n <> 1 then raise exception 'CHECK FAILED: ai_reserve_gate (no refused row)'; end if;
+  update public.ai_usage set status = 'ok', cost_micro_usd = 400, settled_at = now() where id = first_id;
+  select * into r from public.ai_reserve('anthropic', 'claude-haiku-4-5', 'chat', 600, 1000, w_from, w_to);
+  if not r.granted or r.spent_micro_usd <> 400 then raise exception 'CHECK FAILED: ai_reserve_gate (400 + 600: %)', r; end if;
+  select * into r from public.ai_reserve('anthropic', 'claude-haiku-4-5', 'chat', 0, 1000, w_from, w_to);
+  if r.granted or r.spent_micro_usd <> 1000 then raise exception 'CHECK FAILED: ai_reserve_gate (reserve 0 at cap: %)', r; end if;
+  insert into public.ai_usage (created_at, provider, model, task, status, reserved_micro_usd, cost_micro_usd, settled_at)
+    values (now() - interval '40 days', 'google', 'gemini-2.5-flash', 'summary', 'ok', 999, 999, now() - interval '40 days');
+  if public.ai_month_spend(w_from, w_to) <> 1000 then raise exception 'CHECK FAILED: ai_reserve_gate (month spend / previous month counted)'; end if;
+  perform pg_temp.expect_fail('ai_reserve null from', 'select public.ai_reserve(''google'', ''m'', ''summary'', 1, 1000, null, now())', array['22023']);
+  perform pg_temp.expect_fail('ai_reserve null to', 'select public.ai_reserve(''google'', ''m'', ''summary'', 1, 1000, now() - interval ''1 day'', null)', array['22023']);
+  perform pg_temp.expect_fail('ai_reserve null cap', 'select public.ai_reserve(''google'', ''m'', ''summary'', 1, null, now() - interval ''1 day'', now())', array['22023']);
+  perform pg_temp.expect_fail('ai_reserve null reserve', 'select public.ai_reserve(''google'', ''m'', ''summary'', null, 1000, now() - interval ''1 day'', now())', array['22023']);
+  perform pg_temp.expect_fail('ai_reserve from >= to', 'select public.ai_reserve(''google'', ''m'', ''summary'', 1, 1000, now(), now())', array['22023']);
+  perform pg_temp.expect_fail('ai_reserve negative reserve', 'select public.ai_reserve(''google'', ''m'', ''summary'', -1, 1000, now() - interval ''1 day'', now())', array['22023']);
+  reset role;
+  delete from public.ai_usage;
+end $$;
+
+do $$ -- ai_functions_locked
+declare f text;
+begin
+  foreach f in array array['public.ai_reserve(text,text,text,bigint,bigint,timestamptz,timestamptz)', 'public.ai_month_spend(timestamptz,timestamptz)'] loop
+    if has_function_privilege('anon', f, 'execute') or has_function_privilege('authenticated', f, 'execute') then
+      raise exception 'CHECK FAILED: ai_functions_locked (anon/authenticated can execute %)', f;
+    end if;
+    if not has_function_privilege('service_role', f, 'execute') then
+      raise exception 'CHECK FAILED: ai_functions_locked (service_role cannot execute %)', f;
+    end if;
+  end loop;
+  if exists (
+    select 1 from pg_proc p
+    where p.pronamespace = 'public'::regnamespace and p.proname in ('ai_reserve', 'ai_month_spend')
+      and (p.prosecdef or p.proconfig is null or not ('search_path=""' = any (p.proconfig)))
+  ) then
+    raise exception 'CHECK FAILED: ai_functions_locked (security definer or search_path not empty)';
+  end if;
 end $$;
 
 do $$ -- manual_rows_nulls_dont_collide

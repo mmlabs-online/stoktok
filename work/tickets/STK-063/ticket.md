@@ -1,13 +1,13 @@
-# STK-063: AI provider layer (Claude + Google AI) with budget cap and usage log
+# STK-063: AI budget and usage foundation (slice 1 of 3: config, cost, budget gate, ai_usage)
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P2 |
 | Areas | architecture, security, db |
-| Attempts | 0 |
+| Attempts | 2 |
 | Created | 2026-11-08 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/49 |
 
 ## Goal
 Add one server-only AI layer that STK-064, STK-065 and STK-066 share. It sits behind a provider interface with two implementations, Claude API and Google AI API. It logs token usage and cost for every call and enforces a hard budget of 5 USD per month across both providers.
@@ -27,3 +27,4 @@ docs/spec-v1.md §2 (LLM provider), §6 Signal & AI design, §8 secrets; open qu
 ## Notes / answers from Ming
 - 2026-11-08: Providers are Claude API and Google AI API. Budget is 5 USD per month.
 - Human step: Ming creates both API keys (agent collection in Bitwarden) and adds the `STOKTOK_ANTHROPIC_API_KEY` and `STOKTOK_GOOGLE_AI_API_KEY` secrets to the deployment repo's `stoktok` environment.
+- 2026-11-10 (orchestrator): split per plan.md. This ticket is slice 1 (core AI config, cost, budget levels, provider selection, `ai_usage` table with the atomic `ai_reserve` gate, usage repo, ADR 0008). Slice 2 (AI client, prompt-injection defence, zod, secrets, guards) moved to STK-069; slice 3 (Claude and Gemini adapters, wiring, Settings usage card) moved to STK-070.

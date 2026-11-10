@@ -24,3 +24,4 @@ docs/spec-v1.md §3 F5, §6.2 anti-hallucination rules, §7 schedule (after EOD)
 - [ ] `typecheck`, `lint` and `test` are green. Use a fake provider in tests, and include tests for citation stripping and for missing-data handling.
 
 ## Notes / answers from Ming
+- 2026-11-10 (orchestrator): waits for STK-070 (the AI layer was split from STK-063 into STK-063, STK-069 and STK-070).
