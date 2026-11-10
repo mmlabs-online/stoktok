@@ -91,3 +91,43 @@ No violations found. R7: attempt 2 changes only `scripts/check-deploy-env.sh` (i
 - Writers using `cp`/`dd`/`sed -i` or a literal `stoktok.env` path, and writes from other steps.
 - Commit N1–N12 (plus P-cases) as `scripts/check-deploy-env.test.sh`, run in CI.
 - From attempt 1: compose.yml header comment; `docs/deploy.md` Environment step 5 "both"; stale "R6 suspended" placeholders.
+
+## Attempt 3 — 2026-11-10
+Verdict: PASS
+
+### Checks (run by reviewer)
+- check:deploy-env: `OK: deploy env lists consistent` (exit 0)
+- typecheck: exit 0
+- lint: exit 0
+- test: exit 0. core 776, sources 35, ai 62, db 169 (+1 todo), worker 292, web 302 passed. Matches impl-log.md.
+
+Negative cases. Each case ran on a fresh scratch copy of scripts/docs/deploy/.github/.env.example, and the copy was deleted afterwards. The mutation diffs were checked against the repo, and `git status` stays clean.
+- Baseline: OK, exit 0.
+- N1–N10: all exit 1 with the planned FAIL lines. N7 also shows the printf-set FAIL, as before.
+- N11a (`!` dropped), N11b (`exit 1` removed), N11c (real guard commented out, `^.*$` check added), and the attempt-1 comment-line case: all exit 1 with the guard FAIL.
+- **N11d** (guard line becomes `if ! [[ "$ANTHROPIC_API_KEY" =~ ^.*$ ]]; then # if ! [[ … ^[A-Za-z0-9._-]*$ ]]; then`): exit 1, guard FAIL. Issue 1 is fixed.
+- N12a/b/c: exit 1 with the other-writer FAIL. N12f (`>| "$tmp"`): exit 1 with the other-writer FAIL, so the nit is fixed.
+- **N12d** (`; echo "X=$Y" >> "$tmp"` appended to the printf line): exit 1 with the printf-shape FAIL.
+- **N12e** (printf retargeted to `> "${ENV_FILE}"` and moved above `missing=""`): exit 1 with the printf-shape FAIL plus both guard FAILs (`g < p`). Issue 2 is fixed.
+- Extra probes: the guard text inside an `echo '…'` → exit 1. A duplicated printf line → exit 1 (count ≠ 1). The guard plus `exit 1` inside a no-op heredoc → exit 1 (the existing heredoc guard).
+
+### Acceptance criteria
+- [x] AC1: no change since attempt 1. `.env.example:15-17`, `docs/deploy.md:140-141`. No `LLM_*` outside `work/`. check:deploy-env OK.
+- [x] AC2: workflow unchanged since attempt 1. `deploy-stoktok.yml:164-165` (mappings), `:194-201` (`*` charset guards before `mktemp` and the printf), `:207` (printf with the two optional keys). No `missing` line for either key.
+- [x] AC3: `scripts/check-deploy-env.sh:109-182`. printf keys = required ∪ optional, a `STOKTOK_` mapping for both, `missing` only for required keys. N1–N10 fail as planned.
+- [x] AC4: see Checks.
+- [x] Ming's note (1): the whole trimmed, non-comment line `if ! [[ "$K" =~ ^[A-Za-z0-9._-]*$ ]]; then` is required, followed by `exit 1`, inside the secrets step, before `mktemp` and the printf (`:163-172`). Evidence: N11a–d.
+- [x] Ming's note (2): exactly one printf, anchored to `printf '…' "$VAR"… > "$tmp"` (`:127-131`). Any other redirect to `$tmp`/`$ENV_FILE` (including `>|`) or a `tee` fails (`:177-182`). Evidence: N12a–f.
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found. R7: attempt 3 changes only `scripts/check-deploy-env.sh` (in the plan) plus ticket bookkeeping. Across the whole ticket diff, the changed files are the plan's 4 files plus `work/`. R3: no change. R8: no change to core logic.
+
+### Nits (do not block)
+- If the printf is moved after `mv -f "$tmp" "$ENV_FILE"`, the check still passes (probe: OK, exit 0). This is harmless: it would write a stray `$tmp` that the trap removes, and the guards still come first. It does not weaken either of Ming's two points.
+
+### Follow-ups (out of scope)
+- From attempt 2, still open: pin the required keys' charset/`https://` guards in the same way; restrict `secrets.` mappings to the `secrets` step; catch writers via `cp`/`dd`/`sed -i`, a literal `stoktok.env` path, or writes from other steps; commit N1–N12f as `scripts/check-deploy-env.test.sh` in CI.
+- From attempt 1: compose.yml header comment; `docs/deploy.md` Environment step 5 still says "both"; stale "R6 suspended" placeholders.
