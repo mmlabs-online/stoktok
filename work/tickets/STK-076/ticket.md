@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P2 |
 | Areas | security, ui |
 | Attempts | 0 |
@@ -24,3 +24,9 @@ docs/spec-v1.md §7 (as updated by STK-074 / ADR 0009). CLAUDE.md R3, R6. Depend
 
 ## Notes / answers from Ming
 - 2026-11-10 (orchestrator): split from STK-074 per its plan.md (proposed there as "STK-075"; that ID was already taken by the font ticket).
+- 2026-11-10 (orchestrator): carry-overs from the STK-074 reviews:
+  - Extend the r3-guard allow-list for `ai_key_set` / `ai_key_delete` (today: the ai-keys repo and its test only) to the new server module(s) that save/delete keys; the Settings page and actions must use only `saveAiKey` / `deleteAiKey` / `listAiKeyMeta`, never `readAiKeySecrets`.
+  - Never call `rpc(..., { get: true })` for key writes (the key would go into the URL).
+  - Validate with core `validateAiKeyFormat` (20–256 printable ASCII, no trimming); show fixed-string Vietnamese errors, never the input.
+  - The "using the server env key" state needs a presence-only boolean from the server (no env value, no last4).
+  - UI spelling "Khóa" (consistent with "Xóa", "Hủy"); design in work/tickets/STK-074/consult-data-visualization-engineer.md.
