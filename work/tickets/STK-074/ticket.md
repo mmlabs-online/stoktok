@@ -1,8 +1,8 @@
-# STK-074: AI API keys entered on Settings and stored encrypted in Supabase Vault
+# STK-074: AI provider keys in Supabase Vault and key resolution (slice a)
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P2 |
 | Areas | security, db, architecture, ui |
 | Attempts | 0 |
@@ -28,3 +28,4 @@ docs/spec-v1.md §7 Deployment ("Secrets … LLM API key only in the deploy repo
 - 2026-11-10 (Ming): (1) UI = a "Khoá AI" card on Settings: paste, save, then show only the last 4 characters with replace and delete; the key is never sent back to the browser. (2) Storage = Supabase Vault (encrypted, service_role only, decrypted only on the server). (3) Precedence = UI key first, STK-072 env keys as fallback.
 - "như recotdin" — Ming referred to how Ricotdin handles keys (spec §9 Q6); the chosen UI is the Settings card above.
 - Spec/CLAUDE.md conflict flagged: both currently say LLM keys live only in the deploy repo's env handling. Ming's decision above overrides; this ticket updates both.
+- 2026-11-10 (orchestrator): split per plan.md. This ticket is slice (a): Vault storage, migration/rollback/db:check stub, repo, key resolver (UI → env → off), AiClient per-call resolution, web/worker wiring, r3-guard, ADR 0009, CLAUDE.md and spec §7. The Settings card and actions (AC1, AC3, no-echo part of AC7) moved to STK-076.
