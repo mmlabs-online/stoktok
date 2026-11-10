@@ -1,8 +1,8 @@
-# STK-069: AI client, guards and secrets (STK-063 slice 2)
+# STK-069: Harden ai_reserve and db carry-overs (STK-063 slice 2a)
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P2 |
 | Areas | architecture, security |
 | Attempts | 1 |
@@ -31,3 +31,4 @@ docs/spec-v1.md §2 (LLM provider), §6 Signal & AI design, §8 secrets. CLAUDE.
   - Harden `ai_reserve` with a new migration: reject a window that does not contain the DB's `now()`, and reject `p_reserve_micro_usd = 0` (and require prices > 0 in `validateAiConfig`). Security review 🟡 items 1 and 3.
   - Fix ADR 0008 wording: the cap is bounded by one call's estimation error, not "never exceeded".
   - Test that settled cost ≤ reserved cost, or log a breach as `error_code = 'over_reservation'`.
+- 2026-11-10 (orchestrator): split per plan.md. This ticket is slice a: the `ai_reserve` hardening migration, `Db` widened to `rpc`, prices > 0, ADR 0008 wording. The AI client, guards and optional secrets (ticket AC1–AC7) moved to STK-071.
