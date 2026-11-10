@@ -68,7 +68,7 @@ $ ls -l apps/web/.next/standalone/apps/web/.next/node_modules/@anthropic-ai/ ...
 sdk-1255717e6d35d28d -> ../../../../../node_modules/.pnpm/@anthropic-ai+sdk@1.7.0_zod@4.6.7/node_modules/@anthropic-ai/sdk
 genai-67caea3a265f1561 -> ../../../../../node_modules/.pnpm/@google+genai@3.0.0/node_modules/@google/genai
 ```
-  Importing the hashed aliases from `standalone/apps/web` printed `hashed anthropic ok function` and `hashed google ok function`. The standalone server on dummy `SUPABASE_*` env returned `/healthz` 200 with 0 `MODULE_NOT_FOUND` lines. (The one server chunk mentioning `api.anthropic.com` is our own adapter code with the fixed base URL, not SDK code.) The plain-name probe in `scripts/check-image.sh` passes locally from the same directory; it runs in a container only in CI.
+  Importing the hashed aliases from `standalone/apps/web` printed `hashed anthropic ok function` and `hashed google ok function`. The standalone server on dummy `SUPABASE_*` env returned `/healthz` 200 with 0 `MODULE_NOT_FOUND` lines. (The one server chunk mentioning `api.anthropic.com` is our own adapter code with the fixed base URL, not SDK code.) (Superseded in Attempt 2: the plain-name probe proved nothing. It passed locally only because Node climbed out of `.next/standalone` into the repo's `node_modules`, and it fails in an isolated copy.)
 - Env carry-over: `grep -nE 'ANTHROPIC_CUSTOM_HEADERS|GOOGLE_GENAI_API_VERSION' deploy/deployment-repo/apps/stoktok/compose.yml deploy/deployment-repo/.github/workflows/deploy-stoktok.yml` printed nothing (exit 1).
 
 ### Out-of-plan files
@@ -83,4 +83,40 @@ None.
 
 ### Scope self-check
 - Could the diff be smaller? No.
-- Diff size: see `git diff --shortstat` (lockfile +18; new files untracked). Nothing committed, per the orchestrator.
+- Diff size: see `git diff --shortstat` (lockfile +18; new files untracked). (Stale in Attempt 1: the work was committed as eed5977.)
+
+## Attempt 2 — 2026-11-10 (REWORK)
+
+### Files touched
+| File | Required because |
+|---|---|
+| scripts/check-image.sh | Review Issue 1: probe now imports the Turbopack hashed aliases the server uses, from `/app/apps/web/.next/server/chunks/ssr`. It discovers alias names by prefix (`sdk-`, `genai-`) in `.next/node_modules`, exits 2 if not exactly one match, so no hash is hard-coded. |
+| scripts/check-no-service-key-in-client.sh | Review nit: `--scan-only` without a dir prints a plain usage line, exit 2. |
+| work/tickets/STK-073/impl-log.md | Corrected the Attempt 1 claim that the plain-name probe proves anything, and the stale "nothing committed" text. |
+
+### Verification on a copy outside the repo
+Copy of `apps/web/.next/standalone` (+ `.next/static`) at `/tmp/claude-0/-home-user-stoktok/47951d1f-9fbc-5953-bf55-b5f44f766a41/scratchpad/iso`, so resolution cannot reach the repo's `node_modules`. The command text was extracted from `scripts/check-image.sh` and run with cwd `iso/apps/web/.next/server/chunks/ssr`:
+```
+PASS-case
+exit=0
+$ ls iso/apps/web/.next/node_modules/@google
+genai-67caea3a265f1561
+$ rm iso/apps/web/.next/node_modules/@google/genai-*
+FAIL-case
+exit=2
+```
+Exit 2 is the "alias not found" branch, so the probe fails when an alias symlink is missing. `bash -n scripts/check-image.sh`: syntax ok. `--scan-only` with no dir: "usage: check-no-service-key-in-client.sh --scan-only <dir>", exit 2. Docker is unavailable here, so the container run happens only in CI.
+
+### Checks
+- typecheck: all Done. lint: all Done.
+- test: core 779, sources 35, ai 169, db 174 + 1 todo, worker 293, web 314. No failures.
+- `pnpm check:service-key`: exit 0, "OK: no secret or AI SDK material in client bundle".
+
+### Out-of-plan files
+None (both scripts were already in the plan's file list from Attempt 1).
+
+### Follow-ups
+Unchanged from Attempt 1.
+
+### Scope self-check
+Only the listed review issues were fixed. Not committed.

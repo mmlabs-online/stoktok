@@ -8,7 +8,8 @@ STATIC="$ROOT/apps/web/.next/static"
 NEEDLES=(SUPABASE_SERVICE_ROLE_KEY service_role ANTHROPIC_API_KEY GOOGLE_AI_API_KEY @anthropic-ai/sdk @google/genai api.anthropic.com generativelanguage.googleapis.com)
 
 if [ "${1:-}" = "--scan-only" ]; then
-  STATIC="${2:?usage: --scan-only <dir>}"
+  [ -n "${2:-}" ] || { echo "usage: check-no-service-key-in-client.sh --scan-only <dir>" >&2; exit 2; }
+  STATIC="$2"
 else
   SENTINEL="sb-service-SENTINEL-$RANDOM$RANDOM"
   AI_A="sk-ant-SENTINEL-$RANDOM$RANDOM"
