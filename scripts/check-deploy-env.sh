@@ -135,6 +135,8 @@ if ! diff <(echo "$format_order") <(echo "$argument_order"); then
   echo "FAIL: printf argument order differs from format key order (< format, > arguments)" >&2
   fail=1
 fi
+# secrets step without comment lines (line order kept).
+secrets_step="$(sed -n '/^      - name: secrets\s*$/,/^      - name: deploy\s*$/p' "$WF" | grep -vE '^\s*#' || true)"
 for k in $required $optional; do
   if ! grep -qE "^\s+$k: \\$\{\{ secrets\.STOKTOK_$k \}\}\s*$" "$WF"; then
     echo "FAIL: workflow lacks '$k: \${{ secrets.STOKTOK_$k }}'" >&2
@@ -152,11 +154,24 @@ for k in $optional; do
     echo "FAIL: optional key $k has a missing line in the workflow (an unset optional secret must not fail the run)" >&2
     fail=1
   fi
-  if ! grep -qF "[[ \"\$$k\" =~ ^[A-Za-z0-9._-]*\$ ]]" "$WF"; then
-    echo "FAIL: optional key $k lacks the pinned empty-allowed charset check ^[A-Za-z0-9._-]*\$ in the workflow" >&2
+  # The guard is a non-comment `if ! [[ ... ]]; then` with `exit 1` within 4 lines, in the secrets step, before mktemp.
+  guard_ok="$(echo "$secrets_step" | awk -v k="$k" '
+    index($0, "if ! [[ \"$" k "\" =~ ^[A-Za-z0-9._-]*$ ]]; then") && !g { g = NR; next }
+    g && !x && NR <= g + 4 && /^[[:space:]]*exit 1[[:space:]]*$/ { x = 1 }
+    /mktemp/ && !m { m = NR }
+    END { print (g && x && m && g < m) ? "yes" : "no" }')"
+  if [ "$guard_ok" != yes ]; then
+    echo "FAIL: optional key $k lacks the guard 'if ! [[ \"\$$k\" =~ ^[A-Za-z0-9._-]*\$ ]]; then' + exit 1 before mktemp in the secrets step" >&2
     fail=1
   fi
 done
+# The secrets step writes the env file only with the one printf; no other redirect to $tmp / $ENV_FILE, no tee.
+other_writers="$(echo "$secrets_step" | grep -vF "printf 'SUPABASE_URL=" \
+  | grep -E '>>?[[:space:]]*"?\$\{?(tmp|ENV_FILE)|(^|[^A-Za-z_])tee([^A-Za-z_]|$)' || true)"
+if [ -n "$other_writers" ]; then
+  echo "FAIL: secrets step writes to the env file outside the single printf: $other_writers" >&2
+  fail=1
+fi
 
 # STK-044: one runner user; env file, scheduler dir and log dir agree across workflow, compose, scripts, plist, runbook.
 DRAFTS="$ROOT/deploy/deployment-repo"

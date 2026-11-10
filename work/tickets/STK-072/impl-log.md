@@ -41,3 +41,28 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No; the script block is the bulk and each assertion maps to a plan item.
 - Diff size: +73 / -18 lines across 4 files (impl-log excluded; not committed)
+
+## Attempt 2 (REWORK) — 2026-11-10
+
+Scope: the two 🟡 findings of security-review.md (attempt 1). Only `scripts/check-deploy-env.sh` changed; the workflow already satisfied the stricter checks and was not touched.
+
+### Files touched
+| File | Required because |
+|---|---|
+| `scripts/check-deploy-env.sh` | (1) the per-optional-key charset pin now needs a non-comment `if ! [[ "$K" =~ ^[A-Za-z0-9._-]*$ ]]; then` line, an `exit 1` line within the next 4 lines, all inside the `secrets` step (comment lines stripped first) and before `mktemp`. (2) new FAIL when any line of the `secrets` step other than the `printf 'SUPABASE_URL=` line redirects (`>`/`>>`) to `$tmp` or `$ENV_FILE`, or uses `tee`. |
+
+### Tests (negative cases, each on a fresh scratch copy, repo untouched; script `neg2.sh` in the scratchpad)
+- Baseline OK exit 0; N1-N10 unchanged results (N6a/N6b/X1 now print the new guard message).
+- N11a `!` dropped: FAIL (guard). N11b `exit 1` removed: FAIL (guard). N11c real guard moved into a comment, weakened `^.*$` check left: FAIL (guard).
+- N12a extra `echo "X=$Y" >> "$tmp"`: FAIL (other writer). N12b extra `tee -a "$ENV_FILE"`: FAIL. N12c extra `echo X > "$ENV_FILE"`: FAIL.
+
+### Checks
+- check:deploy-env: `OK: deploy env lists consistent`
+- typecheck: exit 0; lint: exit 0; test: exit 0 (all packages).
+
+### Out-of-plan files
+None (the script is in the plan's file list from attempt 1; workflow unchanged).
+
+### Follow-ups
+- Not done (outside the two findings): pin the four required keys' `+` guards the same way; restrict `secrets.` mappings to the `secrets` step.
+- The writer check matches redirects to `$tmp`/`$ENV_FILE` and `tee` only; a writer using another path or `cp`/`mv` is not caught.
