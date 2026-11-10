@@ -45,3 +45,34 @@ No violations found. R2: AI cost is integer micro-USD with BigInt math and one `
 - Widen `Db` in `packages/db/src/client.ts` to include `rpc` and drop `AiDb` (slice 2, as the implementer noted).
 - Manual sweep for stale `reserved` rows; re-verify model IDs and prices before go-live.
 - The security auditor must still run at REVIEW (the diff touches a migration and the first SQL function). No `security-review.md` is in the ticket folder yet.
+
+## Attempt 2 — 2026-11-10 (slice 1 of 3, REWORK of attempt 1)
+Verdict: PASS
+
+### Checks (run by reviewer)
+- typecheck: green (exit 0).
+- lint: green (exit 0).
+- test: green. core 763 passed (64 files), db 164 passed + 1 todo, sources 35, worker 292, web 302. Matches impl-log.md attempt 2.
+- db:check: "db:check OK" (apply, checks, rollback, re-apply, checks).
+- `git diff --stat origin/main...HEAD -- pnpm-lock.yaml`: empty.
+
+### Attempt 1 issues
+- Issue 1 (🔴, `ai_reserve` fails open on NULL): **fixed.** `supabase/migrations/20261109000100_ai_usage.sql:52-54`: the guard now raises `22023` if any of the seven arguments is NULL, and also for reserve < 0, cap <= 0 and from >= to, exactly as instructed. `scripts/db-check/checks.sql:570-575` adds six `expect_fail` cases inside the `ai_reserve_gate` block, run as service_role before `reset role`: NULL from, NULL to, NULL cap, NULL reserve, from >= to, and reserve < 0, each expecting `22023`. The tests are meaningful. Without the fix, the NULL-from case would be granted, the statement would succeed, and `expect_fail` would raise "statement succeeded". db:check passes with them.
+
+### Acceptance criteria (plan, slice 1)
+- Criteria 1–8 and 10–12: still met. The evidence from attempt 1 still holds. Commit f6d0ff9 changes only the migration guard and checks.sql, and all checks are green again.
+- [x] 9 Atomic budget gate now fails closed for every bad input (see Issue 1). `ai_reserve_gate` and `ai_functions_locked` are green.
+
+### Scope
+Attempt 2 touches only `supabase/migrations/20261109000100_ai_usage.sql` and `scripts/db-check/checks.sql`, both in the plan's file list, plus the `work/` bookkeeping files. No out-of-plan changes.
+
+### Rules R1–R10
+No violations. The fix does not change the attempt 1 rule assessment. security-review.md for attempt 1 has no 🔴, and the change only adds a stricter argument check.
+
+### Nits (do not block)
+Carried over from attempt 1, still open: the float `Math.ceil` in `messages-vi.ts:7`, the `AiUsageSettle` discriminated union, and the name of the `budget.test.ts` rollover test.
+
+### Follow-ups (out of scope)
+- Widen `Db` to include `rpc` and drop `AiDb` (slice 2).
+- Manual sweep for stale `reserved` rows; re-verify model IDs and prices before go-live.
+- Create the follow-up tickets for slices 2 and 3 per the plan's Split proposal.
