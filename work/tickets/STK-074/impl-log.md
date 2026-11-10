@@ -61,4 +61,25 @@ None.
 typecheck, lint green; test: core 785, sources 35, ai 184, db 189 (+1 todo), worker 295, web 317 passed; db:check OK; check:service-key OK.
 
 ### Out-of-plan files
-None beyond the list above (all within the rework scope). Not committed.
+None beyond the list above (all within the rework scope). Committed in b3f6498.
+
+## Attempt 3 (REWORK: review attempt 2 Issue 1 = security-review attempt 2 N1)
+
+### Files touched
+| File | Required because |
+|---|---|
+| docs/adr/0009-ai-provider-keys-in-vault.md | Issue 1: removed the misplaced "3b. Replace" line from the Decision list (numbering 1-9 restored); added smoke step 5d after 5c (replace via `ai_key_set` with `DUMMY-not-a-real-key-1111`: `key_last4 = '1111'`, `secret_id` unchanged from step 3, `ai_key_secrets()` returns the new value, exactly 1 stoktok vault row, optional Vault description check). Also added the expected value for `log_parameter_max_length` in step 2. |
+| work/tickets/STK-074/impl-log.md | Corrected the stale "Not committed" note in attempt 2 (it was committed in b3f6498). |
+
+### Checks
+See the results appended below. No code changes.
+
+### Out-of-plan files
+None. Not committed.
+
+### Follow-ups
+None new.
+
+### Scope self-check
+Docs-only change, limited to Issue 1 plus the two optional items.
+typecheck, lint, test all green (worker 295, web 317, db and others passed; no failures).
