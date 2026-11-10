@@ -187,8 +187,21 @@ describe('google missing candidatesTokenCount', () => {
   ])('%s -> malformed with null usage', async (_n, meta) => {
     await expect(fake(googleWith(text, 'STOP', meta)).provider.generate(req())).rejects.toMatchObject({ code: 'malformed', usage: null });
   });
-  test('no output parts keeps 0', async () => {
+  test('no output parts keeps 0 without a total', async () => {
     const r = await fake(googleWith([], 'MAX_TOKENS', { promptTokenCount: 100 })).provider.generate(req());
     expect(r.usage).toEqual({ inputTokens: 100, outputTokens: 0 });
+  });
+  test('no output parts with a higher total -> derived value', async () => {
+    const r = await fake(googleWith([], 'MAX_TOKENS', { promptTokenCount: 100, totalTokenCount: 160 })).provider.generate(req());
+    expect(r.usage).toEqual({ inputTokens: 100, outputTokens: 60 });
+  });
+  test('null candidates behaves like missing', async () => {
+    const r = await fake(googleWith(text, 'STOP', { promptTokenCount: 100, candidatesTokenCount: null, totalTokenCount: 150 })).provider.generate(req());
+    expect(r.usage).toEqual({ inputTokens: 100, outputTokens: 50 });
+    await expect(fake(googleWith(text, 'STOP', { promptTokenCount: 100, candidatesTokenCount: null })).provider.generate(req())).rejects.toMatchObject({ code: 'malformed', usage: null });
+  });
+  test('total higher than candidates + thoughts wins', async () => {
+    const r = await fake(googleWith(text, 'STOP', { promptTokenCount: 100, candidatesTokenCount: 5, thoughtsTokenCount: 5, totalTokenCount: 130 })).provider.generate(req());
+    expect(r.usage).toEqual({ inputTokens: 100, outputTokens: 30 });
   });
 });

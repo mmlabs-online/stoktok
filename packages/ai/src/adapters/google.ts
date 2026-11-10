@@ -28,10 +28,15 @@ function usageOf(raw: unknown, hasOutput: boolean): Usage | null {
   const toolUse = raw.toolUsePromptTokenCount ?? 0;
   const ok = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
   if (!ok(prompt) || !ok(toolUse)) return null;
-  // Output came back but the candidate count is missing: derive it (thoughts included) from the total, never settle 0.
-  const out = raw.candidatesTokenCount === undefined && hasOutput ? [raw.totalTokenCount === undefined ? NaN : (raw.totalTokenCount as number) - prompt - toolUse] : [raw.candidatesTokenCount ?? 0, raw.thoughtsTokenCount ?? 0];
-  if (!out.every(ok) || (raw.candidatesTokenCount === undefined && hasOutput && !ok(raw.totalTokenCount))) return null;
-  return toUsage(prompt + toolUse, (out as number[]).reduce((a, b) => a + b, 0));
+  // Output tokens = max(candidates + thoughts, total - prompt - toolUse) whenever a valid total exists, so a low or
+  // missing candidate count never under-settles. Output present with no candidate count and no usable total is malformed.
+  const missing = raw.candidatesTokenCount == null;
+  const counted = [missing ? 0 : raw.candidatesTokenCount, raw.thoughtsTokenCount ?? 0];
+  if (!counted.every(ok)) return null;
+  const derived = ok(raw.totalTokenCount) ? raw.totalTokenCount - prompt - toolUse : NaN;
+  if (missing && hasOutput && !ok(derived)) return null;
+  const base = (counted as number[]).reduce((a, b) => a + b, 0);
+  return toUsage(prompt + toolUse, ok(derived) ? Math.max(base, derived) : base);
 }
 
 function buildParams(req: ProviderRequest): Record<string, unknown> {

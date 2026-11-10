@@ -70,3 +70,15 @@ Shared helpers unchanged. SDK option names confirmed in installed .d.ts (`Client
 
 ### Out-of-plan files
 None. Not committed (as instructed).
+
+## Attempt 3 (REWORK: security-review attempt 2 finding A, covering B)
+
+### Files touched
+- `packages/ai/src/adapters/google.ts` (`usageOf`): when `totalTokenCount` is a valid non-negative integer, output tokens = max(candidates + thoughts, total - prompt - toolUsePrompt); a null `candidatesTokenCount` is treated as missing (`== null`). Output parts present with no candidate count and no valid derived total still -> `malformed` with null usage.
+- `packages/ai/src/adapters/google.test.ts`: no-parts case with a higher total expects the derived value (the no-total case keeps 0); new null-candidates case (with and without total); new case where total exceeds candidates + thoughts.
+
+### Checks
+- typecheck, lint, test: all workspaces pass (see run; ai suite green)
+
+### Out-of-plan files
+None. Not committed (as instructed).
