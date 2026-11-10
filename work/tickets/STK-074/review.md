@@ -131,3 +131,46 @@ No violations found.
   - db:check rollback coverage with a seeded Vault row.
 - F9 (security review, not in Ming's list): the migration guard could also require `pg_extension` to contain `supabase_vault`, so a plaintext stub on a non-local database cannot be mistaken for Vault.
 - F4: after the smoke test, check whether the real `vault.update_secret` blanks the description on replace. This is cosmetic.
+
+## Attempt 3 — 2026-11-10
+Verdict: PASS
+
+### Checks (run by reviewer)
+- typecheck: green (all packages; web route types generated, worker `tsc --noEmit` Done).
+- lint: green (eslint Done in all packages).
+- test: green: core 785, sources 35, ai 184, db 189 (+1 todo), worker 295, web 317. Same as attempt 2, which is expected because no code changed.
+- Scope: `git diff 9d39ef7 HEAD` touches only `docs/adr/0009-ai-provider-keys-in-vault.md` (+1/−1 lines in the Decision list, step 2 and step 5d), `impl-log.md`, and the orchestrator state rows in `ticket.md` and `backlog.md`. No code, migration or test changed.
+
+### Issue 1 (attempt 2): fixed
+- The misplaced "3b. Replace" line is gone from "## Decision". Decisions now run 1–9 with no gap (ADR:9-18).
+- Smoke step 5d (ADR:45) comes after 5c and has all four expected checks:
+  - `key_last4 = '1111'`;
+  - `secret_id` equals the value noted in step 3, which proves an in-place update;
+  - `ai_key_secrets()` returns `google | DUMMY-not-a-real-key-1111`;
+  - the escaped-LIKE count of `stoktok\_ai\_key\_%` returns `1`, so there is no orphan row.
+- Consistent with the other steps:
+  - Steps 3–5 still expect the `0000` value. They now run before the replace, so their expected values hold.
+  - The 5d count of `1` holds because only `google` is set during the test (no stored keys exist before STK-076).
+  - Step 9 deletes whatever value is stored and expects a count of `0`. That is still correct after 5d.
+  - The LIKE escaping matches step 9 and the rollback (F6).
+
+### Step-2 expectation for log_parameter_max_length
+- The rule "must be `0` if `log_min_duration_statement` is not `-1`" is correct. Postgres logs bind parameters in full (default `-1`) when a statement is logged because of its duration, and `0` suppresses them.
+- It is safe. Step 2 already requires `log_min_duration_statement = -1` and `log_statement` to be `none`/`ddl`; a `select ai_key_set(...)` is neither ddl nor mod. So the new clause is a stricter fallback and contradicts nothing. Any value that could log parameters still trips "stop and tell the team".
+
+### Regression versus plan.md
+None. The change is docs-only. Every acceptance criterion verified in attempts 1–2 still holds, and AC6 (the ADR records Vault, precedence and the threat model) is now structurally clean.
+
+### Rules R1–R10
+No violations found.
+
+### Nits (do not block)
+- impl-log attempt 3 says "Not committed" under Out-of-plan files, but it is committed in 580a1ed. This is the same stale-note pattern as attempt 2.
+- Step 2: the `log_parameter_max_length` clause is redundant while `log_min_duration_statement` must be `-1`. It could say "(should be `0` as defence in depth)". This is cosmetic.
+- Step 2 does not cover a literal typed into the SQL editor. `log_parameter_max_length` only limits bind parameters, not query text. The dummy-only rule in the smoke test intro already covers this.
+
+### Follow-ups (out of scope)
+- Ming runs the smoke test (now including 5b, 5c and 5d) on the real project and records the result of step 7 and the F4 description check as an ADR amendment.
+- Apply the migration before deploying the image.
+- db:check rollback coverage with a seeded Vault row.
+- F9: the migration guard could also require `pg_extension` to contain `supabase_vault` on non-local databases.
