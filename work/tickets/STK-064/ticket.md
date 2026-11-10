@@ -25,3 +25,4 @@ docs/spec-v1.md §3 F5, §6.2 anti-hallucination rules, §7 schedule (after EOD)
 
 ## Notes / answers from Ming
 - 2026-11-10 (orchestrator): waits for STK-070 (the AI layer was split from STK-063 into STK-063, STK-069 and STK-070).
+- 2026-11-10 (orchestrator): now waits for STK-073 (STK-070 was split into adapters and wiring + usage card).

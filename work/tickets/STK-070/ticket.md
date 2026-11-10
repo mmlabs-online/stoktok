@@ -1,8 +1,8 @@
-# STK-070: Claude and Gemini adapters, wiring and AI usage card (STK-063 slice 3)
+# STK-070: Claude and Gemini adapters in packages/ai (STK-063 slice 3a)
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P2 |
 | Areas | architecture, security, ui |
 | Attempts | 0 |
@@ -30,3 +30,4 @@ docs/spec-v1.md §2 (LLM provider), §6, §8 secrets. CLAUDE.md R1, R3, R5. Depe
   - Measure or document the real per-provider overhead behind `providerOverheadTokens` (default 1000) and `maxToolCallsPerRound` (default 8).
   - Map a `22023` from `ai_reserve` inside the ledger port adapter if convenient (the client already fails closed on any reserve throw).
   - Keys reach both web and worker (STK-072); the deployment-repo copy of the workflow is updated by Ming by hand.
+- 2026-11-10 (orchestrator): split per plan.md. This ticket keeps AC1 and the typecheck/lint/test part of AC4. The web/worker wiring, `next.config.ts`, the client-bundle check and the Settings usage card (AC2, AC3, bundle part of AC4) moved to STK-073.
