@@ -1,8 +1,8 @@
-# STK-064: Daily AI summaries per symbol and per portfolio (F5)
+# STK-064: AI summaries storage and output validator (F5 slice a)
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P2 |
 | Areas | data, db, ui, security |
 | Attempts | 0 |
@@ -31,3 +31,4 @@ docs/spec-v1.md §3 F5, §6.2 anti-hallucination rules, §7 schedule (after EOD)
   - Stored articles/statements go only in untrusted data blocks, never in `system` or the caller's text (STK-071 security note). Any tool passed to the client must be genuinely read-only (R10).
   - First worker job to import the AI SDKs: add the worker-image SDK resolution probe to `scripts/check-image.sh` (STK-073 follow-up), and check `apps/worker` tsup externals.
   - Real provider behaviour (model IDs, prices, thinking, JSON mode) is still verify-before-go-live (see STK-070 impl-log).
+- 2026-11-10 (orchestrator): split per plan.md. This ticket is slice 1: `ai_summaries` migration/rollback/db:check, db repo, core input-ID grammar, body types/parser and `sanitizeSummaryOutput`. Worker job → STK-077, portfolio summary → STK-078, UI cards → STK-079.
