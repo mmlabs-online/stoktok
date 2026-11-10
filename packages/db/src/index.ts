@@ -73,5 +73,8 @@ export {
 export { aiUsageLedger, getAiMonthSpend, reserveAiUsage, settleAiUsage } from './repos/ai-usage';
 export type { AiReserveRequest, AiReserveResult } from './repos/ai-usage';
 export type { AiUsageSettle } from './rows';
+export { listAiSummariesForDate, upsertAiSummary } from './repos/ai-summaries';
+export type { AiSummaryRecord } from './mappers';
+export type { AiSummaryInsert } from './rows';
 export { deleteAiKey, listAiKeyMeta, readAiKeySecrets, saveAiKey } from './repos/ai-keys';
 export type { AiKeyMeta, StoredAiKeySecrets } from './repos/ai-keys';

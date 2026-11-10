@@ -255,3 +255,35 @@ export interface AiUsageSettle {
   costMicroUsd: number | null;
   errorCode?: string;
 }
+
+/** ai_summaries row as read (explicit columns). `body` is untrusted until core parseStoredSummaryBody accepts it. */
+export interface AiSummaryRow {
+  id: Int8;
+  scope: string;
+  symbol: string;
+  summary_date: string;
+  generator: string;
+  provider: string | null;
+  model: string | null;
+  usage_id: Int8 | null;
+  body_version: number;
+  body: unknown;
+  input_ids: string[];
+  created_at: string;
+}
+
+/** Upsert payload: every column is always sent so a replace leaves no stale value (usage_id/provider/model null for template rows). */
+export interface AiSummaryInsert {
+  scope: 'symbol' | 'portfolio';
+  /** '' for the portfolio. */
+  symbol: string;
+  summary_date: string;
+  generator: 'model' | 'template';
+  provider: string | null;
+  model: string | null;
+  usage_id: number | null;
+  body_version: number;
+  body: unknown;
+  input_ids: string[];
+  created_at: string;
+}

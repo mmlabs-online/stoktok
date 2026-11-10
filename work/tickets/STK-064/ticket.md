@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | IN_PROGRESS |
+| State | REVIEW |
 | Priority | P2 |
 | Areas | data, db, ui, security |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-11-08 |
 | PR | — |
 

@@ -31,7 +31,7 @@ do $$ -- tables_exist
 declare got text[];
 begin
   select array_agg(tablename order by tablename) into got from pg_tables where schemaname = 'public';
-  if got is distinct from array['ai_keys','ai_usage','assets','corporate_actions','data_gaps','financial_lines','financials','lottery_draws','lottery_tickets','news','prices_daily','prices_intraday','settings','signals','symbols','transactions','watchlist'] then
+  if got is distinct from array['ai_keys','ai_summaries','ai_usage','assets','corporate_actions','data_gaps','financial_lines','financials','lottery_draws','lottery_tickets','news','prices_daily','prices_intraday','settings','signals','symbols','transactions','watchlist'] then
     raise exception 'CHECK FAILED: tables_exist (got %)', got;
   end if;
 end $$;
@@ -541,6 +541,93 @@ begin
   perform pg_temp.expect_fail('ai reserved with cost', au || '(''google'',''m'',''chat'',''reserved'',0,0,1,5,null)', array['23514']);
   perform pg_temp.expect_fail('ai refused with cost > 0', au || '(''google'',''m'',''chat'',''refused'',0,0,1,5,now())', array['23514']);
   perform pg_temp.expect_fail('ai provider_error without settled_at', au || '(''google'',''m'',''chat'',''provider_error'',0,0,1,null,null)', array['23514']);
+end $$;
+
+do $$ -- ai_summaries_columns
+begin
+  perform pg_temp.assert_col('ai_summaries', 'id', 'bigint', true);
+  perform pg_temp.assert_col('ai_summaries', 'scope', 'text', true);
+  perform pg_temp.assert_col('ai_summaries', 'symbol', 'text', true);
+  perform pg_temp.assert_col('ai_summaries', 'summary_date', 'date', true);
+  perform pg_temp.assert_col('ai_summaries', 'generator', 'text', true);
+  perform pg_temp.assert_col('ai_summaries', 'provider', 'text', false);
+  perform pg_temp.assert_col('ai_summaries', 'model', 'text', false);
+  perform pg_temp.assert_col('ai_summaries', 'usage_id', 'bigint', false);
+  perform pg_temp.assert_col('ai_summaries', 'body_version', 'smallint', true);
+  perform pg_temp.assert_col('ai_summaries', 'body', 'jsonb', true);
+  perform pg_temp.assert_col('ai_summaries', 'input_ids', 'ARRAY', true);
+  perform pg_temp.assert_col('ai_summaries', 'created_at', 'timestamp with time zone', true);
+end $$;
+
+do $$ -- service_role_can_read_write_ai_summaries
+declare n int;
+begin
+  set local role service_role;
+  insert into public.ai_summaries (scope, symbol, summary_date, generator, body)
+    values ('symbol', 'VNM', '2026-11-10', 'template', '{"sections":[]}');
+  update public.ai_summaries set input_ids = '{px:VNM:2026-11-10}' where symbol = 'VNM';
+  select count(*) into n from public.ai_summaries where symbol = 'VNM' and input_ids = '{px:VNM:2026-11-10}';
+  delete from public.ai_summaries where symbol = 'VNM';
+  reset role;
+  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_ai_summaries'; end if;
+end $$;
+
+do $$ -- ai_summaries_negatives
+declare
+  s text := 'insert into public.ai_summaries (scope, symbol, summary_date, generator, provider, model, usage_id, body, input_ids) values ';
+  b text := '''{"sections":[]}''';
+begin
+  perform pg_temp.expect_fail('sum bad scope', s || '(''stock'',''VNM'',''2026-11-10'',''template'',null,null,null,' || b || ',''{}'')', array['23514']);
+  perform pg_temp.expect_fail('sum symbol scope with empty symbol', s || '(''symbol'','''',''2026-11-10'',''template'',null,null,null,' || b || ',''{}'')', array['23514']);
+  perform pg_temp.expect_fail('sum portfolio with symbol', s || '(''portfolio'',''VNM'',''2026-11-10'',''template'',null,null,null,' || b || ',''{}'')', array['23514']);
+  perform pg_temp.expect_fail('sum lowercase symbol', s || '(''symbol'',''vnm'',''2026-11-10'',''template'',null,null,null,' || b || ',''{}'')', array['23514']);
+  perform pg_temp.expect_fail('sum bad provider', s || '(''symbol'',''VNM'',''2026-11-10'',''model'',''openai'',''m'',null,' || b || ',''{}'')', array['23514']);
+  perform pg_temp.expect_fail('sum model without provider/model', s || '(''symbol'',''VNM'',''2026-11-10'',''model'',null,null,null,' || b || ',''{}'')', array['23514']);
+  perform pg_temp.expect_fail('sum template with provider', s || '(''symbol'',''VNM'',''2026-11-10'',''template'',''google'',''m'',null,' || b || ',''{}'')', array['23514']);
+  perform pg_temp.expect_fail('sum body is array', s || '(''symbol'',''VNM'',''2026-11-10'',''template'',null,null,null,''[]'',''{}'')', array['23514']);
+  perform pg_temp.expect_fail('sum body is string', s || '(''symbol'',''VNM'',''2026-11-10'',''template'',null,null,null,''"x"'',''{}'')', array['23514']);
+  perform pg_temp.expect_fail('sum body without sections', s || '(''symbol'',''VNM'',''2026-11-10'',''template'',null,null,null,''{}'',''{}'')', array['23514']);
+  perform pg_temp.expect_fail('sum oversize body',
+    'insert into public.ai_summaries (scope, symbol, summary_date, generator, body) values (''symbol'',''VNM'',''2026-11-10'',''template'',jsonb_build_object(''sections'', jsonb_build_array(repeat(md5(random()::text), 2000))))',
+    array['23514']);
+  perform pg_temp.expect_fail('sum bad input id', s || '(''symbol'',''VNM'',''2026-11-10'',''template'',null,null,null,' || b || ',''{"bad id"}'')', array['23514']);
+  perform pg_temp.expect_fail('sum null input id', s || '(''symbol'',''VNM'',''2026-11-10'',''template'',null,null,null,' || b || ',''{NULL}'')', array['23514']);
+  perform pg_temp.expect_fail('sum too many input ids',
+    'insert into public.ai_summaries (scope, symbol, summary_date, generator, body, input_ids) values (''symbol'',''VNM'',''2026-11-10'',''template'',''{"sections":[]}'',(select array_agg(''news:'' || g) from generate_series(1, 201) g))',
+    array['23514']);
+  perform pg_temp.expect_fail('sum null body', s || '(''symbol'',''VNM'',''2026-11-10'',''template'',null,null,null,null,''{}'')', array['23502']);
+  perform pg_temp.expect_fail('sum nonexistent usage_id', s || '(''symbol'',''VNM'',''2026-11-10'',''model'',''google'',''m'',999999,' || b || ',''{}'')', array['23503']);
+  insert into public.ai_summaries (scope, symbol, summary_date, generator, body) values ('symbol', 'VNM', '2026-11-10', 'template', '{"sections":[]}');
+  perform pg_temp.expect_fail('sum duplicate symbol/date', s || '(''symbol'',''VNM'',''2026-11-10'',''template'',null,null,null,' || b || ',''{}'')', array['23505']);
+  insert into public.ai_summaries (scope, symbol, summary_date, generator, body) values ('portfolio', '', '2026-11-10', 'template', '{"sections":[]}');
+  perform pg_temp.expect_fail('sum duplicate portfolio/date', s || '(''portfolio'','''',''2026-11-10'',''template'',null,null,null,' || b || ',''{}'')', array['23505']);
+  delete from public.ai_summaries;
+end $$;
+
+do $$ -- ai_summaries_usage_fk
+declare uid bigint;
+begin
+  insert into public.ai_usage (provider, model, task, status, reserved_micro_usd) values ('google', 'm', 'summary', 'reserved', 1) returning id into uid;
+  insert into public.ai_summaries (scope, symbol, summary_date, generator, provider, model, usage_id, body)
+    values ('symbol', 'VNM', '2026-11-10', 'model', 'google', 'm', uid, '{"sections":[]}');
+  delete from public.ai_usage where id = uid;
+  if not exists (select 1 from public.ai_summaries where symbol = 'VNM' and usage_id is null) then
+    raise exception 'CHECK FAILED: ai_summaries_usage_fk';
+  end if;
+  delete from public.ai_summaries;
+end $$;
+
+do $$ -- ai_summaries_upsert_replaces
+declare n int;
+begin
+  insert into public.ai_summaries (scope, symbol, summary_date, generator, body) values ('symbol', 'VNM', '2026-11-10', 'template', '{"sections":[],"v":1}');
+  insert into public.ai_summaries (scope, symbol, summary_date, generator, provider, model, body)
+    values ('symbol', 'VNM', '2026-11-10', 'model', 'google', 'm', '{"sections":[],"v":2}')
+    on conflict (scope, symbol, summary_date) do update
+      set generator = excluded.generator, provider = excluded.provider, model = excluded.model, body = excluded.body;
+  select count(*) into n from public.ai_summaries where symbol = 'VNM' and body ->> 'v' = '2' and provider = 'google';
+  if n <> 1 or (select count(*) from public.ai_summaries) <> 1 then raise exception 'CHECK FAILED: ai_summaries_upsert_replaces'; end if;
+  delete from public.ai_summaries;
 end $$;
 
 do $$ -- ai_reserve_gate
