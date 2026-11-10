@@ -80,3 +80,54 @@ No violations found. R3: the decrypt path is restricted to server modules and gu
   - call `validateAiKeyFormat` in the actions;
   - use `listAiKeyMeta` only on the page;
   - add the no-echo tests for action results and console output.
+
+## Attempt 2 — 2026-11-10
+Verdict: REWORK
+
+### Checks (run by reviewer)
+- typecheck: green (all packages, `tsc --noEmit` / next typegen Done).
+- lint: green (eslint Done in all packages).
+- test: green: core 785, sources 35, ai 184, db 189 (+1 todo), worker 295, web 317. These match impl-log attempt 2.
+- db:check: `db:check OK` (all migrations including 20261110000200_ai_keys.sql, checks before and after re-apply).
+- check:service-key: `OK: no secret or AI SDK material in client bundle` (0 hits for both SDKs and both API hosts).
+
+### Fixes from Ming's note (security-review attempt 1)
+- F1 threat model: done. `docs/adr/0009-ai-provider-keys-in-vault.md:20-26` covers the larger blast radius of a service-role leak and the instruction to rotate at Anthropic and Google. It names the dashboard Vault UI and SQL editor history as decrypt paths and says backups can be decrypted by anyone who restores into the project.
+- F2 logging checks: done. Smoke step 2 (ADR:40) and the threat-model bullet (ADR:25) cover log_min_duration_statement, log_parameter_max_length, log_parameter_max_length_on_error and pgaudit.
+- F3 smoke steps: **partly done.** Step 5b (positive service_role call, ADR:44) is present. The replace step "3b" was put in the wrong section, see Issue 1.
+- F5 fail closed: done. `packages/db/src/repos/ai-keys.ts:69` throws MAPPING on a null or empty secret. Test: `ai-keys.test.ts:113` "a null or empty secret throws MAPPING" passes. Fail-closed handling at the client level was already covered (a DataError leads to `provider_unavailable`). Recorded as ADR decision 9.
+- F6 escaped LIKE: done in the rollback (`.down.sql:12`), `checks.sql:681` and smoke step 9.
+- F7: done. New r3-guard test `r3-guard.test.ts:118-122` restricts ai_key_set and ai_key_delete to the repo and its test, and it passes. A grep confirms no other TS/JS file names them. The comment in core `keys.ts:1` was reworded so the guard does not flag it. ADR decision 7 now matches what the guard enforces.
+- F8: done. Smoke step 5c (ADR:45) checks that the owner of all three functions is `postgres`.
+- F10: done. ADR decision 8.
+
+### Acceptance criteria (slice a)
+Every criterion that passed in attempt 1 still holds. The attempt 2 code changes are small and additive: one type guard, one guard test, and LIKE escapes. No regression against plan.md. AC6 (an ADR that records Vault, precedence and the threat model) is met for the threat model. The ADR now has a structural defect, which is Issue 1.
+
+### Issues
+#### Issue 1 — 🟡 should-fix — F3 replace smoke step is in the wrong section and contradicts step 5
+- **Where**: `docs/adr/0009-ai-provider-keys-in-vault.md:14`
+- **Expected**: Ming's note asks for a smoke step that tests replace via `ai_key_set`. It should sit in "## Manual Vault smoke test" (ADR:37-49), in an order where every expected value holds.
+- **Actual**:
+  - "3b. Replace: …" sits inside "## Decision", between decisions 5 and 6. That breaks the decision numbering, and anyone following the smoke test will never run it.
+  - It also says "the step 5 query then returns the `1111` value". But if it ran right after step 3, step 5 would return `…1111`, while step 5 expects `DUMMY-not-a-real-key-0000`.
+- **Fix instruction**:
+  - Delete line 14 from the Decision section.
+  - In the smoke test, add it after step 5c, for example as "5d. Replace: `select * from public.ai_key_set('google', 'DUMMY-not-a-real-key-1111');` returns `key_last4 = '1111'`; `select secret_id from public.ai_keys where provider = 'google';` equals the value noted in step 3; `select provider, secret from public.ai_key_secrets();` returns `google | DUMMY-not-a-real-key-1111`; `select count(*) from vault.secrets where name like 'stoktok\_ai\_key\_%';` returns `1`."
+  - The last count also proves that no orphan row was left behind.
+  - Steps 6–9 then work unchanged, because step 9 deletes whatever value is stored.
+
+### Rules R1–R10
+No violations found.
+
+### Nits (do not block)
+- Smoke step 2: `show log_parameter_max_length;` has no expected value. Add "(must be `0` unless log_min_duration_statement is -1)" so the check is pass/fail.
+- impl-log attempt 2 says "Not committed", but the change is committed in b3f6498.
+
+### Follow-ups (out of scope)
+- From attempt 1, still open:
+  - Ming runs the smoke test on the real project (now with 5b, 5c and the replace step) and records step 7 as an ADR amendment.
+  - Apply the migration before deploying the image.
+  - db:check rollback coverage with a seeded Vault row.
+- F9 (security review, not in Ming's list): the migration guard could also require `pg_extension` to contain `supabase_vault`, so a plaintext stub on a non-local database cannot be mistaken for Vault.
+- F4: after the smoke test, check whether the real `vault.update_secret` blanks the description on replace. This is cosmetic.
