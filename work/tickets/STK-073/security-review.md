@@ -81,3 +81,39 @@
 
 ### Open questions
 None.
+
+## STK-073 security re-review, attempt 2
+
+**Verdict: no 🔴 and no 🟡 findings. Nothing blocks PASS.** I only had Read and Grep, so I reviewed the files at HEAD and did not run either script.
+
+### Findings
+- 🟢 **No injection or unsafe globbing.** `/home/user/stoktok/scripts/check-image.sh:56`
+  - The `node -e` body is a fixed literal. It has no `$`, backticks or bash variables, so no outside input can reach the JS.
+  - The only shell variable is `"$NAME"`, which is quoted and derived from the PID.
+  - There is no shell glob. Directory discovery uses `fs.readdirSync` plus a fixed `startsWith` prefix (`sdk-`, `genai-`) under two fixed scopes (`@anthropic-ai`, `@google`).
+  - A name returned by `readdirSync` cannot contain a `/`, so it cannot climb out of the scope directory.
+- 🟢 **It fails closed.** Every failure path ends in the `::error::` branch:
+  - 0 or more than 1 match: `process.exit(2)`.
+  - Scope directory missing: `readdirSync` throws an uncaught error and node exits 1.
+  - Working directory `-w …/chunks/ssr` missing: `docker exec` exits non-zero.
+  - Import rejected: exit 1.
+- 🟢 **It tests the real resolution path.** A bare `import('@anthropic-ai/sdk-<hash>')` from `[eval]` with cwd `.next/server/chunks/ssr` walks up the `node_modules` folders to `apps/web/.next/node_modules`. The server chunks resolve the same way. The probe still runs as the image's `USER node`, not root.
+- 🟢 **No secrets printed.** The container only gets `SUPABASE_SERVICE_ROLE_KEY=dummy` (line 39). On failure the probe prints at most a stack trace with paths, never env values.
+- 🟢 **Nit, not new:** `check-image.sh:56`. The reject handler `()=>process.exit(1)` still throws away `e.code`. Exit 2 (wrong match count) and exit 1 (missing directory or failed import) also lead to the same error message. Printing the cause would make a red CI run easier to diagnose. This is an optional follow-up.
+- 🟢 **The usage change has no logic effect.** `/home/user/stoktok/scripts/check-no-service-key-in-client.sh:3,11` changed only the usage comment and message.
+  - `--scan-only` without a directory still exits 2.
+  - A missing directory still fails (lines 21–24) under `set -euo pipefail`.
+  - The search is still exact (`grep -rlF --`, line 28).
+  - Build mode still adds the 3 sentinels (line 18).
+- 🟢 **No regressions** against attempt 1. The secret-env and `.env*` image checks (lines 13–19), the worker smoke test, the `/healthz` and `/` probes and the MODULE_NOT_FOUND log grep are all unchanged.
+
+### Recommendations
+1. Approve on R3 (AC2–AC4). No changes are needed.
+2. Optional follow-up (R7): in the probe at `check-image.sh:56`, log `e.code` or `e.message` and the match count before exiting.
+
+### Risks
+- If a build ever produces two hashed alias directories for one SDK, the probe fails with exit 2. That fails closed by design, but the CI message will not say why.
+- The probe runs only in CI. A red `images` job means REWORK.
+
+### Open questions
+None.
