@@ -73,3 +73,31 @@ No violations found. `maxToolCallsPerRound` lives in core config (R5). The new c
 - The fakes rule does not catch a relative `./fakes` import from non-test files in packages/ai/src.
 - The importer regex misses backtick `import()`.
 - STK-070: adapters must validate the usage they put into `ProviderError`.
+
+## Attempt 3 — 2026-11-10
+Verdict: PASS
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exit 0. Clean for core, ai, sources, db, web (next typegen + tsc), worker.
+- lint: `pnpm lint` exit 0. Clean for all 6 projects.
+- test: `pnpm test` exit 0. core 776, ai 62 (4 files), sources 35, db 169 + 1 todo, worker 292, web 302 passed; 0 failures. Matches impl-log.md attempt 3.
+
+### Acceptance criteria
+- [x] Attempt 2 Issue 1 (`callRound` never throws on the provider-error path) is fixed. Evidence: in packages/ai/src/client.ts:245-263, the catch branch now calls `usageCostMicroUsd` inside its own try/catch. It uses the real tokens only when the cost was computed. Otherwise it settles 0/0 with `costMicroUsd: null` and keeps `errorCode: err.code`. The whole `callRound` path is now guarded: the provider call is in try/catch with the guarded cost, and `classify` is in try/catch (:268-276).
+- [x] The requested tests are present and green. client.test.ts:328-336 is a `test.each` with `usage(-1, 2)` and `usage(1.5, 2)`. Each case checks that `generate` resolves `{ ok: false, reason: 'provider_error', usageIds: [1] }`, that `ledger.events` equals `['reserve','settle']`, and that the settle `toEqual`s `{ status: 'provider_error', inputTokens: 0, outputTokens: 0, costMicroUsd: null, errorCode: 'http' }`.
+- [x] All other ACs (AC1–AC9 and Ming's fixes 2–4) are unchanged from attempts 1–2. The evidence still holds and all tests are green.
+
+### Regression vs plan.md
+None found. The attempt-3 commit 24237d5 changes only packages/ai/src/client.ts (+14/−6, catch branch only) and client.test.ts (+10), plus work files. Both files are in the plan's file list. The valid-usage path behaves the same as before: the existing "ProviderError with usage settles real cost" test (errorCode 'http') still passes. The `git diff origin/main...HEAD` file set is the same as in attempt 2.
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found. Cost is still computed only via core `usageCostMicroUsd` (R1/R2). No new config or secrets.
+
+### Nits (do not block)
+- 💭 The attempt-2 nits are still open: the duplicated importer regex in r3-guard.test.ts, and valid `res.usage` being dropped on `malformed`.
+
+### Follow-ups (out of scope)
+- The attempt-2 follow-ups still apply. STK-070 adapters should validate usage before they put it into `ProviderError`.
