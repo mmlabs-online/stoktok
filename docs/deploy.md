@@ -18,7 +18,7 @@ A push to a branch `release/vX.Y.Z` (its commit must already be on main) runs `r
 - **D1:** the runner, the Docker engine (OrbStack, set to start at login) and the scheduler all run as `mingming`, in that user's login session. `mingming` must be logged in (auto-login after a reboot). Check: reboot, let it auto-login, run the `runner-check` workflow and see it green. No deploys or jobs run without the session.
 - **D2:** time zone is Asia/Ho_Chi_Minh (`sudo systemsetup -gettimezone`; `run-schedule.sh` refuses to run if `date +%z` is not `+0700`). Sleep is off (`sudo pmset -a sleep 0 disablesleep 1`, or lid open on power), otherwise deploys queue and jobs coalesce on wake.
 - **D3:** the Mac is Intel, so the `linux/amd64` images run natively.
-- **D4:** secrets file `/Users/mingming/.config/stoktok/stoktok.env`, mode 600, owner `mingming`, outside git and the runner checkout. It holds only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. It is written by `deploy-stoktok` on every run from the `stoktok` environment secrets. Do not edit it by hand: the next deploy overwrites it. It sits in a personal home directory: `deploy-stoktok` creates the directory with mode 700 and excludes it from Time Machine; keep the backup destination encrypted.
+- **D4:** secrets file `/Users/mingming/.config/stoktok/stoktok.env`, mode 600, owner `mingming`, outside git and the runner checkout. It holds every key of the env list below (optional ones may be empty). It is written by `deploy-stoktok` on every run from the `stoktok` environment secrets. Do not edit it by hand: the next deploy overwrites it. It sits in a personal home directory: `deploy-stoktok` creates the directory with mode 700 and excludes it from Time Machine; keep the backup destination encrypted.
 - **D5:** deployment `main` is protected: PR required, code-owner review, `pr-scope` required, no admin bypass. The `stoktok` secrets reach a job on the self-hosted runner, so this protection is what stands between a push and the key. Side effect: without a `github-actions` bypass, an automatic rollback ends in `restore-unpushed` (the server is restored, the run is red, and Ming reverts the release PR by hand).
 
 ## Repository secrets
@@ -32,10 +32,11 @@ Create it **before** merging the setup PR. Otherwise GitHub creates the environm
 2. Deployment branches and tags: selected branches, `main` only. This is the control GitHub enforces; the `if: github.ref == 'refs/heads/main'` guard in the workflow is not one on its own, because a manual run uses the workflow file of the chosen branch.
 3. Environment secrets, prefixed `STOKTOK_` because the deployment repo is shared by every mmlabs app: `STOKTOK_SUPABASE_URL` (`https://<ref>.supabase.co`, no trailing slash or path) and `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` (the **new** key, not the one pasted into chat on 2026-11-01). The workflow writes them into the env file as `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, the names the app reads.
    Auth (STK-004, STK-048) adds two more. Authen is Supabase Auth of the stoktok project itself: `STOKTOK_AUTHEN_SUPABASE_URL` = the stoktok project URL (same value as `STOKTOK_SUPABASE_URL`, `https://<ref>.supabase.co`, no path), `STOKTOK_AUTHEN_SUPABASE_ANON_KEY` = the stoktok project's anon or `sb_publishable_` key (never the service role key). They are written as `AUTHEN_SUPABASE_URL` and `AUTHEN_SUPABASE_ANON_KEY`.
+   Two optional AI secrets (STK-072): `STOKTOK_ANTHROPIC_API_KEY` and `STOKTOK_GOOGLE_AI_API_KEY`, written as `ANTHROPIC_API_KEY` and `GOOGLE_AI_API_KEY`. Unset means that provider is off.
 4. No repo-level secrets with the same names (environment secrets would quietly override them). No required reviewers: the PR merge is already the gate.
 5. Fallback if the org plan has no environments on a private repo: store both as repo-level Actions secrets and remove the `environment: stoktok` line in the deployment PR before merging. The `main` guard, the fail-safe and D5 stay. Weakness: any workflow on any branch can read repo-level secrets. Record a follow-up to restore the line when the plan allows.
 
-If either secret is empty or malformed, `deploy-stoktok` stops at the `secrets` step, names the secret, starts nothing and leaves the old file in place.
+If a *required* secret is empty or malformed, `deploy-stoktok` stops at the `secrets` step, names the secret, starts nothing and leaves the old file in place.
 
 ## Setup
 Create the `stoktok` environment and its secrets (section above), then Ming merges the deployment-repo setup PR (drafts in `deploy/deployment-repo/`, plus the CODEOWNERS line). Merging runs `deploy-stoktok` because `compose.yml` changed under `apps/stoktok/`. With no `release.env` it skips the deploy and the publish, but still runs `preflight` and `envdir`; the LaunchAgent is installed by the first release deploy (nothing is published before that, so a scheduler would have nothing to run).
@@ -80,6 +81,14 @@ Why: a pre-STK-060 auth image under the new workflow throws in `loadAuthConfig` 
 
 If no auth image has been released yet, skip the allowlist secret entirely and ship STK-060 together with the auth setup above.
 
+## Enable AI keys (STK-072)
+`deploy/deployment-repo/` is only a draft mirror; nothing here deploys by itself. Steps 1 and 2 can go in either order: an old workflow with a new image means the keys are absent, so AI is off; a new workflow with no secrets writes `K=`, so AI is off. Either way there is no lockout.
+1. In `mmlabs-online/deployment`, Settings, Environments, `stoktok`: optionally add `STOKTOK_ANTHROPIC_API_KEY` and/or `STOKTOK_GOOGLE_AI_API_KEY`. Leaving one out disables that provider. Do not create repo-level secrets with the same names. Values must match `^[A-Za-z0-9._-]*$`: no spaces or newlines, and a whitespace-only value fails the run.
+2. Open a deployment-repo PR from a non-`release/*` branch that copies the updated `.github/workflows/deploy-stoktok.yml` as-is, then merge it.
+3. A workflow-only change does not trigger a deploy (the paths filter is `apps/stoktok/**`). Run `deploy-stoktok` via `workflow_dispatch` on `main` once. It rewrites `stoktok.env` (expect `changed=true` and a one-time force-recreate of web).
+4. Check: `ls -l ~/.config/stoktok/stoktok.env` still shows `-rw------- mingming`. Do not print the file.
+5. After any later key change or rotation, run `workflow_dispatch` on `main` again.
+
 ## Rotate the Supabase key
 1. Create the new key in Supabase. For an `sb_secret_...` key, create it next to the old one. For the legacy JWT `service_role` key, rotating means rotating the JWT secret: the old key dies at once and the anon key and all sessions are invalidated too. That includes web's Authen anon key (`STOKTOK_AUTHEN_SUPABASE_ANON_KEY`) and Ming's login session, so web cannot sign anyone in until the anon key is replaced. Then do steps 2 and 3 right away. Verify which applies in the Supabase dashboard.
 2. Update the `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` secret of the `stoktok` environment. If the legacy JWT secret was rotated, also update `STOKTOK_AUTHEN_SUPABASE_ANON_KEY` with the new anon key.
@@ -118,7 +127,7 @@ tail -f /Users/mingming/stoktok/logs/eod-prices.log     # also financials.log, s
 `run --rm` discards the container's logs, which is why `run-job.sh` appends to host files.
 
 ## Env list
-Names only. Values live in the `stoktok` environment secrets of the deployment repo, and `deploy-stoktok` writes the host env file; they are never in this repo (R3). Reserved variables are not passed to containers until a ticket reads them. Deploy-only variables: `STOKTOK_WEB_IMAGE`, `STOKTOK_WORKER_IMAGE` and `STOKTOK_VERSION`, written by `release.yml` into `release.env` (not secrets).
+Names only. Values live in the `stoktok` environment secrets of the deployment repo, and `deploy-stoktok` writes the host env file; they are never in this repo (R3). Reserved variables are not passed to containers until a ticket reads them. Optional variables are always written to the env file; an empty value means the feature is off. Deploy-only variables: `STOKTOK_WEB_IMAGE`, `STOKTOK_WORKER_IMAGE` and `STOKTOK_VERSION`, written by `release.yml` into `release.env` (not secrets).
 
 <!-- env-list:start -->
 | Name | Service | Status | Secret |
@@ -128,8 +137,8 @@ Names only. Values live in the `stoktok` environment secrets of the deployment r
 | `SUPABASE_ANON_KEY` | none | reserved | y |
 | `AUTHEN_SUPABASE_URL` | web | required now | n |
 | `AUTHEN_SUPABASE_ANON_KEY` | web | required now | y |
-| `LLM_PROVIDER` | none | reserved | n |
-| `LLM_API_KEY` | none | reserved | y |
+| `ANTHROPIC_API_KEY` | web, worker | optional | y |
+| `GOOGLE_AI_API_KEY` | web, worker | optional | y |
 <!-- env-list:end -->
 
 ## Restart safety check
