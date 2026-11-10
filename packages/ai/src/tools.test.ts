@@ -22,6 +22,7 @@ describe('assertReadTools', () => {
     ['duplicate names', [tool(), tool()]],
     ['bad maxResultBytes', [tool({ maxResultBytes: 0 })]],
     ['fractional maxResultBytes', [tool({ maxResultBytes: 1.5 })]],
+    ['reserved name final_output', [tool({ name: 'final_output' })]],
     ['bad name', [tool({ name: 'a b' })]],
   ])('%s throws', (_n, tools) => {
     expect(() => assertReadTools(tools)).toThrow(TypeError);

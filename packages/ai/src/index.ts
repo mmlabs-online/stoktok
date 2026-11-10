@@ -1,5 +1,10 @@
 export { AiClient } from './client';
 export type { AiClientOptions } from './client';
+export { createAnthropicProvider } from './adapters/anthropic';
+export type { AnthropicMessagesClient } from './adapters/anthropic';
+export { createGoogleProvider } from './adapters/google';
+export type { GoogleModelsClient } from './adapters/google';
+export { buildProviders } from './providers';
 export { readAiEnv } from './env';
 export type { AiEnv } from './env';
 export { UNTRUSTED_DATA_RULE } from './untrusted';
