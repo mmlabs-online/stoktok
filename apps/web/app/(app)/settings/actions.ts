@@ -2,6 +2,8 @@
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import type { AiKeyActionState } from '@stoktok/core';
+import { handleDeleteAiKey, handleSaveAiKey } from '../../../server/ai-keys';
 import { getDb } from '../../../server/db';
 import { handleSaveSettings } from '../../../server/settings/handlers';
 import type { SettingsFormState } from '../../../server/settings/handlers';
@@ -16,5 +18,19 @@ export async function saveSettingsAction(_prev: SettingsFormState, formData: For
     revalidatePath('/', 'layout');
     redirect('/settings?saved=1');
   }
+  return state;
+}
+
+export async function saveAiKeyAction(_prev: AiKeyActionState | null, formData: FormData): Promise<AiKeyActionState> {
+  await requireUser();
+  const state = await handleSaveAiKey(getDb(), formData);
+  if (state.ok) revalidatePath('/settings');
+  return state;
+}
+
+export async function deleteAiKeyAction(_prev: AiKeyActionState | null, formData: FormData): Promise<AiKeyActionState> {
+  await requireUser();
+  const state = await handleDeleteAiKey(getDb(), formData);
+  if (state.ok) revalidatePath('/settings');
   return state;
 }

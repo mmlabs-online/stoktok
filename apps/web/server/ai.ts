@@ -1,6 +1,7 @@
 import 'server-only';
 import { AiClient, makeProviderResolver, readAiEnv } from '@stoktok/ai';
-import type { BudgetStatus } from '@stoktok/core';
+import type { AiEnv } from '@stoktok/ai';
+import type { AiProvider, BudgetStatus } from '@stoktok/core';
 import { aiUsageLedger, getDb, readAiKeySecrets } from './db';
 
 // The deploy env must not set the SDKs' ANTHROPIC_CUSTOM_HEADERS / GOOGLE_GENAI_API_VERSION.
@@ -22,4 +23,9 @@ export function getAi(): AiClient {
 
 export function getAiBudgetStatus(): Promise<BudgetStatus> {
   return getAi().budgetStatus();
+}
+
+/** Booleans only: env values never leave this module. */
+export function aiEnvPresence(env: AiEnv = readAiEnv()): Record<AiProvider, boolean> {
+  return { anthropic: !!env.anthropicApiKey, google: !!env.googleAiApiKey };
 }

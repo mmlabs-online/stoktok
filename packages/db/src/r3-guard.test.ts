@@ -115,10 +115,37 @@ describe('R3 guard', () => {
     expect(hits).toEqual([]);
   });
 
-  test('the write wrappers (ai_key_set, ai_key_delete) appear only in the ai-keys repo and its test (STK-076 extends this list)', () => {
-    const allowed = new Set(['packages/db/src/repos/ai-keys.ts', 'packages/db/src/repos/ai-keys.test.ts']);
+  test('the write wrappers (ai_key_set, ai_key_delete) appear only in the ai-keys repo, the web ai-keys module and their tests', () => {
+    const allowed = new Set([
+      'packages/db/src/repos/ai-keys.ts',
+      'packages/db/src/repos/ai-keys.test.ts',
+      'apps/web/server/ai-keys.ts',
+      'apps/web/server/ai-keys.test.ts',
+    ]);
     const hits = files.filter((f) => /ai_key_set|ai_key_delete/.test(f.text)).map((f) => f.path).filter((p) => !allowed.has(p));
     expect(hits).toEqual([]);
+  });
+
+  test("apps/web/server/ai-keys.ts starts with import 'server-only'", () => {
+    expect(readFileSync(join(ROOT, 'apps/web/server/ai-keys.ts'), 'utf8').startsWith("import 'server-only';")).toBe(true);
+  });
+
+  test('the settings key actions, page and card never reference the decrypting entry points', () => {
+    const targets = files.filter(
+      (f) =>
+        f.path === 'apps/web/server/ai-keys.ts' ||
+        f.path === 'apps/web/app/(app)/settings/actions.ts' ||
+        f.path === 'apps/web/app/(app)/settings/page.tsx' ||
+        f.path.startsWith('apps/web/components/settings/'),
+    );
+    expect(targets.length).toBeGreaterThanOrEqual(5);
+    expect(targets.filter((f) => /readAiKeySecrets|ai_key_secrets/.test(f.text)).map((f) => f.path)).toEqual([]);
+  });
+
+  test("the AI keys card is a client component and imports nothing from a server path", () => {
+    const card = files.find((f) => f.path === 'apps/web/components/settings/ai-keys-card.tsx')!;
+    expect(card.text).toContain("'use client'");
+    expect(card.text).not.toMatch(/from\s+['"][^'"]*server\//);
   });
 
   test('no TS/JS file references Vault objects (Vault is reached only through the SQL wrappers)', () => {
