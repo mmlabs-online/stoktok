@@ -64,3 +64,46 @@ I had no shell, so I could not run `git diff`, the tests or typecheck. I read th
 
 ### Open questions
 - Should a refusal caused by a 22023 or a reserve throw leave a trace beyond logs (for example a counter)? It writes no `ai_usage` row today. This is acceptable in single-user v1, but it is the one place where budget enforcement events cannot be audited.
+
+## STK-071 security re-review, attempt 2
+
+I read these files directly: `packages/ai/src/{client,tools,index,types}.ts`, `packages/ai/package.json`, `packages/ai/src/client.test.ts` (lines 240–360), `packages/core/src/ai/{config,cost}.ts` and `packages/db/src/r3-guard.test.ts`. I did not run the tests, typecheck or git diff.
+
+**Verdict: no 🔴 findings. All four attempt-1 🟡 fixes are in place. One 🟡 gap of the same kind is left.**
+
+### Attempt-1 🟡 fixes
+
+1. **The provider-response checks in `callRound` no longer throw: fixed.** `client.ts:262-270` wraps the new `classify` (`:274-312`) in a try/catch. A failure settles as `provider_error` with code `malformed`, cost `null` and 0 tokens. A `null` cost is still counted at the reserved amount in the budget ledger, so the budget stays safe. Tests at `client.test.ts:328-347` cover missing usage, missing parts, fractional tokens, negative tokens and a refine that throws, and they check the reserve → settle order.
+2. **The `@stoktok/ai` importer rule now catches both quote styles, `import()`, `require` and bare imports: fixed.** See `r3-guard.test.ts:69-73`. A self-test of the regex is at `:75-81`. Subpaths (`/fakes`) are matched too.
+3. **`@stoktok/ai/fakes` can only be imported from tests: fixed.** See `r3-guard.test.ts:83-88`. The regex is broad and also matches the name in comments or strings, so it errs on the safe side. `packages/ai/src/index.ts` does not re-export the fakes.
+4. **Cap on tool calls per round: fixed.**
+   - The setting `maxToolCallsPerRound` is in config: `config.ts:24`, default 8 at `:49`. `:79` validates it as a positive integer, and tests are at `config.test.ts:37-39`.
+   - `client.ts:290` enforces it before settle and before any tool runs, failing the call as `provider_error` with code `too_many_tool_calls`, at the real cost.
+   - The test at `client.test.ts:243-256` confirms that no tool runs and the provider is called only once.
+
+### New or remaining findings
+
+- 🟡 **`client.ts:252`: the error path can still throw.** `usageCostMicroUsd(model, err.usage, …)` runs inside the `catch` at `:245`, which the new try/catch does not cover.
+  - **How it happens:** an adapter (STK-070) throws `ProviderError('rate_limited', {inputTokens: undefined or 1.5 or -1, …})`. `assertCount` then throws a RangeError and `generate` throws.
+  - **Effect:** the `ai_usage` row stays `reserved` forever, and the caller gets an exception instead of a `GenerateResult`.
+  - **Not affected:** the budget. A reserved row stays counted.
+  - **Fix:** wrap the cost calculation, for example `const cost = safeCost(err.usage)` that returns `null` (and 0 tokens) on a throw, and add a test case with `new ProviderError('http', usage(-1, 2))`. This is the gap attempt 1 flagged, on the error branch.
+- 🟢 **`client.ts:264-269`: real usage is discarded on `malformed`.** When `res.usage` is valid but something later in `classify` throws (for example a schema refine), the real tokens are dropped and the round is counted at the reserved worst case. This errs on the safe side, so it is acceptable; only the audit is less precise.
+- 🟢 **`r3-guard.test.ts:70`: the importer regex has small gaps.** It misses backtick template imports (`` import(`@stoktok/ai`) ``) and relative paths into `packages/ai/src` from `apps/web`. Package `exports` block deep subpaths such as `@stoktok/ai/src/client`, but not relative paths. Low risk.
+- 🟢 **The fakes rule only checks the package name.** A non-test file inside `packages/ai` that does `import './fakes'` would not be caught. Today only `client.test.ts:16` and `untrusted.test.ts:2` do this. Optionally, extend the rule to match `\./fakes['"]` in non-test files under `packages/ai/src`.
+- No regressions found:
+  - `classify` keeps the order: max_tokens, then the final-round check, then the cap, then per-call allowlist/zod validation, then output.
+  - `generate:188-190` checks each call again before running it.
+  - The new error codes (`malformed`, `too_many_tool_calls`) satisfy the DB check `^[a-z0-9_]{1,100}$` (`supabase/migrations/20261109000100_ai_usage.sql:16`).
+
+### Attempt-1 🟢 follow-ups still open
+- Tool names are not capped at 59 characters: `tools.ts:4` is still `{1,64}`. A name of 60–64 characters still makes `wrapUntrusted` throw at `client.ts:203` after the tool has run and after settle.
+- `runTool` (`client.ts:215-223`) still only aborts and does not race the timeout, so a tool that ignores the signal hangs `generate`.
+- `UNTRUSTED_DATA_RULE` still does not name the real delimiter (`client.ts:116`).
+- The SDK regex (`r3-guard.test.ts:64`) still misses bare `import '@anthropic-ai/sdk'` and other SDK names (`openai`, `@google/generative-ai`, `@ai-sdk/*`).
+- **STK-070:** a `server-only` `apps/web/server/ai.ts` plus a guard for it like `:48-53`. Adapters must enforce `maxOutputTokens` and the thinking budget on the provider side, and must validate the usage in `ProviderError` (see the 🟡 above).
+- **STK-064/065/066:** no stored or fetched text in `input.system` or the caller's text. Each tool needs an R10 check, because `kind: 'read'` is a label the tool gives itself.
+- The attempt-1 open question, auditing refusals caused by a reserve throw or 22023, now has a documented answer at `client.ts:59-63`: these refusals are logged only. Whether that is enough is still Ming's call; no counter has been added.
+
+### Recommendation
+Fix the 🟡 at `client.ts:252` in this ticket. It is a one-line wrap plus one test, and it completes AC2's "callRound never throws" contract. Everything else can go to follow-ups.
