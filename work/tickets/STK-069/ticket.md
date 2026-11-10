@@ -27,5 +27,6 @@ docs/spec-v1.md §2 (LLM provider), §6 Signal & AI design, §8 secrets. CLAUDE.
 ## Notes / answers from Ming
 - 2026-11-10 (orchestrator): split from STK-063 per its plan.md. Carry-overs from STK-063 review and security review:
   - Widen the db `Db` type to include `rpc` and drop the local `AiDb` type.
+  - Harden `ai_reserve` with a new migration: reject a window that does not contain the DB's `now()`, and reject `p_reserve_micro_usd = 0` (and require prices > 0 in `validateAiConfig`). Security review 🟡 items 1 and 3.
   - Fix ADR 0008 wording: the cap is bounded by one call's estimation error, not "never exceeded".
   - Test that settled cost ≤ reserved cost, or log a breach as `error_code = 'over_reservation'`.

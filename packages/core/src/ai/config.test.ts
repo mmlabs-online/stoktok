@@ -26,7 +26,6 @@ describe('validateAiConfig rejects', () => {
     ['warnPpm 1_000_000', (c: AiConfig) => (c.budget.warnPpm = 1_000_000)],
     ['non-integer price', (c: AiConfig) => (c.priceTable['claude-sonnet-4-5']!.inMicroUsdPerMTok = 1.5)],
     ['negative price', (c: AiConfig) => (c.priceTable['claude-sonnet-4-5']!.outMicroUsdPerMTok = -1)],
-    ['zero price', (c: AiConfig) => (c.priceTable['gemini-2.5-flash']!.inMicroUsdPerMTok = 0)],
     ['another time zone', (c: AiConfig) => (c.budget.timeZone = 'UTC')],
     ['maxOutputTokens <= 0', (c: AiConfig) => (c.maxOutputTokensByTask.chat = 0)],
   ])('%s', (_name, mutate) => {

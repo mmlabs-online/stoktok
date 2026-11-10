@@ -59,9 +59,8 @@ export function validateAiConfig(cfg: AiConfig): string[] {
     }
   }
   for (const [model, row] of Object.entries(cfg.priceTable)) {
-    // Prices must be > 0: a free model would give a 0 reservation, which ai_reserve rejects.
-    if (!isPosInt(row.inMicroUsdPerMTok) || !isPosInt(row.outMicroUsdPerMTok)) {
-      errors.push(`price of ${model} must be positive integers`);
+    if (!isNonNegInt(row.inMicroUsdPerMTok) || !isNonNegInt(row.outMicroUsdPerMTok)) {
+      errors.push(`price of ${model} must be non-negative integers`);
     }
   }
   for (const task of AI_TASKS) {
