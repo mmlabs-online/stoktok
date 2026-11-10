@@ -83,3 +83,43 @@ Files:
 - /home/user/stoktok/scripts/check-deploy-env.sh
 - /home/user/stoktok/deploy/deployment-repo/.github/workflows/deploy-stoktok.yml
 - /home/user/stoktok/work/tickets/STK-072/security-review.md
+
+## STK-072 security re-review, attempt 3 (`scripts/check-deploy-env.sh`)
+
+**Verdict: no 🔴 findings. Both 🟡 findings from attempt 2 are closed.** The current workflow still passes every check. I don't have a shell, so I worked through each check by hand against `deploy/deployment-repo/.github/workflows/deploy-stoktok.yml` and ran nothing.
+
+### Findings
+- 🟢 **Closed: "printf can move ahead of the guards".**
+  - The awk check at `check-deploy-env.sh:164-170` now requires each optional key's guard to come before both `mktemp` and the printf (`g < m && g < p`).
+  - If the printf is not in the secrets step, `p` is 0 and the check fails. Since exactly one printf is allowed (`:128`), it can't hide in another step either.
+  - Against the workflow: the guards at `deploy-stoktok.yml:194` and `:198` come before `mktemp` at `:205` and the printf at `:207`. Pass.
+  - The printf can no longer target `$ENV_FILE` either. The pattern at `:127` requires the line to end in exactly ` > "$tmp"`.
+- 🟢 **Closed: "anything on the printf line is ignored".**
+  - Expanded, the pattern at `:127` is `^[[:space:]]+printf '[^']*'( "\$VAR")+ > "\$tmp"[[:space:]]*$`.
+  - The format can't contain a `'`, the arguments can only be `"$NAME"`, and the line must end at the redirect.
+  - So `; echo …`, `&&`, `>>`, `>|`, `> "$ENV_FILE"` and comment-prefixed lines all fail.
+  - `grep -cF … -ne 1` (`:128`) fails closed if a second copy appears anywhere, even in a comment.
+  - `deploy-stoktok.yml:207` matches the pattern.
+- 🟢 **The guard is matched on the whole line** (`:165-166`). Leading and trailing spaces are trimmed, then the line is compared as plain text, not as a regex. Guard text inside an `echo`, a trailing `# …` comment or `; then :; else` on the same line no longer matches.
+- 🟢 **`>|` is caught** (`:178`, `>(>|\|)?`). The non-printf lines of the current secrets step (`:168`, `:175-201`, `:209-219`) don't match, so there is no false positive.
+- 🟢 **No regressions.** Every new pipeline is either inside an `if` condition or ends in `|| true`, so `set -euo pipefail` doesn't stop the script early. An empty `secrets_step` fails closed. The awk string comparison treats `[ ] . * $` literally.
+
+### Remaining bypasses (all need a deliberate edit; 🟢, follow-ups per R7)
+- **A command on the previous line can swallow the printf.** If the line before it ends in `\`, the printf becomes part of that command. For example, `cat other \` writes another file into `$tmp`, and `: \` leaves it empty. Neither the pattern check nor the writer check (`:177-178`) looks at the line before the printf. Fix: require the line before the printf to be exactly `trap 'rm -f "$tmp"' EXIT`.
+- **The printf doesn't have to come after `mktemp`.** There is no `p > m` check, so `tmp="$ENV_FILE"` set earlier would make a non-atomic write possible. The guards still run first, so injection stays blocked.
+- **The `exit 1` doesn't have to be in that `if`'s own body.** It only has to appear within the next 4 lines, so `then` / `:` / `else` / `exit 1` passes (`:167`).
+- **The writer check only scans the secrets step and only `$tmp`/`$ENV_FILE`.** Not covered: writes from other steps, a literal `stoktok.env` path, and `cp`, `dd` or `sed -i` onto the env file (`:177-178`).
+
+### Follow-ups still open from attempts 1 and 2
+1. **Required-key guards are not pinned.** These are the `https://` checks at `deploy-stoktok.yml:178` and `:186` and the `+` charset checks at `:182` and `:190`. This gap predates the ticket.
+2. **`secrets.` mappings are still matched across the whole workflow, not just the secrets step.** `check-deploy-env.sh:81` and `:147` grep `"$WF"` even though `secrets_step` is already computed at `:145`. So the AI keys could be mapped into `preflight` or `notify`, which write to the step summary, and the check would still pass.
+3. **There is still no `scripts/check-deploy-env.test.sh`.** It should cover N11–N13, plus "printf before the guards", "a writer on the printf line", `>|`, and the line-continuation case.
+
+### Open questions (Ming's decision, unchanged)
+- Should a malformed optional key fail the whole deploy, or only turn that provider off?
+- Should the AI keys go to `web, worker`, or only to `worker` until STK-070?
+
+Files reviewed:
+- /home/user/stoktok/scripts/check-deploy-env.sh
+- /home/user/stoktok/deploy/deployment-repo/.github/workflows/deploy-stoktok.yml
+- /home/user/stoktok/work/tickets/STK-072/security-review.md
