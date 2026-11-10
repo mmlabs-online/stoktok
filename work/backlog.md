@@ -66,4 +66,4 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-070 | Claude and Gemini adapters in packages/ai (STK-063 slice 3a) | DONE | P2 | architecture, security, ui | 3 | 2026-11-10 |
 | STK-071 | AI client, untrusted blocks, tools and guards (STK-063 slice 2b-i) | DONE | P2 | architecture, security | 3 | 2026-11-10 |
 | STK-072 | Optional AI secrets in deploy tooling (STK-063 slice 2b-ii) | DONE | P2 | architecture, security | 3 | 2026-11-10 |
-| STK-073 | AI wiring and AI usage card (STK-063 slice 3b) | BACKLOG | P2 | architecture, security, ui | 0 | 2026-11-10 |
+| STK-073 | AI wiring and AI usage card (STK-063 slice 3b) | DONE | P2 | architecture, security, ui | 2 | 2026-11-10 |

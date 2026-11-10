@@ -51,6 +51,11 @@ done
 docker logs "$NAME"
 if [ "$ok" -ne 1 ]; then echo "::error::web smoke failed: /healthz did not return 200"; exit 1; fi
 if ! probe / '0'; then echo "::error::web smoke failed: / did not answer"; exit 1; fi
+# The server loads the SDKs through Turbopack's hashed aliases in .next/node_modules
+# (the hash changes per build), from the server chunk directory. Probe exactly that.
+if ! docker exec -w /app/apps/web/.next/server/chunks/ssr "$NAME" node -e "const fs=require('fs');const d='../../../node_modules';const ids=[['@anthropic-ai','sdk-'],['@google','genai-']].map(([s,p])=>{const n=fs.readdirSync(d+'/'+s).filter(x=>x.startsWith(p));if(n.length!==1)process.exit(2);return s+'/'+n[0]});Promise.all(ids.map(i=>import(i))).then(()=>process.exit(0),()=>process.exit(1))"; then
+  echo "::error::web smoke failed: AI SDK externals do not resolve in the image"; exit 1
+fi
 if docker logs "$NAME" 2>&1 | grep -E 'Cannot find module|MODULE_NOT_FOUND'; then
   echo "::error::web smoke failed: module not found"; exit 1
 fi

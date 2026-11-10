@@ -14,6 +14,9 @@
     "start:job": "node dist/cli.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.7.0",
+    "@google/genai": "3.0.0",
+    "@stoktok/ai": "workspace:*",
     "@stoktok/core": "workspace:*",
     "@stoktok/db": "workspace:*",
     "@stoktok/sources": "workspace:*",

@@ -15,6 +15,8 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
+const SDK_IMPORT = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"](?:@anthropic-ai\/sdk|@google\/genai)/;
+
 const files = [...walk(join(ROOT, 'apps')), ...walk(join(ROOT, 'packages'))]
   .filter((p) => !p.endsWith('r3-guard.test.ts') && !p.endsWith('next-env.d.ts'))
   .map((p) => ({ path: relative(ROOT, p), text: readFileSync(p, 'utf8') }));
@@ -61,9 +63,21 @@ describe('R3 guard', () => {
   });
 
   test('AI SDKs (@anthropic-ai/sdk, @google/genai) are imported only under packages/ai/', () => {
-    const sdk = /(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"](?:@anthropic-ai\/sdk|@google\/genai)/;
-    const hits = files.filter((f) => sdk.test(f.text)).map((f) => f.path).filter((p) => !p.startsWith('packages/ai/'));
+    const hits = files.filter((f) => SDK_IMPORT.test(f.text)).map((f) => f.path).filter((p) => !p.startsWith('packages/ai/'));
     expect(hits).toEqual([]);
+  });
+
+  test('SDK regex catches from, import(), require() and side-effect import', () => {
+    for (const s of [`from '@anthropic-ai/sdk'`, `from "@google/genai"`, `import('@google/genai')`, `require("@anthropic-ai/sdk")`, `import '@anthropic-ai/sdk'`]) {
+      expect(SDK_IMPORT.test(s), s).toBe(true);
+    }
+    expect(SDK_IMPORT.test(`from '@stoktok/ai'`)).toBe(false);
+  });
+
+  test("apps/web/server/ai.ts exists, starts with import 'server-only' and imports from './db'", () => {
+    const text = readFileSync(join(ROOT, 'apps/web/server/ai.ts'), 'utf8');
+    expect(text.startsWith("import 'server-only';")).toBe(true);
+    expect(text).toMatch(/from '\.\/db'/);
   });
 
   test('apps/web importers of @stoktok/ai are only apps/web/server/ai.ts', () => {

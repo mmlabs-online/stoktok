@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
-# STK-006 (R3): build web with a sentinel service key and prove it is absent from client bundles.
+# STK-006 (R3): build web with sentinel service and AI keys and prove they, the AI SDKs and their hosts are absent from client bundles.
+# usage: check-no-service-key-in-client.sh [--scan-only <dir>]   (--scan-only skips the build and scans <dir> with the fixed needles)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SENTINEL="sb-service-SENTINEL-$RANDOM$RANDOM"
 STATIC="$ROOT/apps/web/.next/static"
+NEEDLES=(SUPABASE_SERVICE_ROLE_KEY service_role ANTHROPIC_API_KEY GOOGLE_AI_API_KEY @anthropic-ai/sdk @google/genai api.anthropic.com generativelanguage.googleapis.com)
 
-SUPABASE_URL=http://localhost SUPABASE_SERVICE_ROLE_KEY="$SENTINEL" pnpm --filter @stoktok/web build
+if [ "${1:-}" = "--scan-only" ]; then
+  [ -n "${2:-}" ] || { echo "usage: check-no-service-key-in-client.sh --scan-only <dir>" >&2; exit 2; }
+  STATIC="$2"
+else
+  SENTINEL="sb-service-SENTINEL-$RANDOM$RANDOM"
+  AI_A="sk-ant-SENTINEL-$RANDOM$RANDOM"
+  AI_G="goog-SENTINEL-$RANDOM$RANDOM"
+  SUPABASE_URL=http://localhost SUPABASE_SERVICE_ROLE_KEY="$SENTINEL" ANTHROPIC_API_KEY="$AI_A" GOOGLE_AI_API_KEY="$AI_G" pnpm --filter @stoktok/web build
+  NEEDLES=("$SENTINEL" "$AI_A" "$AI_G" "${NEEDLES[@]}")
+fi
 
 if [ ! -d "$STATIC" ]; then
   echo "FAIL: $STATIC missing" >&2
@@ -14,13 +24,13 @@ if [ ! -d "$STATIC" ]; then
 fi
 
 fail=0
-for needle in "$SENTINEL" SUPABASE_SERVICE_ROLE_KEY service_role; do
+for needle in "${NEEDLES[@]}"; do
   hits="$( { grep -rlF -- "$needle" "$STATIC" || true; } | wc -l)"
   echo "hits for '$needle' in .next/static: $hits"
   if [ "$hits" -ne 0 ]; then fail=1; fi
 done
 if [ "$fail" -ne 0 ]; then
-  echo "FAIL: service key material found in client bundle" >&2
+  echo "FAIL: secret or AI SDK material found in client bundle" >&2
   exit 1
 fi
-echo "OK: no service key material in client bundle"
+echo "OK: no secret or AI SDK material in client bundle"

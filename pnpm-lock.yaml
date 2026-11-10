@@ -29,6 +29,15 @@ importers:
 
   apps/web:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: 1.7.0
+        version: 1.7.0(zod@4.6.7)
+      '@google/genai':
+        specifier: 3.0.0
+        version: 3.0.0
+      '@stoktok/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@stoktok/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -81,6 +90,15 @@ importers:
 
   apps/worker:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: 1.7.0
+        version: 1.7.0(zod@4.6.7)
+      '@google/genai':
+        specifier: 3.0.0
+        version: 3.0.0
+      '@stoktok/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@stoktok/core':
         specifier: workspace:*
         version: link:../../packages/core

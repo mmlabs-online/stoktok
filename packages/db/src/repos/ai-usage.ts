@@ -71,3 +71,12 @@ export async function getAiMonthSpend(db: Db, window: BudgetWindow): Promise<num
   const res = await db.rpc('ai_month_spend', { p_from: window.fromTs, p_to: window.toTs });
   return mapRow((v: unknown) => toSafeInt(v, 'spent', 'ai_usage'), unwrap<unknown>(res, ctx), ctx);
 }
+
+/** Binds the ledger functions to `db`. Structurally the `UsageLedger` port of @stoktok/ai; errors pass through unchanged (pgCode survives). */
+export function aiUsageLedger(db: Db) {
+  return {
+    reserve: (r: AiReserveRequest) => reserveAiUsage(db, r),
+    settle: (id: number, s: AiUsageSettle, now: Date) => settleAiUsage(db, id, s, now),
+    monthSpend: (w: BudgetWindow) => getAiMonthSpend(db, w),
+  };
+}
