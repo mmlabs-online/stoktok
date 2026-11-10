@@ -7,7 +7,7 @@
 | Areas | architecture, security |
 | Attempts | 1 |
 | Created | 2026-11-10 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/50 |
 
 ## Goal
 Add the server-only `@stoktok/ai` package on top of the STK-063 budget foundation: the provider interface, the client that reserves budget before every provider call, prompt-injection defence, a read-only tool allowlist, zod output validation and the AI secret names. This is slice 2 of the original STK-063 (see work/tickets/STK-063/plan.md "Split proposal").
