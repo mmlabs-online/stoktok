@@ -326,6 +326,16 @@ describe('provider failures', () => {
   });
 
   test.each([
+    ['negative tokens', usage(-1, 2)],
+    ['fractional tokens', usage(1.5, 2)],
+  ])('ProviderError with %s in usage still settles provider_error with null cost and does not throw', async (_n, bad) => {
+    const { client, ledger } = setup([new ProviderError('http', bad)]);
+    expect(await client.generate(base())).toMatchObject({ ok: false, reason: 'provider_error', usageIds: [1] });
+    expect(ledger.events).toEqual(['reserve', 'settle']);
+    expect(ledger.settles[0]?.settle).toEqual({ status: 'provider_error', inputTokens: 0, outputTokens: 0, costMicroUsd: null, errorCode: 'http' });
+  });
+
+  test.each([
     ['missing usage', { parts: [{ type: 'text', text: 'x' }], stop: 'end' }],
     ['missing parts', { stop: 'end', usage: usage() }],
     ['fractional tokens', { parts: [{ type: 'text', text: 'x' }], stop: 'end', usage: usage(1.5, 2) }],

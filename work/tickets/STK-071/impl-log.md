@@ -58,3 +58,20 @@ None.
 
 ### Out-of-plan files
 None (all four fixes were requested by Ming). Not committed.
+
+---
+
+## Attempt 3 (REWORK: review attempt 2, Issue 1)
+
+### Files touched
+| File | Required because |
+|---|---|
+| packages/ai/src/client.ts | Issue 1: provider-error branch of `callRound` computes cost under try/catch; bad `err.usage` settles 0 tokens, `costMicroUsd: null`, keeps `errorCode` |
+| packages/ai/src/client.test.ts | Issue 1: `ProviderError('http', usage(-1, 2))` and `usage(1.5, 2)` resolve provider_error, events `['reserve','settle']`, null cost, errorCode http |
+
+### Checks
+- typecheck: clean; lint: clean
+- test: core 776, ai 62, sources 35, db 169 (+1 todo), worker 292, web 302 passed
+
+### Out-of-plan files
+None. Not committed.

@@ -244,14 +244,20 @@ export class AiClient {
       res = await Promise.race([provider.generate({ ...request, signal: ctl.signal }), timeout]);
     } catch (e) {
       const err = e instanceof ProviderError ? e : new ProviderError('http');
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let costMicroUsd: number | null = null;
+      if (err.usage) {
+        try {
+          costMicroUsd = usageCostMicroUsd(model, err.usage, this.cfg);
+          inputTokens = err.usage.inputTokens;
+          outputTokens = err.usage.outputTokens;
+        } catch {
+          // bad usage from the adapter: settle with no cost rather than throw
+        }
+      }
       return {
-        settle: {
-          status: 'provider_error',
-          inputTokens: err.usage?.inputTokens ?? 0,
-          outputTokens: err.usage?.outputTokens ?? 0,
-          costMicroUsd: err.usage ? usageCostMicroUsd(model, err.usage, this.cfg) : null,
-          errorCode: err.code,
-        },
+        settle: { status: 'provider_error', inputTokens, outputTokens, costMicroUsd, errorCode: err.code },
         failure: 'provider_error',
         calls: [],
       };
