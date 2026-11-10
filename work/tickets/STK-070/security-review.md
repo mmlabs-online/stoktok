@@ -101,3 +101,24 @@ I had no shell, so I checked the code by reading it against the installed SDKs: 
 
 ### Open questions
 None.
+
+## STK-070 security re-review, attempt 3
+
+**Verdict:** 🟡A and 🟢B are both fixed, and I found no regressions. Two small 🟢 notes remain; neither blocks.
+
+### Findings
+- **🟡A fixed.** `/home/user/stoktok/packages/ai/src/adapters/google.ts:36-39`. When `totalTokenCount` is valid, output is `max(candidates + thoughts, total − prompt − toolUse)`. A low, zero or missing candidate count can no longer settle below the reported total. This covers MAX_TOKENS with empty parts (tested at `google.test.ts:195`) and partial counts (`:204`).
+- **🟢B fixed.** `google.ts:33`. `candidatesTokenCount == null` treats null and undefined as missing. If output exists and there is no usable total, usage is null and the response is malformed (`google.test.ts:199-201`). A negative or invalid count still fails at `:35` (`google.test.ts:130`).
+- **🟢C (new, informational).** `google.ts:37`. The "negative derived value → malformed" rule only applies when the candidate count is missing. If candidates are present and `total < prompt + toolUse`, the code quietly falls back to `candidates + thoughts` instead of rejecting the response. This doesn't under-settle against the reported counts, but it doesn't match the stated behaviour either. Fix: either reject whenever `total` is valid and `derived < 0`, or update the comment and impl-log to match the code.
+- **🟢D (residual edge).** `google.ts:37`. A response with finishReason `MAX_TOKENS`, empty parts, and no candidates, thoughts or total settles at `outputTokens: 0`, even though up to `outputCap` may have been produced. Real Gemini responses always include `totalTokenCount`, so this is unlikely. Optional hardening: treat it as malformed when the count is missing, there is no usable total, and the response has output or `finishReason === 'MAX_TOKENS'`. `parseResponse` would need to pass the finish reason into `usageOf`.
+- **Anthropic: no change needed.** `/home/user/stoktok/packages/ai/src/adapters/anthropic.ts:21-26`. `output_tokens` is checked by `toUsage` (`shared.ts:7-11`); a missing or invalid value gives null usage and a malformed response. Input adds up all three cache fields. I found no path where it settles low.
+
+### Regressions
+None found:
+- Prompt-blocked responses still settle with the prompt count (`google.test.ts:117`).
+- `cachedContentTokenCount` is still left out, which is correct because it is already part of `promptTokenCount`.
+- `toolUse` is counted on the input side only.
+- No other files changed.
+
+### Open question
+Should 🟢C be closed in this ticket (one-line change plus a test) or added to follow-ups under R7? It is not a blocker either way.
