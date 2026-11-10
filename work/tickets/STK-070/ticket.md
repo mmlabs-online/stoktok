@@ -7,7 +7,7 @@
 | Areas | architecture, security, ui |
 | Attempts | 3 |
 | Created | 2026-11-10 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/53 |
 
 ## Goal
 Add the real Anthropic (Claude) and Google AI (Gemini) adapters to `@stoktok/ai`, wire the AI client into the web server and the worker, and show this month's AI spend with the 80% warning on Settings. This is slice 3 of the original STK-063 (see work/tickets/STK-063/plan.md "Split proposal").
