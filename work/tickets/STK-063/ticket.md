@@ -7,7 +7,7 @@
 | Areas | architecture, security, db |
 | Attempts | 2 |
 | Created | 2026-11-08 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/49 |
 
 ## Goal
 Add one server-only AI layer that STK-064, STK-065 and STK-066 share. It sits behind a provider interface with two implementations, Claude API and Google AI API. It logs token usage and cost for every call and enforces a hard budget of 5 USD per month across both providers.
