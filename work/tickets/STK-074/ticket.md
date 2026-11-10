@@ -7,7 +7,7 @@
 | Areas | security, db, architecture, ui |
 | Attempts | 3 |
 | Created | 2026-11-10 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/56 |
 
 ## Goal
 Let Ming enter the Anthropic and Google AI API keys on the Settings screen, store them encrypted in Supabase Vault, and have the server-side AI client use them (falling back to the STK-072 env keys), without a key ever reaching the browser or the logs.
