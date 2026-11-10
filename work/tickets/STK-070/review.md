@@ -133,3 +133,37 @@ No violations found.
 - When `candidatesTokenCount` is present, output could be `max(candidates + thoughts, total - prompt - toolUse)`. This was the security review's "safer still" option and was not required.
 - The Anthropic SDK still reads `ANTHROPIC_CUSTOM_HEADERS` (`client.js:178`), and `@google/genai` still reads other `GOOGLE_*` env vars (project/location). Clear these in the deploy env, or handle them in STK-073.
 - Carry-overs from attempt 1 still apply: STK-073 must cover both SDKs in the bundle check and pass a consistent `timeoutMs`; record the real fixtures from live calls before go-live.
+
+## Attempt 3 — 2026-11-10
+Verdict: PASS
+
+### Checks (run by reviewer)
+- typecheck: all workspaces pass (no errors).
+- lint: all workspaces pass (no errors).
+- test: core 776; sources 35 (1 file skipped); ai 168 (9 files); db 169 + 1 todo; worker 292 (1 file skipped); web 302. All green. The impl-log only says "ai suite green" without a count; my run is consistent with it (165 → 168, +3 new tests).
+
+### Acceptance criteria
+- [x] Ticket note (security-review attempt 2 🟡A): when `totalTokenCount` is valid, Gemini output = max(candidates + thoughts, total − prompt − toolUse). Evidence: `packages/ai/src/adapters/google.ts:36-39`. Tests: `google.test.ts` "no output parts with a higher total -> derived value" (MAX_TOKENS, empty parts → 60) and "total higher than candidates + thoughts wins" (5+5 vs 30 → 30).
+- [x] 🟢B: a `null` candidate count is treated as missing. Evidence: `google.ts:33` (`== null`). Test: "null candidates behaves like missing", both with a total (→ 50) and without one (→ `malformed`, usage null).
+- [x] Fail-safe still holds: output present, candidate count missing, derived value negative/invalid/absent → `ProviderError('malformed', null)`. Evidence: `google.ts:38`, `google.ts:75`. Tests: the existing "no total", "total below prompt" and "invalid total" table cases still pass.
+- [x] Ticket AC1 and the typecheck/lint/test part of AC4 are still met. The Anthropic adapter, the shared helpers, the SDK pins and the stop/finish mapping are unchanged in `acae129`.
+
+### Scope
+- Code changes in `acae129` are limited to `packages/ai/src/adapters/google.ts` (`usageOf`) and `google.test.ts`. The other files are bookkeeping (`work/backlog.md`, ticket.md, impl-log.md). No out-of-plan files.
+- Only one existing test changed: it was renamed to "no output parts keeps 0 without a total". The assertion is the same.
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found.
+- R2: token counts are checked as safe non-negative integers before use, and `toUsage` checks them again.
+- R8: every new branch has a test.
+
+### Nits (do not block)
+- `google.ts:37`: if candidates are present and `total < prompt + toolUse`, the code silently uses candidates + thoughts instead of rejecting the response (security re-review 🟢C). This matches the ticket note, since max(base, negative) = base, and it never settles below the reported counts. The comment at `:31-32` could state this explicitly.
+
+### Follow-ups (out of scope)
+- Security 🟢D: MAX_TOKENS with empty parts and no candidates/thoughts/total settles at 0 output tokens. Optional hardening: pass the finish reason into `usageOf` and fail closed.
+- Consider rejecting any response where a valid `totalTokenCount` is below prompt + toolUse (🟢C), if real traffic shows this never happens.
+- Earlier carry-overs still apply: record real fixtures before go-live; STK-073 handles bundle checks and the deploy env (`ANTHROPIC_CUSTOM_HEADERS`, `GOOGLE_*`).
