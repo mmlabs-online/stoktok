@@ -58,6 +58,12 @@ describe('worstCaseCostMicroUsd', () => {
       }
     }
   });
+  test('provider adds providerOverheadTokens input tokens once', () => {
+    const input = { inputUtf8Bytes: 100, messageCount: 1 };
+    const base = worstCaseCostMicroUsd('chat', 'claude-sonnet-4-5', input);
+    const withProvider = worstCaseCostMicroUsd('chat', 'claude-sonnet-4-5', { ...input, provider: 'anthropic' });
+    expect(withProvider - base).toBe(1000 * 3);
+  });
   test('worst case >= usageCostMicroUsd for any usage within the bounds', () => {
     const cases = [
       { bytes: 100, msgs: 1, inTok: 30, outTok: 1000 },
