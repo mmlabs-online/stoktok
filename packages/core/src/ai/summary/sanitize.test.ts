@@ -121,6 +121,62 @@ describe('sanitizeSummaryOutput', () => {
     expect(r.stripped.invalid_text).toBe(bad.length);
   });
 
+  test('bad providedIds (invalid format or a missing: marker) return bad_context', () => {
+    for (const id of ['bad id', 'missing:VNM:news', 'px:vnm:2026-11-10']) {
+      expect(sanitizeSummaryOutput({ sections: [] }, { ...ctx, providedIds: [id] })).toEqual({ ok: false, code: 'bad_context' });
+    }
+  });
+
+  test('drops invisible and lookalike characters (U+00AD, U+E0041 tag, Cyrillic а, U+034F, variation selector)', () => {
+    const bad = ['nê\u00adn mua', 'Giá\u{E0041} tăng', 'Giá nên mu\u0430', 'Giá\u034F tăng', 'Giá\uFE0F tăng', 'Giá \u0442ăng'];
+    const r = run([out('price', ...bad.map((t) => s(t)))]);
+    expect(r.stripped.invalid_text).toBe(bad.length);
+  });
+
+  test('keeps real Vietnamese text with diacritics, dong sign and percent', () => {
+    const ok = ['Giá đóng cửa ở mức 70.000 ₫ (tăng 1,5%).', 'Thanh khoản cải thiện, khối ngoại bán ròng.', 'Đường trung bình động 20 phiên nằm dưới giá.'];
+    const r = run([out('price', ...ok.map((t) => s(t)))]);
+    expect(texts(r, 'price')).toEqual(ok);
+    expect(r.stripped.invalid_text).toBe(0);
+  });
+
+  test('NFKC-normalises text (decomposed Vietnamese is stored composed)', () => {
+    const r = run([out('price', s('Giá đóng cửa.'))]);
+    expect(texts(r, 'price')).toEqual(['Giá đóng cửa.']);
+  });
+
+  test('deny-list also catches bypasses: no diacritics, reversed order, other advice verbs, forecasts with a number', () => {
+    const bad = [
+      'nen mua',
+      'gia muc tieu 80.000',
+      'Price target 80.',
+      'Lợi nhuận kỳ vọng cao.',
+      'Nên gom thêm.',
+      'Nên chốt lời.',
+      'Nên cắt lỗ.',
+      'Nên nắm giữ.',
+      'Nên tích lũy.',
+      'Khuyên mua.',
+      'Khuyến nghị nắm giữ.',
+      'Tiềm năng tăng lớn.',
+      'Dự báo giá cuối năm.',
+      'Upside 20%.',
+      'You should buy.',
+      'You should sell.',
+      'Giá sẽ tăng 20%.',
+      'Giá có thể giảm khoảng 10%.',
+      'Giá sẽ tăng   mạnh 5 điểm.',
+    ];
+    const r = run([out('price', ...bad.map((t) => s(t)))]);
+    expect(r.stripped.deny_listed).toBe(bad.length);
+  });
+
+  test('deny-list keeps neutral past/present statements', () => {
+    const ok = ['Doanh thu tăng 5%.', 'Giá đã giảm 2% trong phiên.', 'Công ty công bố kế hoạch mở rộng.'];
+    const r = run([out('financials', ...ok.map((t) => s(t, ['fin:VNM:2026Q3'])))]);
+    expect(texts(r, 'financials')).toEqual(ok);
+  });
+
   test('trims/collapses whitespace, NFC-normalises; drops empty and over-long sentences', () => {
     const r = run([out('price', s('  Giá   đóng\n cửa  ', ['px:VNM:2026-11-10']), s('é.'), s('   '), s('x'.repeat(281)))]);
     expect(texts(r, 'price')).toEqual(['Giá đóng cửa', 'é.']);
@@ -132,7 +188,7 @@ describe('sanitizeSummaryOutput', () => {
     const r = run([out('price', ...many)]);
     expect(texts(r, 'price')).toHaveLength(AI_SUMMARY_CONFIG.maxSentencesPerSection);
     expect(r.stripped.over_limit).toBe(2);
-    const ids = ['px:VNM:2026-11-10', 'sig:VNM:trend_ma:2026-11-10', 'news:1', 'news:2', 'fin:VNM:2026Q3', 'a', 'b'];
+    const ids = ['px:VNM:2026-11-10', 'sig:VNM:trend_ma:2026-11-10', 'news:1', 'news:2', 'fin:VNM:2026Q3', 'news:3', 'news:4'];
     const r2 = run([out('price', s('A.', ids))], { providedIds: ids });
     expect(r2.stripped.over_limit).toBe(1);
   });

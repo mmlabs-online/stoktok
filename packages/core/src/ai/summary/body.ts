@@ -41,33 +41,50 @@ export function noDataBody(subject: string, topics: readonly SummaryTopic[], cfg
 
 const MARKUP_RE = /[<>`*#|[\]{}\\]|https?:\/\/|www\./i;
 
-function hasControlOrBidi(text: string): boolean {
-  for (const ch of text) {
-    const c = ch.codePointAt(0) ?? 0;
-    if (
-      c < 0x20 ||
-      (c >= 0x7f && c <= 0x9f) ||
-      (c >= 0x200b && c <= 0x200f) ||
-      (c >= 0x202a && c <= 0x202e) ||
-      (c >= 0x2060 && c <= 0x2064) ||
-      (c >= 0x2066 && c <= 0x2069) ||
-      c === 0xfeff
-    ) {
-      return true;
-    }
-  }
-  return false;
+/** Allow-list: Latin letters (Vietnamese included), marks, numbers, spaces, basic punctuation, the dong sign. */
+const ALLOWED_TEXT_RE = /^[\p{Script=Latin}\p{M}\p{N}\p{Zs}.,;:!?%()'"/+\-–—‘’“”₫]+$/u;
+const IGNORABLE_RE = /\p{Default_Ignorable_Code_Point}/u;
+
+/**
+ * True when `text` is usable plain text: non-empty, within the length cap, already NFKC-normalised, made only of
+ * allowed characters (no other scripts, control, bidi or invisible characters), no markup or URL.
+ */
+export function isPlainSummaryText(text: string, cfg: AiSummaryConfig = AI_SUMMARY_CONFIG): boolean {
+  return (
+    text.length > 0 &&
+    text.length <= cfg.maxSentenceChars &&
+    text === text.normalize('NFKC') &&
+    ALLOWED_TEXT_RE.test(text) &&
+    !IGNORABLE_RE.test(text) &&
+    !MARKUP_RE.test(text)
+  );
 }
 
-/** True when `text` is usable plain text: non-empty, within the length cap, no markup, URL, control or bidi characters. */
-export function isPlainSummaryText(text: string, cfg: AiSummaryConfig = AI_SUMMARY_CONFIG): boolean {
-  return text.length > 0 && text.length <= cfg.maxSentenceChars && !MARKUP_RE.test(text) && !hasControlOrBidi(text);
+/** Lower-cases and removes diacritics (NFD, strip marks, đ to d). */
+const stripDiacritics = (s: string): string => s.normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/g, 'd');
+
+/** True when `text` matches a deny pattern, either as written or with diacritics removed. Same check on write and read. */
+export function isDenyListed(text: string, cfg: AiSummaryConfig = AI_SUMMARY_CONFIG): boolean {
+  const lower = text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ');
+  const plain = stripDiacritics(lower);
+  return cfg.denyPatterns.some((p) => new RegExp(p, 'u').test(lower) || new RegExp(stripDiacritics(p), 'u').test(plain));
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** Re-validates a stored body. Returns a rebuilt body (unknown keys dropped), or null when anything is off. */
-export function parseStoredSummaryBody(raw: unknown, cfg: AiSummaryConfig = AI_SUMMARY_CONFIG): AiSummaryBody | null {
+export interface StoredBodyContext {
+  /** The row's input_ids: every cited id must be one of them. */
+  inputIds?: readonly string[];
+  /** 'PORTFOLIO' or the row's symbol: missing markers must name it, and for a symbol every symbol-scoped id must match it. */
+  subject?: string;
+}
+
+/**
+ * Re-validates a stored body: format, plain text, deny-list, and (with `ctx`) consistency with its row.
+ * Returns a rebuilt body (unknown keys dropped), or null when anything is off.
+ */
+export function parseStoredSummaryBody(raw: unknown, cfg: AiSummaryConfig = AI_SUMMARY_CONFIG, ctx: StoredBodyContext = {}): AiSummaryBody | null {
+  const allowed = ctx.inputIds === undefined ? null : new Set(ctx.inputIds);
   try {
     if (utf8ByteLength(JSON.stringify(raw)) > cfg.maxBodyBytes) return null;
   } catch {
@@ -88,9 +105,21 @@ export function parseStoredSummaryBody(raw: unknown, cfg: AiSummaryConfig = AI_S
       if (!isRecord(x) || typeof x.text !== 'string' || !isPlainSummaryText(x.text, cfg) || !Array.isArray(x.inputIds)) return null;
       const ids = x.inputIds;
       if (ids.length < 1 || ids.length > cfg.maxIdsPerSentence) return null;
-      if (!ids.every((id) => typeof id === 'string' && parseInputId(id) !== null)) return null;
+      if (isDenyListed(x.text, cfg)) return null;
+      for (const id of ids) {
+        const ref = typeof id === 'string' ? parseInputId(id) : null;
+        if (ref === null) return null;
+        if (allowed !== null && !allowed.has(id as string)) return null;
+        if ((ref.kind === 'missing') !== (s.missing === true)) return null;
+        if (ref.kind === 'missing') {
+          if (ref.topic !== topic || (ctx.subject !== undefined && ref.subject !== ctx.subject)) return null;
+        } else if (ctx.subject !== undefined && ctx.subject !== 'PORTFOLIO' && 'symbol' in ref && ref.symbol !== ctx.subject) {
+          return null;
+        }
+      }
       sentences.push({ text: x.text, inputIds: ids as string[] });
     }
+    if (s.missing && (sentences.length !== 1 || sentences[0]?.text !== cfg.noDataText || sentences[0].inputIds.length !== 1)) return null;
     out.push({ topic: topic as SummaryTopic, missing: s.missing, sentences });
   }
   return { version: cfg.bodyVersion, sections: out, strippedCount };

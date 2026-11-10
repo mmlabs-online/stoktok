@@ -1,4 +1,4 @@
-import type { Int8 } from '@stoktok/core';
+import type { AiSummaryBody, Int8 } from '@stoktok/core';
 
 export interface AssetRow {
   id: string;
@@ -283,7 +283,7 @@ export interface AiSummaryInsert {
   model: string | null;
   usage_id: number | null;
   body_version: number;
-  body: unknown;
+  body: AiSummaryBody;
   input_ids: string[];
   created_at: string;
 }

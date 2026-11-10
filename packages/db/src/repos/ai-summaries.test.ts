@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { createFake } from '../../test/fake-client';
+import type { AiSummaryBody } from '@stoktok/core';
 import type { Db } from '../client';
 import type { AiSummaryInsert } from '../rows';
 import { listAiSummariesForDate, upsertAiSummary } from './ai-summaries';
 
-const body = { version: 1, strippedCount: 0, sections: [{ topic: 'price', missing: false, sentences: [{ text: 'Giá đóng cửa.', inputIds: ['px:VNM:2026-11-10'] }] }] };
+const body: AiSummaryBody = { version: 1, strippedCount: 0, sections: [{ topic: 'price', missing: false, sentences: [{ text: 'Giá đóng cửa.', inputIds: ['px:VNM:2026-11-10'] }] }] };
 const row: AiSummaryInsert = {
   scope: 'symbol',
   symbol: 'VNM',
@@ -50,6 +51,8 @@ describe('listAiSummariesForDate', () => {
       data: [
         { ...base, id: '7', usage_id: '9', body },
         { ...base, id: 8, symbol: 'FPT', usage_id: null, body: { version: 9 } },
+        { ...base, id: 10, usage_id: null, input_ids: [] },
+        { ...base, id: 11, symbol: 'FPT', usage_id: null, input_ids: ['px:VNM:2026-11-10'] },
       ],
     });
     const out = await listAiSummariesForDate(f.db as unknown as Db, '2026-11-10');
@@ -59,5 +62,7 @@ describe('listAiSummariesForDate', () => {
     expect(f.methods('eq')[0]?.args).toEqual(['summary_date', '2026-11-10']);
     expect(out[0]).toMatchObject({ id: 7, usageId: 9, summaryDate: '2026-11-10', body, inputIds: ['px:VNM:2026-11-10'] });
     expect(out[1]).toMatchObject({ id: 8, usageId: null, body: null });
+    expect(out[2]).toMatchObject({ id: 10, body: null }); // cited id not in input_ids
+    expect(out[3]).toMatchObject({ id: 11, body: null }); // VNM id in an FPT row
   });
 });

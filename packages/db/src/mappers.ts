@@ -393,6 +393,7 @@ export function aiSummaryFromRow(row: AiSummaryRow): AiSummaryRecord {
   if (typeof row.summary_date !== 'string' || !DATE_RE.test(row.summary_date)) {
     throw new RowMappingError(t, 'summary_date', `invalid date: ${String(row.summary_date)}`);
   }
+  const inputIds = Array.isArray(row.input_ids) ? row.input_ids.filter((x): x is string => typeof x === 'string') : [];
   return {
     id: toSafeInt(row.id, 'id', t),
     scope: row.scope,
@@ -402,8 +403,8 @@ export function aiSummaryFromRow(row: AiSummaryRow): AiSummaryRecord {
     provider: row.provider,
     model: row.model,
     usageId: row.usage_id === null ? null : toSafeInt(row.usage_id, 'usage_id', t),
-    body: parseStoredSummaryBody(row.body),
-    inputIds: Array.isArray(row.input_ids) ? row.input_ids.filter((x): x is string => typeof x === 'string') : [],
+    body: parseStoredSummaryBody(row.body, undefined, { inputIds, subject: row.scope === 'portfolio' ? 'PORTFOLIO' : row.symbol }),
+    inputIds,
     createdAt: row.created_at,
   };
 }

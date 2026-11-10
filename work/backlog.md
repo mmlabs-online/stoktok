@@ -57,7 +57,7 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-061 | Income statement and balance sheet lines for the AI layer | DONE | P2 | data, db, finance | 1 | 2026-11-08 |
 | STK-062 | News adapters (CafeF, Vietstock, VnExpress) and news store | DONE | P2 | data, db, security | 1 | 2026-11-08 |
 | STK-063 | AI budget and usage foundation (slice 1 of 3: config, cost, budget gate, ai_usage) | DONE | P2 | architecture, security, db | 2 | 2026-11-10 |
-| STK-064 | AI summaries storage and output validator (F5 slice a) | REWORK | P2 | data, db, ui, security | 2 | 2026-11-08 |
+| STK-064 | AI summaries storage and output validator (F5 slice a) | REVIEW | P2 | data, db, ui, security | 2 | 2026-11-08 |
 | STK-065 | Rule-based suggestions with AI explanation, and the suggestion scorecard (F6 + F7) | BACKLOG | P2 | finance, db, ui | 0 | 2026-11-08 |
 | STK-066 | Free chat with a stock-analysis agent | BACKLOG | P2 | architecture, security, ui, finance | 0 | 2026-11-08 |
 | STK-067 | Financial ratios derived in core (margins, D/E, ROE, ROA, YoY, P/E, P/B) | BACKLOG | P2 | finance, db | 0 | 2026-11-08 |

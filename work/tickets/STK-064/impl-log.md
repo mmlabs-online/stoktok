@@ -43,3 +43,22 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No; every file is in the plan list.
 - Diff size: ~166 insertions / 4 deletions in tracked files plus ~805 lines in new files (migration, core summary module and tests, repo and test).
+
+## Attempt 2 (REWORK: security findings, Ming 2026-11-10)
+
+Files touched (all existing slice-1 files; no SQL changed, so db:check not run):
+- `packages/core/src/ai/summary/body.ts`: `isPlainSummaryText` is now NFKC-stable + allow-list (Latin, marks, numbers, Zs, basic punctuation, dong sign) + refuses `Default_Ignorable_Code_Point`; new `isDenyListed` (matches as written and with diacritics stripped); `parseStoredSummaryBody` takes optional `ctx {inputIds, subject}`, re-runs the deny check, enforces `missing` consistency both ways, cited ids subset of `input_ids`, and symbol/marker subject match. Required because findings 1-4.
+- `packages/core/src/ai/summary/config.ts`: new deny patterns (price target, lợi nhuận kỳ vọng, nên gom/chốt lời/cắt lỗ/nắm giữ/tích lũy, khuyên mua/bán, khuyến nghị nắm giữ/gom, tiềm năng tăng/giảm, dự báo giá, upside, should buy/sell, sẽ/có thể tăng/giảm + number or %). "cam kết" left as is.
+- `packages/core/src/ai/summary/sanitize.ts`: uses `isDenyListed`, NFKC on write, `bad_context` for bad `providedIds`.
+- `packages/core/src/ai/summary/index.ts`: export `isDenyListed`, `StoredBodyContext`.
+- `packages/db/src/mappers.ts`: passes `inputIds` and subject to the parser.
+- `packages/db/src/rows.ts`: `AiSummaryInsert.body` typed `AiSummaryBody`.
+- Tests: `body.test.ts`, `sanitize.test.ts`, `repos/ai-summaries.test.ts` (new cases for U+00AD, U+E0041, Cyrillic, U+034F, VS16, each deny bypass, Vietnamese false-positives, parser consistency, bad providedIds, mapper rows with stray ids). Two existing tests adjusted: the over_limit ids test used invalid ids `'a','b'` (now `news:3`,`news:4`); the db test body is typed `AiSummaryBody`.
+
+Checks: `pnpm typecheck` clean; `pnpm lint` clean; `pnpm test` core 831, sources 35, ai 184, db 195 (+1 todo), worker 295, web 349, all passed.
+
+Behaviour notes: stored text must now already be NFKC (write path normalises; read rejects otherwise). The allow-list also admits typographic quotes, en/em dash. U+2028 on write is collapsed to a space as before (whitespace), rejected on read. Symbol check on read applies only to symbol rows; portfolio rows only check the missing marker names PORTFOLIO.
+
+Out-of-plan files: none.
+Follow-ups: DB-level optional guards (`body::text !~ '[<>]'`, body_version match) not added (SQL untouched).
+Scope self-check: only the listed items changed; nothing committed.

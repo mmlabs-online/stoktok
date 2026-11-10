@@ -1,9 +1,9 @@
 import { utf8ByteLength } from '../cost';
-import { noDataSection, isPlainSummaryText } from './body';
+import { noDataSection, isDenyListed, isPlainSummaryText } from './body';
 import type { AiSummaryBody, AiSummarySection, AiSummarySentence } from './body';
 import { AI_SUMMARY_CONFIG, SUMMARY_TOPICS } from './config';
 import type { AiSummaryConfig, SummaryTopic } from './config';
-import { formatInputId } from './input-ids';
+import { formatInputId, parseInputId } from './input-ids';
 
 export type StripReason =
   | 'invalid_text'
@@ -56,6 +56,7 @@ export function sanitizeSummaryOutput(raw: unknown, ctx: SanitizeContext, cfg: A
   if (topics.some((t) => formatInputId({ kind: 'missing', subject: ctx.subject, topic: t }) === null)) {
     return { ok: false, code: 'bad_context' };
   }
+  if (ctx.providedIds.some((id) => id.startsWith('missing:') || parseInputId(id) === null)) return { ok: false, code: 'bad_context' };
 
   const stripped: Record<StripReason, number> = {
     invalid_text: 0,
@@ -68,13 +69,11 @@ export function sanitizeSummaryOutput(raw: unknown, ctx: SanitizeContext, cfg: A
     bad_topic: 0,
   };
   const provided = new Set(ctx.providedIds);
-  const deny = cfg.denyPatterns.map((p) => new RegExp(p, 'u'));
 
   const check = (s: Record<string, unknown>): AiSummarySentence | StripReason => {
-    const text = typeof s.text === 'string' ? s.text.normalize('NFC').replace(/\s+/g, ' ').trim() : '';
+    const text = typeof s.text === 'string' ? s.text.normalize('NFKC').replace(/\s+/g, ' ').trim() : '';
     if (!isPlainSummaryText(text, cfg)) return 'invalid_text';
-    const lower = text.toLowerCase();
-    if (deny.some((re) => re.test(lower))) return 'deny_listed';
+    if (isDenyListed(text, cfg)) return 'deny_listed';
     if (!Array.isArray(s.inputIds) || s.inputIds.length === 0) return 'no_ids';
     const ids = [...new Set(s.inputIds)];
     if (ids.length > cfg.maxIdsPerSentence) return 'over_limit';

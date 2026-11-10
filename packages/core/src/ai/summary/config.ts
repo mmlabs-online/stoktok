@@ -14,7 +14,7 @@ export interface AiSummaryConfig {
   /** Matches the SQL guard on ai_summaries.input_ids. */
   maxInputIds: number;
   noDataText: string;
-  /** Regex sources, matched with flag `u` on NFC-lowercased text: price targets, return promises, certainty, buy/sell advice. */
+  /** Regex sources, matched with flag `u` on NFKC-lowercased text, and again (diacritics removed from both) on a stripped copy: price targets, return promises, certainty, buy/sell advice. */
   denyPatterns: readonly string[];
 }
 
@@ -37,7 +37,16 @@ export const AI_SUMMARY_CONFIG: AiSummaryConfig = {
     'chắc chắn (tăng|giảm|lãi)',
     'lãi chắc',
     'nên (mua|bán)',
-    'khuyến nghị (mua|bán)',
+    'khuyến nghị (mua|bán|nắm giữ|gom)',
     'sẽ (tăng|giảm) (lên|xuống|đến|tới)',
+    'price target',
+    'lợi nhuận kỳ vọng',
+    'nên (gom|chốt lời|cắt lỗ|nắm giữ|tích lũy)',
+    'khuyên (mua|bán)',
+    'tiềm năng (tăng|giảm)',
+    'dự báo giá',
+    'upside',
+    'should (buy|sell)',
+    '(sẽ|có thể) (tăng|giảm)( \\p{L}+){0,2} ?[\\d%]',
   ],
 };
