@@ -114,3 +114,57 @@ No violations found. R1/R8: the logic is in `packages/core` and has unit tests. 
 - STK-077: measure the `deny_listed` false-positive rate on real output. In particular, the forecast pattern catches announced corporate plans ("sẽ tăng vốn lên 30.000 tỷ"), alongside the existing "cam kết" note. Tune `AI_SUMMARY_CONFIG.denyPatterns` if needed.
 - STK-077: the read path requires that symbol rows cite only that symbol's symbol-scoped ids. If a symbol summary ever gets market-context inputs (for example `px:VNINDEX:…`), relax `parseStoredSummaryBody`'s subject check or scope those ids differently. Otherwise those rows will read back as `body: null`.
 - Optional DB guards from the security review (`body::text !~ '[<>]'`, `body->>'version' = body_version`) were not added (no SQL in this attempt), as the impl-log records.
+
+## Attempt 3 — 2026-11-10
+Verdict: PASS
+
+Scope of this attempt: commit 593cfe5 (plus 7b3f302, workflow files only). The work is Ming's 2026-11-10 request "after review attempt 2 PASS", which applies security-review.md attempt 2.
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exited 0.
+- lint: `pnpm lint` exited 0.
+- test: `pnpm test` passed in every package: core 834/834, sources 35, ai 184, db 195 (+1 todo), worker 295, web 349. These counts match impl-log Attempt 3.
+- db:check: not run. No SQL changed.
+
+### Requested fixes
+- [x] **🟡 The text allow-list is narrowed to the Vietnamese alphabet plus ASCII 0-9, with no `\p{M}`.** In `body.ts:48`, `\p{Script=Latin}`, `\p{M}` and `\p{N}` are gone. Evidence: `body.test.ts › rejects Latin lookalikes, combining marks and non-ASCII digits` covers U+0251 `muɑ`, U+0261 `ɡiá`, U+0336 and U+0662 (twice), and all of them return null.
+- [x] **🟢 Punctuation runs collapse to one space in both deny copies.** See `body.ts:70`, `75-77`. Evidence: `body.test.ts:80` covers `Nên – mua`, `nên/mua` and `nên: mua`, and all of them return null.
+- [x] **🟢 `StoredBodyContext` is required on the read path.** At `body.ts:82-90`, `96`, both `ctx` and its `inputIds` and `subject` are required. The compiler enforces this, and typecheck is green.
+- [x] **🟢 Section topics are checked against the row scope on read.** At `body.ts:99`, `114`, symbol rows accept only `SYMBOL_SUMMARY_TOPICS` and the `PORTFOLIO` row accepts only `['portfolio']`. Evidence: `body.test.ts › topics must match the row scope` tests both directions, including a `missing:PORTFOLIO:price` body.
+- [x] The false-positive phrases stay strict, as Ming asked. `config.ts` is unchanged.
+
+### Specific verifications requested
+- **Real Vietnamese still passes.**
+  - `body.test.ts › accepts real Vietnamese covering every tone mark, upper and lower case` checks 8 sentences.
+  - A reviewer probe built all 12 vowel bases (a ă â e ê i o ô ơ u ư y) × 6 tones × upper and lower case, plus đ/Đ, using NFC. **0 failures.**
+  - The probe also tested 7 typical factual sentences: prices with `₫` and `1,5%`, `RSI(14)`, curly quotes with an en dash, `ỨNG DỤNG ĐƯỢC CẬP NHẬT.`, and others. All are plain text and none are deny-listed.
+- **Round trip from `sanitizeSummaryOutput` to `parseStoredSummaryBody`.**
+  - `sanitize.test.ts:38` checks it with the row context, and the test passes.
+  - A reviewer probe ran the round trip on three bodies, and each read back byte-identical:
+    - a symbol body with NFD input text, a deny-listed sentence that gets stripped, curly quotes and a missing topic;
+    - a portfolio body;
+    - an all-missing portfolio body.
+- **Callers of `parseStoredSummaryBody`.** The only production caller is `packages/db/src/mappers.ts:406`. It passes `{ inputIds, subject: scope === 'portfolio' ? 'PORTFOLIO' : row.symbol }`. Every test caller in `body.test.ts` and `sanitize.test.ts` passes a context.
+
+### Scope
+Changed code files are `body.ts`, `body.test.ts` and `sanitize.test.ts`. The remaining changes are workflow files: `backlog.md`, `ticket.md` and `impl-log.md`. Every code change maps to Ming's note. There are no out-of-plan files.
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found.
+- R1/R8: the logic is in `packages/core`, with unit tests.
+- R5: the deny phrases and limits stay in `AI_SUMMARY_CONFIG`.
+- R7: the change matches the request exactly.
+- R9: write and read share the same text and deny checks, and the read path enforces citation and scope consistency.
+
+### Nits (do not block)
+- 🟢 from security-review attempt 3: `sanitizeSummaryOutput` does not check `ctx.topics` against the subject's scope. In the reviewer probe, `subject: 'VNM', topics: ['portfolio']` returns `ok: true`, and that body reads back as `null`. This fails closed. Returning `bad_context` there would turn a silent bug into a loud one. This can be done in STK-077/078 or a later slice.
+- 🟢 from security-review attempt 3: `\p{Zs}` still admits U+1680. It cannot be used to dodge the deny-list (the probe `nên mua` is denied). A literal space would be stricter.
+- The `cfg` parameter now comes before the required `ctx`, so callers write `undefined` for the default config. A small API wart.
+
+### Follow-ups (out of scope)
+- STK-077: measure deny-list false positives on real output, as Ming asked ("tiềm năng tăng trưởng", "gia tăng", "cam kết", "tăng vốn").
+- STK-077/078: always pass in-scope, non-empty `topics` to sanitize, or add the `bad_context` guard above.
+- Foreign Latin letters (ç, ñ) are now dropped as `invalid_text`. This is intended and fails safe. Revisit only if real summaries lose names.
