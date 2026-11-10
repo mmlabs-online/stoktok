@@ -72,3 +72,64 @@ No violations found.
 - **Model compatibility.** If Gemini 3.x models replace `gemini-2.5-flash`, function-call `thoughtSignature` parts must round-trip even at thinking 0. This belongs with the "thinking + tools on `Part`" follow-up.
 - **Error diagnostics.** `mapThrown` drops every provider detail. Add a sanitised status or error-type code (no body text) for diagnostics.
 - **Carried from plan/impl-log:** `scripts/record-ai-fixtures.sh`, a `countTokens` overhead measurement, Anthropic `cache_control` costing, the stale `reserved` sweep, and all items in the impl-log "verify before go-live" list.
+
+## Attempt 2 — 2026-11-10
+Verdict: PASS
+
+Scope of this attempt: the four security-review attempt 1 fixes Ming asked for (ticket.md, last note), plus a regression check against plan.md. Diff reviewed: `git diff c469b43..HEAD` (attempt 2 commits `5a76d10`, `249bfae`) within `git diff origin/main...HEAD`. Working tree clean.
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck`, all 6 workspaces Done, no errors.
+- lint: `pnpm lint`, all 6 workspaces Done, no errors.
+- test: `pnpm test`: core 776 passed (64 files); sources 35 passed; ai 165 passed (9 files); db 169 passed + 1 todo; worker 292 passed; web 302 passed. Matches impl-log.md attempt 2.
+- No network: `unshare -rn env -u HTTPS_PROXY -u HTTP_PROXY npx vitest run` in `packages/ai`: 9 files, 165 passed.
+
+### Acceptance criteria
+Ming's note (four fixes):
+- [x] 🟡1 Stop/finish reason is mapped before `final_output` is returned.
+  - Anthropic `anthropic.ts:64-87`: the switch runs first. `refusal` → `refused, usage`. Unknown or `pause_turn` → `malformed, usage`. `max_tokens`/`model_context_window_exceeded` with `final_output` → `{parts: [], stop:'max_tokens'}`, so the partial JSON is dropped and `client.ts:292` turns it into `invalid_output/truncated`. `end_turn`/`stop_sequence`/`tool_use` → `final_output` with `stop:'end'`. Forced tool choice returns `tool_use`, so the normal path still works.
+  - Google `google.ts:94-103`: REFUSED set → `refused`. Anything other than STOP/MAX_TOKENS (including null) → `malformed`. MAX_TOKENS with `final_output` → `{parts: [], stop:'max_tokens'}`.
+  - Tests: "anthropic final_output stop handling" (truncated, refusal, unknown reason) and "google final_output stop handling" (MAX_TOKENS, SAFETY, OTHER/null). All pass.
+- [x] 🟡2 Gemini no longer settles 0 output tokens when output came back.
+  - `google.ts:25-35`: if `candidatesTokenCount` is undefined and the candidate has parts, output = `totalTokenCount - prompt - toolUsePrompt` (thoughts included). A missing, non-integer or negative result → `malformed, null`. With no parts, 0 is kept.
+  - Tests: "google missing candidatesTokenCount": derive 170-100-20=50; no total, total below prompt and invalid total each give malformed/null; no parts keeps 0.
+- [x] 🟢3 SDK endpoints and env-driven auth/logging are pinned.
+  - Anthropic `anthropic.ts:95`: `baseURL: 'https://api.anthropic.com'`, `authToken: null`, `logLevel: 'off'`. I checked the installed SDK `client.js:104,161-163`: explicit `baseURL` replaces the `ANTHROPIC_BASE_URL` default, and `options.logLevel` takes precedence over `ANTHROPIC_LOG`. `LogLevel` includes `'off'`.
+  - Google `google.ts:111`: `vertexai: false`, `httpOptions.baseUrl`. In `dist/node/index.mjs:57-68`, `getBaseUrl` returns `httpOptions.baseUrl` before it looks at `GOOGLE_GEMINI_BASE_URL`.
+  - Test: `sdk-pins.test.ts` mocks both constructors and asserts these options.
+- [x] 🟢4 A second Anthropic `final_output` → `malformed, usage` (`anthropic.ts:58-61`). Test: "second final_output -> malformed with usage".
+
+The changed older Google test:
+- [x] `google.test.ts:128`: the case "text output with only `promptTokenCount` → 0 output" now uses no output parts. The change is justified because that exact input is now malformed by design, and the "no total" case in the new describe block covers it. The intent "missing counts → 0 when there is no output" is kept.
+
+Regression check against plan.md (P1–P10):
+- [x] The P5 mapping tables are unchanged for responses without `final_output`.
+  - Google: the order of checks changed, but the refused set and STOP/MAX_TOKENS do not overlap, so the outcomes are the same.
+  - The existing table-driven stop and finish tests still pass.
+- [x] P3, P4, P6, P7 and P8 are unchanged.
+- [x] The `AiClient` round-trip tests still pass.
+- [x] Ticket AC1 and the typecheck/lint/test part of AC4 are still met.
+
+### Scope
+- Code changes are limited to `packages/ai/src/adapters/{anthropic,google}.ts` and their tests, plus the new `sdk-pins.test.ts`. All are adapter files in the plan, and the change was requested by Ming.
+- The other changes are bookkeeping: `work/backlog.md`, ticket.md and impl-log.md.
+- No out-of-plan files.
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found.
+- R3: endpoints are pinned, and keys come only from the `apiKey` argument.
+- R8: every fix has a test.
+- R9: truncated or refused structured output is never returned as a complete answer.
+
+### Nits (do not block)
+- `google.ts:31-32`: the guard `!ok(raw.totalTokenCount)` duplicates the NaN/negative check on the derived value, and the long ternary is hard to read. A small named helper would be clearer.
+- `google.ts:25`: `hasOutput` treats any part as output, including empty text or a thought part. This fails closed (it requires a total), so it is fine.
+
+### Follow-ups (out of scope)
+- `usageOf` checks `candidatesTokenCount === undefined`. A `null` value would still go through `?? 0` and settle 0 output tokens. The SDK types the field as `number | undefined`, and proto3 JSON leaves the field out instead of sending null, so this cannot happen today. Using `== null` would close it for free.
+- When `candidatesTokenCount` is present, output could be `max(candidates + thoughts, total - prompt - toolUse)`. This was the security review's "safer still" option and was not required.
+- The Anthropic SDK still reads `ANTHROPIC_CUSTOM_HEADERS` (`client.js:178`), and `@google/genai` still reads other `GOOGLE_*` env vars (project/location). Clear these in the deploy env, or handle them in STK-073.
+- Carry-overs from attempt 1 still apply: STK-073 must cover both SDKs in the bundle check and pass a consistent `timeoutMs`; record the real fixtures from live calls before go-live.

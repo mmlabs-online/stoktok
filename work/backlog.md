@@ -63,7 +63,7 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-067 | Financial ratios derived in core (margins, D/E, ROE, ROA, YoY, P/E, P/B) | BACKLOG | P2 | finance, db | 0 | 2026-11-08 |
 | STK-068 | Cash-flow statement lines and free cash flow | BLOCKED | P2 | data, finance | 0 | 2026-11-08 |
 | STK-069 | Harden ai_reserve and db carry-overs (STK-063 slice 2a) | DONE | P2 | architecture, security | 1 | 2026-11-10 |
-| STK-070 | Claude and Gemini adapters in packages/ai (STK-063 slice 3a) | REVIEW | P2 | architecture, security, ui | 2 | 2026-11-10 |
+| STK-070 | Claude and Gemini adapters in packages/ai (STK-063 slice 3a) | REWORK | P2 | architecture, security, ui | 3 | 2026-11-10 |
 | STK-071 | AI client, untrusted blocks, tools and guards (STK-063 slice 2b-i) | DONE | P2 | architecture, security | 3 | 2026-11-10 |
 | STK-072 | Optional AI secrets in deploy tooling (STK-063 slice 2b-ii) | DONE | P2 | architecture, security | 3 | 2026-11-10 |
 | STK-073 | AI wiring and AI usage card (STK-063 slice 3b) | BACKLOG | P2 | architecture, security, ui | 0 | 2026-11-10 |
