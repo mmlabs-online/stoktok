@@ -35,3 +35,41 @@ No violations found. R2: all costs are integer micro-USD via core (BigInt in `wo
 ### Follow-ups (out of scope)
 - The ticket areas include `security` and the diff adds prompt-injection and guard code, so the security auditor should run at REVIEW (orchestrator).
 - Measure the real `providerOverheadTokens` in STK-070.
+
+## Attempt 2 — 2026-11-10
+Verdict: REWORK
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` clean for core, ai, sources, db, web (next typegen + tsc), worker.
+- lint: `pnpm lint` clean for all 6 projects.
+- test: core 776, ai 60 (4 files), sources 35, db 169 + 1 todo, worker 292, web 302 passed; 0 failures. Matches impl-log.md attempt 2.
+
+### Ming's four fixes (ticket.md note, 2026-11-10)
+- [ ] (1) `callRound` must never throw — PARTIAL, see Issue 1. The classification is now in `classify()`, wrapped at client.ts:262-270, and a throw maps to `provider_error`/`malformed` with `usage: null`, so the round is settled. Tests: client.test "malformed provider response (missing usage | missing parts | fractional tokens | negative tokens)…" and "a schema whose parse throws settles malformed" all check `reserve → settle`. The provider-error branch at client.ts:245-258 is still outside any guard.
+- [x] (2) The importer guard handles double quotes, `import()`, `require()` and bare imports. Evidence: r3-guard.test.ts:70-72, plus a regex self-test at :75-81.
+- [x] (3) `@stoktok/ai/fakes` is imported only from `*.test.ts(x)`. Evidence: r3-guard.test.ts:83-88. `packages/ai/src/index.ts` does not re-export the fakes. `grep fakes` shows no non-test importer.
+- [x] (4) Tool calls per round are capped. Evidence: core config.ts `maxToolCallsPerRound` (default 8) is validated as a positive integer, and config.test rejects 0, 1.5 and NaN. client.ts:290 checks the cap before settle, after the final-round check and before the per-call allowlist. Test "more tool calls than maxToolCallsPerRound…" checks that no tool runs, the provider is called once and the round settles at real cost.
+
+### Regression vs plan.md
+None found. The attempt-2 diff (`git diff 2326be9..437082c`) touches only packages/ai/src/client{,.test}.ts, packages/core/src/ai/config{,.test}.ts, packages/db/src/r3-guard.test.ts and work files. All of these were in the attempt-1 file list and were requested by Ming. The order of the checks in `classify` is unchanged apart from the cap. The new error codes match `^[a-z0-9_]{1,100}$`. Attempt-1 AC evidence still holds; all tests are green.
+
+### Issues
+#### Issue 1 — 🟡 should-fix — `callRound` still throws on the provider-error path (fix 1 incomplete)
+- **Where**: packages/ai/src/client.ts:252 (inside the `catch (e)` at :245). The doc comment at :225 says "Never throws".
+- **Expected**: `callRound` never throws (Ming's fix 1, AC2). A `ProviderError` with bad usage still produces a settled `provider_error` round and a `GenerateResult`.
+- **Actual**: `usageCostMicroUsd(model, err.usage, this.cfg)` calls `assertCount` (core cost.ts:13-15). That throws a RangeError when `err.usage` has fractional, negative or missing tokens, for example `new ProviderError('http', { inputTokens: -1, outputTokens: 2 })`. The throw escapes `generate`, the `ai_usage` row stays `reserved`, and the caller gets an exception. The security re-review (security-review.md, attempt 2) reports the same issue. I confirmed it from the code.
+- **Fix instruction**: In the catch branch, compute the cost under a guard. If `err.usage` is present, try `usageCostMicroUsd`. On a throw (or with no usage), use `inputTokens: 0, outputTokens: 0, costMicroUsd: null` and keep `errorCode: err.code`. Use the real tokens only when the cost computed. Add a client.test case next to the "malformed provider response" tests: the provider script throws `new ProviderError('http', usage(-1, 2))` (and `usage(1.5, 2)`). Assert that `generate` resolves `{ ok: false, reason: 'provider_error' }`, that `ledger.events` equals `['reserve', 'settle']`, and that the settle has `costMicroUsd: null` and `errorCode: 'http'`.
+
+### Rules R1–R10
+No violations found. `maxToolCallsPerRound` lives in core config (R5). The new core logic has unit tests (R8).
+
+### Nits (do not block)
+- 💭 r3-guard.test.ts:70 and :76 define the same importer regex twice. The self-test checks the copy, not the regex the rule actually uses, so the two can drift apart. Hoist it to one module-level `const`.
+- 💭 impl-log.md attempt 2 says "Not committed", but the work is in 437082c.
+- 💭 client.ts:264-269: on `malformed`, valid `res.usage` is dropped, so the round counts at the reserved worst case. This is safe but less precise for the audit.
+
+### Follow-ups (out of scope)
+- The attempt-1 🟢 items are still open: cap tool names at 59 characters, race the `runTool` timeout, name the delimiter in `UNTRUSTED_DATA_RULE`, and widen the SDK regex.
+- The fakes rule does not catch a relative `./fakes` import from non-test files in packages/ai/src.
+- The importer regex misses backtick `import()`.
+- STK-070: adapters must validate the usage they put into `ProviderError`.

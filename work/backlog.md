@@ -64,5 +64,5 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-068 | Cash-flow statement lines and free cash flow | BLOCKED | P2 | data, finance | 0 | 2026-11-08 |
 | STK-069 | Harden ai_reserve and db carry-overs (STK-063 slice 2a) | DONE | P2 | architecture, security | 1 | 2026-11-10 |
 | STK-070 | Claude and Gemini adapters, wiring and AI usage card (STK-063 slice 3) | BACKLOG | P2 | architecture, security, ui | 0 | 2026-11-10 |
-| STK-071 | AI client, untrusted blocks, tools and guards (STK-063 slice 2b-i) | REVIEW | P2 | architecture, security | 2 | 2026-11-10 |
+| STK-071 | AI client, untrusted blocks, tools and guards (STK-063 slice 2b-i) | REWORK | P2 | architecture, security | 3 | 2026-11-10 |
 | STK-072 | Optional AI secrets in deploy tooling (STK-063 slice 2b-ii) | BACKLOG | P2 | architecture, security | 0 | 2026-11-10 |
