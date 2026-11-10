@@ -66,6 +66,7 @@ export async function readAiKeySecrets(db: Db): Promise<StoredAiKeySecrets> {
   const out: StoredAiKeySecrets = {};
   for (const r of (res.data ?? []) as { provider: string; secret: string }[]) {
     if (!AI_PROVIDERS.includes(r.provider as AiProvider)) throw new DataError('MAPPING', TABLE, 'read', 'row mapping failed (provider)');
+    if (typeof r.secret !== 'string' || r.secret === '') throw new DataError('MAPPING', TABLE, 'read', 'row mapping failed (secret)');
     out[r.provider as AiProvider] = r.secret;
   }
   return out;

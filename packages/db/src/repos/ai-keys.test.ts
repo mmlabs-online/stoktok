@@ -110,6 +110,14 @@ describe('readAiKeySecrets', () => {
     expectNoSecret(err);
   });
 
+  test('a null or empty secret throws MAPPING (fails closed, no env fallback)', async () => {
+    for (const secret of [null, '']) {
+      const f = createFake();
+      f.respond({ data: [{ provider: 'google', secret }] });
+      expect((await caught(readAiKeySecrets(f.db))).code).toBe('MAPPING');
+    }
+  });
+
   test('an rpc error throws a DataError with no cause and no sentinel', async () => {
     const f = createFake();
     f.respond({ error: { code: 'XX000', message: SENTINEL } });

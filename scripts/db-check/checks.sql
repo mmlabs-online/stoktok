@@ -678,7 +678,7 @@ begin
   set local role service_role;
   perform public.ai_key_delete('anthropic');
   reset role;
-  if exists (select 1 from vault.secrets where name like 'stoktok_ai_key_%') or exists (select 1 from public.ai_keys) then
+  if exists (select 1 from vault.secrets where name like 'stoktok\_ai\_key\_%') or exists (select 1 from public.ai_keys) then
     raise exception 'CHECK FAILED: ai_key_roundtrip (cleanup)';
   end if;
 end $$;

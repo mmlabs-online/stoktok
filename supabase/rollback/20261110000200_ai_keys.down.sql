@@ -9,7 +9,7 @@ begin
     if pg_catalog.to_regclass('public.ai_keys') is not null then
       delete from vault.secrets where id in (select secret_id from public.ai_keys);
     end if;
-    delete from vault.secrets where name like 'stoktok_ai_key_%';
+    delete from vault.secrets where name like 'stoktok\_ai\_key\_%';
   end if;
 end $$;
 

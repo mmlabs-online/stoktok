@@ -1,4 +1,4 @@
-/** Same bounds and charset as the ai_key_set check in supabase/migrations/20261110000200_ai_keys.sql; keep them in sync. */
+/** Same bounds and charset as the key-set check in supabase/migrations/20261110000200_ai_keys.sql; keep them in sync. */
 export const AI_KEY_LENGTH = { min: 20, max: 256 } as const;
 
 export type AiKeyFormatCode = 'AI_KEY_EMPTY' | 'AI_KEY_WHITESPACE' | 'AI_KEY_LENGTH' | 'AI_KEY_CHARSET';

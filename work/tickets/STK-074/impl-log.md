@@ -45,3 +45,20 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No; every file is listed in the plan.
 - Diff size: see `git diff --shortstat` (tracked files) plus 10 new files.
+
+## Attempt 2 (REWORK: security-review attempt 1 findings F1, F2, F3, F5, F6, F7, F8, F10)
+
+### Files touched
+| File | Required because |
+|---|---|
+| docs/adr/0009-ai-provider-keys-in-vault.md | F1 threat model, F2 logging checks, F3 smoke steps 3b/5b, F8 step 5c, F7 wording, F10 note, F5 decision 9, F6 escaped LIKE |
+| packages/db/src/repos/ai-keys.ts, ai-keys.test.ts | F5: null/empty secret throws MAPPING, plus test |
+| packages/db/src/r3-guard.test.ts | F7: ai_key_set / ai_key_delete limited to the ai-keys repo and its test |
+| packages/core/src/ai/keys.ts | comment reworded so it no longer names ai_key_set (guard) |
+| supabase/rollback/20261110000200_ai_keys.down.sql, scripts/db-check/checks.sql | F6: `like 'stoktok\_ai\_key\_%'` |
+
+### Checks
+typecheck, lint green; test: core 785, sources 35, ai 184, db 189 (+1 todo), worker 295, web 317 passed; db:check OK; check:service-key OK.
+
+### Out-of-plan files
+None beyond the list above (all within the rework scope). Not committed.

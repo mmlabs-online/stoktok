@@ -101,7 +101,7 @@ describe('R3 guard', () => {
     expect(fakes.test(`import("@stoktok/ai/fakes")`)).toBe(true);
   });
 
-  test('the decrypting entry points (ai_key_secrets, readAiKeySecrets) appear only in the allowed files', () => {
+  test('the Vault entry points (ai_key_secrets, readAiKeySecrets) appear only in the allowed files', () => {
     const allowed = new Set([
       'packages/db/src/repos/ai-keys.ts',
       'packages/db/src/repos/ai-keys.test.ts',
@@ -112,6 +112,12 @@ describe('R3 guard', () => {
       'apps/worker/src/ai.test.ts',
     ]);
     const hits = files.filter((f) => /ai_key_secrets|readAiKeySecrets/.test(f.text)).map((f) => f.path).filter((p) => !allowed.has(p));
+    expect(hits).toEqual([]);
+  });
+
+  test('the write wrappers (ai_key_set, ai_key_delete) appear only in the ai-keys repo and its test (STK-076 extends this list)', () => {
+    const allowed = new Set(['packages/db/src/repos/ai-keys.ts', 'packages/db/src/repos/ai-keys.test.ts']);
+    const hits = files.filter((f) => /ai_key_set|ai_key_delete/.test(f.text)).map((f) => f.path).filter((p) => !allowed.has(p));
     expect(hits).toEqual([]);
   });
 
