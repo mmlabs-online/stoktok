@@ -58,3 +58,46 @@ I had no shell, so I could not run `git diff`. I read the files directly: the ad
 
 ### Open questions
 - None blocking.
+
+## STK-070 security re-review, attempt 2
+
+I had no shell, so I checked the code by reading it against the installed SDKs: `@anthropic-ai/sdk` 1.7.0 and `@google/genai` 3.0.0. I could not run the tests.
+
+**Verdict:** no 🔴 findings. All four fixes from attempt 1 are in place, and I found no regressions. One 🟡 remains: Gemini can still record 0 output tokens in one case. It is a pre-existing issue and a one-line fix. The rest are 🟢.
+
+### Attempt-1 fixes, checked
+- **🟡1 Stop reason checked before `final_output`: fixed.**
+  - Anthropic (`packages/ai/src/adapters/anthropic.ts:64-86`): the stop reason is mapped first. `max_tokens` and `model_context_window_exceeded` (both valid `StopReason` values in the SDK, `messages.d.ts:4140`) return `{parts:[], stop:'max_tokens'}`, so the client's `truncated` check runs (`client.ts:292`). A refusal returns `refused` with usage. `pause_turn` and unknown reasons return `malformed` with usage.
+  - Google (`google.ts:94-102`): refusal reasons are checked first, anything other than `STOP`/`MAX_TOKENS` is `malformed`, and a truncated `final_output` returns empty parts.
+  - Tests: `anthropic.test.ts:180-195`, `google.test.ts:163-175`.
+- **🟡2 Gemini output-token derivation: fixed for the case raised** (`google.ts:25-35`). When output parts come back without `candidatesTokenCount`, output is now `total − prompt − toolUse`. A missing, negative or non-integer value throws `malformed` with null usage, so the full reservation stays counted (`google.test.ts:177-189`).
+- **🟢3 Pinned SDK settings: confirmed in the SDK sources.**
+  - Anthropic (`anthropic.ts:95`): an explicit `baseURL` takes precedence over `ANTHROPIC_BASE_URL`, and `_baseURLIsExplicit=true` stops a profile from replacing it (`client.js:104,156,261`). With `apiKey` passed, `env=null`, so `ANTHROPIC_API_KEY` and `ANTHROPIC_AUTH_TOKEN` are not read and the default credential chain is skipped (`client.js:123-138`). `authToken:null` is not counted as a second credential (`!= null`). `logLevel:'off'` is valid and takes precedence over `ANTHROPIC_LOG` (`log.js:11`, `client.js:161-164`).
+  - Google (`google.ts:111`): `vertexai:false` takes precedence over `GOOGLE_GENAI_USE_VERTEXAI` and `GOOGLE_GENAI_USE_ENTERPRISE` (`index.mjs:29200-29208`). `httpOptions.baseUrl` takes precedence over `GOOGLE_GEMINI_BASE_URL` (`index.mjs:57-68`). The explicit `apiKey` takes precedence over the env key (`:29342`).
+  - `sdk-pins.test.ts:27-35` asserts these settings.
+- **🟢4 Duplicate `final_output`: fixed** (`anthropic.ts:59`, test at `anthropic.test.ts:192`). Gemini already rejected it via `calls > 1` (`google.ts:98`).
+
+### Remaining findings
+- **🟡 A. Gemini can still record 0 output tokens when Google reports a higher total.** Location: `google.ts:32`, and `google.test.ts:190-193` asserts this behaviour.
+  - When there are no visible parts, or when `candidatesTokenCount` is present, `totalTokenCount` is ignored.
+  - With `MAX_TOKENS` and empty parts, a response that hit the token cap is recorded as 0 output tokens. That releases the reservation even though tokens were produced (for example hidden thoughts, if a model ignores `thinkingBudget:0`).
+  - The undercount is at most `outputCap` per call, but it is exactly the "settles too low" case.
+  - Fix: whenever `totalTokenCount` is a valid integer, use `out = max(cand + thoughts, total − prompt − toolUse)`. Change the test to expect the derived value.
+  - Ties to AC4.
+- **🟢 B. A `null` candidate count is treated as 0** (`google.ts:32-33`). The check uses `=== undefined`, so `candidatesTokenCount: null` with output present gives `null ?? 0 = 0`. Google's JSON normally leaves the field out rather than sending `null`, but `== null` closes this cheaply. Fix A covers it as well.
+- **🟢 C. Some environment variables are still read.**
+  - `ANTHROPIC_CUSTOM_HEADERS` (`client.js:178-188`) can add request headers. It cannot change the host or read the key.
+  - `GOOGLE_GENAI_API_VERSION` (`index.mjs:29397`) can change the API version only.
+  - Both need control of the environment, so this is a follow-up note only (R3).
+- **🟢 D. Follow-up from attempt 1, still open:** the SDKs are still imported at the top of each adapter file (`anthropic.ts:1`, `google.ts:1`). The STK-073 bundle check must cover both SDKs. STK-073 must also pass the same `timeoutMs` to `buildProviders` and `AiClient`.
+
+### Risks
+- The fixtures are still hand-written. How Gemini really reports usage (omitted fields, thoughts with budget 0) is unverified until fixtures are recorded from live calls.
+- No tests mock the SDK, so the pinned settings are checked by reading the source, not at runtime. The `sdk-pins` test asserts the constructor arguments, not what the SDK does with them.
+
+### Recommendations
+- Fix 🟡A in this ticket (a one-line change in `usageOf` plus updating one test).
+- Record 🟢B–D as follow-ups; D belongs to STK-073.
+
+### Open questions
+None.
