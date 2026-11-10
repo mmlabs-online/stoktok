@@ -107,3 +107,48 @@ I read these files directly: `packages/ai/src/{client,tools,index,types}.ts`, `p
 
 ### Recommendation
 Fix the 🟡 at `client.ts:252` in this ticket. It is a one-line wrap plus one test, and it completes AC2's "callRound never throws" contract. Everything else can go to follow-ups.
+
+## STK-071 security re-review, attempt 3
+
+I read `/home/user/stoktok/packages/ai/src/client.ts` and the provider-failure tests in `/home/user/stoktok/packages/ai/src/client.test.ts`. I did not run the tests or typecheck.
+
+**Verdict: no 🔴 or 🟡 findings. The attempt-2 🟡 is fixed and I found no regressions. Nothing blocks a PASS.**
+
+### The attempt-2 🟡 is fixed
+- `client.ts:250-258`: the cost calculation on the error branch (`usageCostMicroUsd` plus copying the token counts) is now inside a try/catch.
+- If the adapter supplies bad usage, the round settles as `provider_error` with cost `null` and 0 tokens, and keeps the adapter's error code. A `null` cost is still counted at the reserved amount, so the budget stays safe.
+- Tokens are copied only after the cost calculation succeeds (`:252-254`), so a settle row never mixes a computed cost with garbage token counts.
+- `client.test.ts:328-336` covers negative and fractional tokens. It checks that `generate` does not throw, the call order is `reserve` then `settle`, and the settle row is exact.
+- The existing tests still pass on the happy path, the no-usage case, non-`ProviderError` throws and the over-reservation case (`:310-326`, `:400-405`).
+
+### callRound / generate: no remaining throw path that matters
+- 🟢 `callRound` (`:226-277`) cannot throw:
+  - The provider call is inside a try at `:243-266`. That covers a synchronous throw from `provider.generate`, `throw null` (`:246` handles it) and the timeout.
+  - The error branch is guarded (`:250-258`).
+  - `classify` is wrapped at `:268-276`.
+- 🟢 There is no provider call without a granted reservation. The only call site is `:167`. It runs only after `reserve` resolves (`:141-154`; a throw returns `budget_unavailable`) and after `granted` is checked (`:156`). This holds on every round.
+- 🟢 `generate` can still throw at these points, all before the first reserve, so no ledger row is left behind and no provider call happens:
+  - `assertReadTools` (`:94`);
+  - the first-turn check (`:95`);
+  - `z.toJSONSchema` (`:122`);
+  - `worstCaseCostMicroUsd` (`:129`).
+
+  These are caller or config errors, so throwing there is acceptable.
+- 🟢 One known throw remains after settle: `wrapUntrusted` at `:203` when a tool name is 60–64 characters. It was already open from attempt 1, nothing is left in `reserved` state, and it fails closed. The fix is still to cap tool names at 59 in `tools.ts:4`.
+- 🟢 A caller-supplied `log.warn` that throws would also make `generate` throw. That is outside this package's control and not worth guarding.
+
+### Regressions
+None. The rest of `client.ts` matches what I verified in attempt 2:
+- the order of checks in `classify`;
+- the per-call re-check at `:189`;
+- the tool-call cap at `:296`;
+- the guarded settle at `:174-179`.
+
+### Follow-ups still open (unchanged from attempt 2)
+- Cap tool names at 59 characters.
+- Race the tool timeout in `runTool` (`:215-223`).
+- Name the real delimiter in `UNTRUSTED_DATA_RULE`.
+- Widen the SDK regex in `r3-guard.test.ts:64`.
+- STK-070: add a `server-only` `apps/web/server/ai.ts` plus a guard for it, and enforce output and thinking limits on the provider side.
+- STK-064/065/066: no stored or fetched text in `input.system`, and an R10 check for each tool.
+- Ming to decide whether reserve-throw refusals need an audit trail beyond logs.
