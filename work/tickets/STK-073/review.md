@@ -52,3 +52,49 @@ Verdict: REWORK
 ### Follow-ups (out of scope)
 - Fix the plan template's server-bundle grep for Turbopack, e.g. `a\.y\("@(anthropic-ai/sdk|google/genai)-[0-9a-f]+"\)`. Also make standalone probes always run from a copy outside the repo, so Node cannot resolve modules from the repo's `node_modules`.
 - Worker-image SDK resolution probe (with STK-064). "Provider not configured" line on the card. Muted "may be refused while warn" note. Stale `reserved` row sweep. Re-verify model IDs and prices before go-live.
+
+## Attempt 2 — 2026-11-10
+Verdict: PASS
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exit 0.
+- lint: `pnpm lint` exit 0.
+- test: `pnpm test` exit 0. core 779, sources 35 (+1 skipped file), ai 169, db 174 + 1 todo, worker 293 (+1 skipped file), web 314. These match impl-log Attempt 2.
+- `pnpm check:service-key`: exit 0. All 11 needles report 0 hits, and it prints "OK: no secret or AI SDK material in client bundle". This run also rebuilt web: `BUILD_ID` and `standalone/apps/web/server.js` both have mtime 08:07:43.
+- `--scan-only` with no dir: prints "usage: check-no-service-key-in-client.sh --scan-only <dir>" and exits 2 (Attempt 1 nit fixed). `bash -n scripts/check-image.sh`: syntax ok.
+- Since Attempt 1 (`2948fee..HEAD`), nothing under `apps/` or `packages/` changed. The commit `6c40e1f` touches only `scripts/check-image.sh`, `scripts/check-no-service-key-in-client.sh` and the work files. The working tree is clean.
+- **Isolated image-equivalent reproduction of the Issue 1 fix** (Docker is unavailable):
+  - I copied fresh `apps/web/.next/standalone` to a new scratch dir outside the repo as `<copy>/app`, plus `.next/static`. The probe's `-w` dir and its `node -e` body were extracted from `scripts/check-image.sh:56` with sed (not retyped). I ran them from `<copy>/app/apps/web/.next/server/chunks/ssr`, the same relative dir as the container's `/app/apps/web/.next/server/chunks/ssr`.
+  - Isolation holds: from that dir, a plain `import('@anthropic-ai/sdk')` gives `ERR_MODULE_NOT_FOUND`. Exit codes are also the same with `NODE_PATH` unset.
+  - Results:
+    - Intact: exit 0.
+    - `@anthropic-ai/sdk-<hash>` alias removed: exit 2.
+    - `@google/genai-<hash>` alias removed: exit 2.
+    - Dangling `@google/genai-<x>` symlink (missing target): exit 1, so the import-failure branch works too.
+    - Two `genai-` aliases: exit 2.
+    - Restored: exit 0.
+  - `server.js` from the copy, with dummy `SUPABASE_*`: `/healthz` 200 and 0 `MODULE_NOT_FOUND` lines.
+
+### Acceptance criteria
+- [x] AC1 `UsageLedger` adapter, errors pass through, 22023 test. Unchanged since Attempt 1, and the tests are green.
+- [x] AC2 `server/ai.ts` is server-only, the only importer, lazy, and works with no keys. The worker factory and its test are present. Unchanged, and green.
+- [x] AC3 `next.config.ts`, the exact SDK pins, and the requirement to be "verified by running the built server or image". Evidence:
+  - The isolated standalone run above: `server.js` healthz 200, and the hashed-alias probe exits 0.
+  - The CI probe at `scripts/check-image.sh:54-58` now checks the path the server actually loads. It fails when an alias is removed or broken.
+- [x] AC4 The bundle check builds with AI sentinels and fails on sentinels, key names, SDK names and hostnames. The run is green, and the negative cases were verified in Attempt 1. The script change since then is the usage line only.
+- [x] AC5 The Settings AI usage card. Unchanged, and `ai-usage-card.test.tsx` and `budget.test.ts` are green.
+- [x] AC6 typecheck, lint, test and the client-bundle check are green, and the CI image probe no longer depends on repo `node_modules`.
+
+### Issues
+None. Attempt 1 Issue 1 is fixed: the probe resolves the Turbopack aliases from the server chunk dir, and no hash is hard-coded.
+
+### Rules R1–R10
+No violations found. The diff since Attempt 1 is scripts only. R7: both scripts are in the plan's file list.
+
+### Nits (do not block)
+- impl-log Attempt 2 "Scope self-check" says "Not committed", but the work is committed as `6c40e1f`. This is stale text again.
+- impl-log corrections are present: Attempt 1 marks the plain-name probe as superseded, and it notes the stale "nothing committed" line.
+
+### Follow-ups (out of scope)
+- Carried over from Attempt 1: the Turbopack server-bundle grep in the plan template; always run standalone probes from a copy outside the repo; the worker-image SDK probe (STK-064); a "provider not configured" line on the card; a "may be refused while warn" note; a sweep for stale `reserved` rows; re-verify model IDs and prices before go-live.
+- The container probe only runs in CI. Say so in the PR description, and watch the first `images` job on the PR.
