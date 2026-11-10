@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P2 |
 | Areas | architecture, security, ui |
-| Attempts | 1 |
+| Attempts | 2 |
 | Created | 2026-11-10 |
 | PR | — |
 
@@ -31,3 +31,4 @@ docs/spec-v1.md §2 (LLM provider), §6, §8 secrets. CLAUDE.md R1, R3, R5. Depe
   - Map a `22023` from `ai_reserve` inside the ledger port adapter if convenient (the client already fails closed on any reserve throw).
   - Keys reach both web and worker (STK-072); the deployment-repo copy of the workflow is updated by Ming by hand.
 - 2026-11-10 (orchestrator): split per plan.md. This ticket keeps AC1 and the typecheck/lint/test part of AC4. The web/worker wiring, `next.config.ts`, the client-bundle check and the Settings usage card (AC2, AC3, bundle part of AC4) moved to STK-073.
+- 2026-11-10 (Ming, after review attempt 1 PASS): fix before the PR, all from security-review.md attempt 1: 🟡1 run the stop/finish-reason mapping before returning `final_output` (truncated → `max_tokens`, refusal/safety → `refused`); 🟡2 Gemini must not settle 0 output tokens when `candidatesTokenCount` is missing but output came back (derive from `totalTokenCount` or throw `malformed, null`); 🟢3 pin each SDK's base URL and turn off env-driven auth/debug logging (Anthropic `baseURL`, `authToken: null`, `logLevel: 'off'`; Google `httpOptions.baseUrl`, `vertexai: false`); 🟢4 Anthropic rejects a second `final_output` as `malformed`.
