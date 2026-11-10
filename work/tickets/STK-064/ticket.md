@@ -2,9 +2,9 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P2 |
-| Areas | data, ui, security |
+| Areas | data, db, ui, security |
 | Attempts | 0 |
 | Created | 2026-11-08 |
 | PR | — |
@@ -26,3 +26,8 @@ docs/spec-v1.md §3 F5, §6.2 anti-hallucination rules, §7 schedule (after EOD)
 ## Notes / answers from Ming
 - 2026-11-10 (orchestrator): waits for STK-070 (the AI layer was split from STK-063 into STK-063, STK-069 and STK-070).
 - 2026-11-10 (orchestrator): now waits for STK-073 (STK-070 was split into adapters and wiring + usage card).
+- 2026-11-10 (orchestrator): added `db` to areas (AC3 is a new `ai_summaries` migration). Carry-overs from STK-063…STK-076:
+  - Use the merged AI layer: `apps/worker/src/ai.ts` (`createWorkerAi`, keys resolved per call: Settings/Vault key → env → off; a key-read error is `provider_unavailable`). Budget exhaustion and `budget_unavailable` / `provider_unavailable` must skip cleanly.
+  - Stored articles/statements go only in untrusted data blocks, never in `system` or the caller's text (STK-071 security note). Any tool passed to the client must be genuinely read-only (R10).
+  - First worker job to import the AI SDKs: add the worker-image SDK resolution probe to `scripts/check-image.sh` (STK-073 follow-up), and check `apps/worker` tsup externals.
+  - Real provider behaviour (model IDs, prices, thinking, JSON mode) is still verify-before-go-live (see STK-070 impl-log).
