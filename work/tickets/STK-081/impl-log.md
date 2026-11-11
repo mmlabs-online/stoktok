@@ -50,3 +50,35 @@ None.
 - Could the diff be smaller? No; every file is on the plan list.
 - Diff size: ~+520 / -35 lines including 3 new files (not committed).
 - No file under apps/, src/repos/, scripts/, .env.example or CLAUDE.md changed.
+
+## Attempt 2 — 2026-11-11 (REWORK: fixes Ming asked for after review attempt 1 PASS)
+
+### Files touched
+| File | Required because |
+|---|---|
+| packages/db/src/pg/access.ts | `q()` callback result type is `Promise<T extends Compilable<unknown> \| Kysely<Database> ? never : T>` (distributive, so unions are caught; `Transaction` extends `Kysely`); the body casts back to `Promise<T>` |
+| packages/db/src/pg/access.test.ts (new) | Compile-time fixtures: positive (row array, `number \| null`, `sql` result rows) and `@ts-expect-error` for a builder, `Kysely`, `Transaction`, and `Kysely \| null`. Covered by `pnpm typecheck` (src is in tsconfig include) |
+| packages/db/src/r3-guard.test.ts | `log:` guard now spans nested config (`[\s\S]*?`, also catches `log(e) {}` shorthand, not `console.log(`); accessor rule adds `getOwnPropertySymbols` and `Reflect.ownKeys`; kysely rule catches `export * / export {…} / export * as x from 'kysely'` (only `sql` and type-only re-exports pass); self-tests for all; unused `DRIVER_IMPORT` and its self-test removed |
+
+### Tests added
+- src/pg/access.test.ts: type fixtures (4 `@ts-expect-error`, 3 positive); typecheck fails if any directive becomes unused.
+- r3-guard `S5 regexes catch their fixtures`: nested `log:` (single and multi-line, shorthand), re-export positives/negatives, the two new accessor names.
+
+### Checks (actual output summary)
+Local Postgres (initdb as `postgres` user, TCP 127.0.0.1:54329), `DB_TEST_URL` set; stopped and removed afterwards.
+- typecheck: pass (no errors in any package)
+- lint: pass
+- test: core 834, sources 35, ai 184, db 236 passed | 1 todo, worker 295, web 349; all green
+- test:db: 5 files, 24 tests passed
+- db:check: `db:check OK`
+- check:service-key: `OK: no secret or AI SDK material in client bundle`
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+- The repo has no `format` script or oxfmt config; I did not run a formatter (an ad hoc oxfmt run with defaults rewrote quotes, so I reverted it and re-applied the edits by hand in the existing style).
+- The `log:` regex scans from `new Kysely(` to the end of the file, so a later unrelated `log:` in the same file would be a false positive. None exists today; the rule is limited to files that contain `new Kysely`.
+
+### Scope self-check
+- Only the five listed items; no commit made.
