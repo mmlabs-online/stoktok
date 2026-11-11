@@ -37,12 +37,8 @@ describe('R3 guard', () => {
     expect(bad).toEqual([]);
   });
 
-  test('SUPABASE_SERVICE_ROLE_KEY is referenced only in packages/db/src/client.ts (and its tests)', () => {
-    const hits = files
-      .filter((f) => f.text.includes('SUPABASE_SERVICE_ROLE_KEY'))
-      .map((f) => f.path)
-      .filter((p) => p !== 'packages/db/src/client.ts' && p !== 'packages/db/src/client.test.ts');
-    expect(hits).toEqual([]);
+  test('SUPABASE_SERVICE_ROLE_KEY appears in no source file', () => {
+    expect(files.filter((f) => f.text.includes('SUPABASE_SERVICE_ROLE_KEY')).map((f) => f.path)).toEqual([]);
   });
 
   test("no file containing 'use client' imports @stoktok/db, server/db, @stoktok/sources or @stoktok/ai", () => {
@@ -123,6 +119,7 @@ describe('R3 guard', () => {
     const allowed = new Set([
       'packages/db/src/repos/ai-keys.ts',
       'packages/db/src/repos/ai-keys.test.ts',
+      'packages/db/test-db/ai-keys.test.ts',
       'packages/db/src/index.ts',
       'apps/web/server/ai.ts',
       'apps/web/server/ai.test.ts',
@@ -137,6 +134,7 @@ describe('R3 guard', () => {
     const allowed = new Set([
       'packages/db/src/repos/ai-keys.ts',
       'packages/db/src/repos/ai-keys.test.ts',
+      'packages/db/test-db/ai-keys.test.ts',
       'apps/web/server/ai-keys.ts',
       'apps/web/server/ai-keys.test.ts',
     ]);
@@ -188,7 +186,8 @@ const inPgDirs = (p: string) => PG_DIRS.some((d) => p.startsWith(d));
 const KYSELY_REEXPORT = /export\s+(?:type\s+)?(?:\*|\{[^}]*\})(?:\s+as\s+\w+)?\s+from\s+['"]kysely['"]/g;
 const KYSELY_DYNAMIC = /(?:import\s*\(\s*|require\s*\(\s*|import\s+)['"]kysely['"]/;
 const KYSELY_FROM = /import\s+(type\s+)?([^;]*?)\s+from\s+['"]kysely['"]/g;
-const KYSELY_CTOR_LOG = /new\s+Kysely\b[^(]*\([\s\S]*?(?<![.\w])log\s*[:(]/;
+const KYSELY_CTOR_LOG = /new\s+Kysely\b[^(]*\([\s\S]*?(?<![.\w])['"]?log['"]?\s*[:(,}]/;
+const SUPABASE_IMPORT = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"]@supabase\//;
 const CREATE_PG_DB = /\bcreatePgDb\s*\(/;
 const ACCESSOR = /kyselyOf|stoktok\.pgdb\.internals|getOwnPropertySymbols|Reflect\s*\.\s*ownKeys/;
 
@@ -232,9 +231,34 @@ describe('S5 data access', () => {
     expect(files.filter((f) => KYSELY_CTOR_LOG.test(f.text)).map((f) => f.path)).toEqual([]);
   });
 
-  test('S5: createPgDb( is called only under packages/db/src/pg/ and packages/db/test-db/', () => {
-    const hits = files.filter((f) => CREATE_PG_DB.test(f.text)).map((f) => f.path).filter((p) => !inPgDirs(p));
+  test('S5: createPgDb( is called only under pg/, test-db/, apps/web/server/db.ts and apps/worker/src/cli.ts', () => {
+    const allowed = new Set(['apps/web/server/db.ts', 'apps/worker/src/cli.ts']);
+    const hits = files.filter((f) => CREATE_PG_DB.test(f.text)).map((f) => f.path).filter((p) => !inPgDirs(p) && !allowed.has(p));
     expect(hits).toEqual([]);
+  });
+
+  test('S5: @supabase/ imports (from, import type, import(), require(), side-effect, export-from) only under apps/web/server/auth/', () => {
+    const hits = files.filter((f) => SUPABASE_IMPORT.test(f.text)).map((f) => f.path).filter((p) => !p.startsWith('apps/web/server/auth/'));
+    expect(hits).toEqual([]);
+  });
+
+  test('S5: packages/db and apps/worker package.json declare no @supabase/* in any dependency field', () => {
+    for (const pkg of ['packages/db/package.json', 'apps/worker/package.json']) {
+      const json = JSON.parse(readFileSync(join(ROOT, pkg), 'utf8')) as Record<string, Record<string, string> | undefined>;
+      for (const field of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+        expect(Object.keys(json[field] ?? {}).filter((n) => n.startsWith('@supabase/')), `${pkg} ${field}`).toEqual([]);
+      }
+    }
+  });
+
+  test('S5: pg and kysely ranges in apps/worker and pg in apps/web equal packages/db', () => {
+    const deps = (pkg: string) => (JSON.parse(readFileSync(join(ROOT, pkg), 'utf8')) as { dependencies: Record<string, string> }).dependencies;
+    const db = deps('packages/db/package.json');
+    expect(db.pg).toBeTruthy();
+    expect(db.kysely).toBeTruthy();
+    expect(deps('apps/worker/package.json').pg).toBe(db.pg);
+    expect(deps('apps/worker/package.json').kysely).toBe(db.kysely);
+    expect(deps('apps/web/package.json').pg).toBe(db.pg);
   });
 
   test('S5 regexes catch their fixtures', () => {
@@ -248,6 +272,10 @@ describe('S5 data access', () => {
     expect(KYSELY_CTOR_LOG.test('new Kysely<Database>({ dialect: new PostgresDialect({ pool }), log: (e) => e })')).toBe(true);
     expect(KYSELY_CTOR_LOG.test('new Kysely<Database>({\n  dialect: new PostgresDialect({ pool }),\n  log(e) {},\n})')).toBe(true);
     expect(KYSELY_CTOR_LOG.test('new Kysely<Database>({ dialect: new PostgresDialect({ pool }) })')).toBe(false);
+    expect(KYSELY_CTOR_LOG.test('new Kysely({ dialect: new PostgresDialect({ pool }), log })')).toBe(true);
+    expect(KYSELY_CTOR_LOG.test('new Kysely({ log, dialect })')).toBe(true);
+    expect(KYSELY_CTOR_LOG.test(`new Kysely({ dialect, 'log': f })`)).toBe(true);
+    expect(KYSELY_CTOR_LOG.test('new Kysely({ dialect }); console.log(1)')).toBe(false);
     for (const s of [`export { Kysely } from 'kysely'`, `export * from 'kysely'`, `export * as k from 'kysely'`, `export { sql, Kysely } from 'kysely'`]) {
       expect(kyselyViolation(s), s).toBe(true);
     }
@@ -257,6 +285,10 @@ describe('S5 data access', () => {
     expect(ACCESSOR.test('Object.getOwnPropertySymbols(db)')).toBe(true);
     expect(ACCESSOR.test('Reflect.ownKeys(db)')).toBe(true);
     expect(CREATE_PG_DB.test('createPgDb(process.env, "web")')).toBe(true);
+    for (const x of [`from '@supabase/ssr'`, `import type { A } from "@supabase/supabase-js"`, `await import('@supabase/ssr')`, `require("@supabase/supabase-js")`, `import '@supabase/ssr'`, `export * from '@supabase/ssr'`]) {
+      expect(SUPABASE_IMPORT.test(x), x).toBe(true);
+    }
+    expect(SUPABASE_IMPORT.test(`from '@stoktok/db'`)).toBe(false);
     expect(ACCESSOR.test('kyselyOf(db)')).toBe(true);
     expect(ACCESSOR.test(`Symbol.for('stoktok.pgdb.internals')`)).toBe(true);
     expect(DRIVER_IMPORT_PG.test(`from 'pg'`)).toBe(true);

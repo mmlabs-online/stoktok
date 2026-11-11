@@ -18,3 +18,6 @@ export const PG_POOL_PROFILES: Record<PgProfile, PoolProfile> = {
 
 /** Postgres wire protocol limit on bind parameters per statement. */
 export const PG_MAX_BIND_PARAMS = 65_535;
+
+/** Per-symbol fan-outs run at most this many queries at once: <= the worker pool `max`, so no caller waits near connectionTimeoutMillis. */
+export const PG_FANOUT_CONCURRENCY = 2;

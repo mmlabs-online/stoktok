@@ -20,7 +20,8 @@
     "@stoktok/core": "workspace:*",
     "@stoktok/db": "workspace:*",
     "@stoktok/sources": "workspace:*",
-    "@supabase/supabase-js": "^2.118.0"
+    "kysely": "^0.29.8",
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

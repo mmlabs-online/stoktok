@@ -1,29 +1,28 @@
-import type { Db } from '../client';
-import { mapRow, unwrap } from '../errors';
+import { mapRow } from '../errors';
 import { financialFromRow } from '../mappers';
 import type { FinancialRecord } from '../mappers';
+import { q } from '../pg/access';
+import type { PgDb } from '../pg/client';
+import { pickRows, upsertChunked } from '../pg/upsert';
 import type { FinancialInsert, FinancialRow } from '../rows';
 
-const COLS = 'symbol,period,eps,bvps,revenue,net_income,source,fetched_at';
+const COLS = ['symbol', 'period', 'eps', 'bvps', 'revenue', 'net_income', 'source', 'fetched_at'] as const;
 
 /** Stored quarters for the symbols from `fromPeriod` ('YYYYQn') on, in one query. */
-export async function listFinancials(db: Db, symbols: readonly string[], fromPeriod: string): Promise<FinancialRecord[]> {
+export async function listFinancials(db: PgDb, symbols: readonly string[], fromPeriod: string): Promise<FinancialRecord[]> {
   if (symbols.length === 0) return [];
   const ctx = { table: 'financials', op: 'list' };
-  const rows = unwrap<FinancialRow[]>(
-    await db.from('financials').select(COLS).in('symbol', [...symbols]).gte('period', fromPeriod),
-    ctx,
-  );
-  return rows.map((r) => mapRow(financialFromRow, r, ctx));
+  const rows = await q(db, ctx, (k) => k.selectFrom('financials').select(COLS).where('symbol', 'in', [...symbols]).where('period', '>=', fromPeriod).execute());
+  return rows.map((r) => mapRow(financialFromRow, r as FinancialRow, ctx));
 }
 
 /**
  * Idempotent upsert on (symbol, period); a later duplicate in the input wins. Every column, including
- * fetched_at, is overwritten (restatement policy, docs/adr/0002). Sequential chunks, no `.select()`.
- * Returns the number of rows sent.
+ * fetched_at, is overwritten (restatement policy, docs/adr/0002). Chunks run in one transaction.
+ * Returns the number of unique rows written.
  */
 export async function upsertFinancials(
-  db: Db,
+  db: PgDb,
   rows: readonly FinancialInsert[],
   { chunkSize = 500 }: { chunkSize?: number } = {},
 ): Promise<number> {
@@ -31,9 +30,6 @@ export async function upsertFinancials(
   const byKey = new Map<string, FinancialInsert>();
   for (const row of rows) byKey.set(`${row.symbol}|${row.period}`, row);
   const unique = [...byKey.values()];
-  for (let i = 0; i < unique.length; i += chunkSize) {
-    const res = await db.from('financials').upsert(unique.slice(i, i + chunkSize), { onConflict: 'symbol,period' });
-    if (res.error) unwrap(res, ctx);
-  }
+  await upsertChunked(db, ctx, 'financials', pickRows(unique, COLS), ['symbol', 'period'], chunkSize);
   return unique.length;
 }

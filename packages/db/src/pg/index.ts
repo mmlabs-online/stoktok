@@ -1,4 +1,4 @@
-/** Subpath barrel (@stoktok/db/pg). Server-only (R3). Kept out of the package index so apps do not bundle pg yet. */
+/** Subpath barrel (@stoktok/db/pg). Server-only (R3). Apps import createPgDb from here only in apps/web/server/db.ts and apps/worker/src/cli.ts. */
 export { createPgDb } from './client';
 export type { PgDb, PgPoolStats } from './client';
 export { PG_POOL_PROFILES } from './config';

@@ -1,64 +1,57 @@
 import { randomUUID } from 'node:crypto';
-import { corporateActionFromRow, corporateActionToRow } from '@stoktok/core';
+import { corporateActionFromRow, corporateActionToRow, toSafeInt } from '@stoktok/core';
 import type { CorporateAction, CorporateActionRow } from '@stoktok/core';
-import type { Db } from '../client';
-import { DataError, fetchAll, mapRow, unwrap, unwrapFound } from '../errors';
+import { DataError, found, mapRow } from '../errors';
+import { q } from '../pg/access';
+import type { PgDb } from '../pg/client';
 
-const COLS = 'id,symbol,type,ex_date,record_date,pay_date,listing_date,amount_per_share,ratio_num,ratio_den';
+/** corporateActionToRow types the amount as Int8 (it only ever holds a number); the table takes number | string. */
+function writable(row: CorporateActionRow) {
+  return { ...row, amount_per_share: row.amount_per_share === null ? null : toSafeInt(row.amount_per_share, 'amount_per_share', 'corporate_actions') };
+}
 
-export async function listCorporateActions(db: Db, opts: { symbol?: string; symbols?: readonly string[] } = {}): Promise<CorporateAction[]> {
+const COLS = ['id', 'symbol', 'type', 'ex_date', 'record_date', 'pay_date', 'listing_date', 'amount_per_share', 'ratio_num', 'ratio_den'] as const;
+
+export async function listCorporateActions(db: PgDb, opts: { symbol?: string; symbols?: readonly string[] } = {}): Promise<CorporateAction[]> {
   if (opts.symbols?.length === 0) return [];
   const ctx = { table: 'corporate_actions', op: 'list' };
-  const rows = await fetchAll<CorporateActionRow>((from, to) => {
-    let q = db.from('corporate_actions').select(COLS);
-    if (opts.symbol !== undefined) q = q.eq('symbol', opts.symbol);
-    if (opts.symbols !== undefined) q = q.in('symbol', [...opts.symbols]);
-    return q
-      .order('ex_date', { ascending: true })
-      .order('symbol', { ascending: true })
-      .order('id', { ascending: true })
-      .range(from, to);
-  }, ctx);
-  return rows.map((r) => mapRow(corporateActionFromRow, r, ctx));
+  const rows = await q(db, ctx, (k) => {
+    let b = k.selectFrom('corporate_actions').select(COLS);
+    if (opts.symbol !== undefined) b = b.where('symbol', '=', opts.symbol);
+    if (opts.symbols !== undefined) b = b.where('symbol', 'in', [...opts.symbols]);
+    return b.orderBy('ex_date', 'asc').orderBy('symbol', 'asc').orderBy('id', 'asc').execute();
+  });
+  return rows.map((r) => mapRow(corporateActionFromRow, r as CorporateActionRow, ctx));
 }
 
 export async function createCorporateAction(
-  db: Db,
+  db: PgDb,
   action: DistributiveOmit<CorporateAction, 'id'>,
   meta: { recordDate?: string } = {},
 ): Promise<CorporateAction> {
   const ctx = { table: 'corporate_actions', op: 'create' };
-  const row = unwrap<CorporateActionRow>(
-    await db
-      .from('corporate_actions')
-      .insert(corporateActionToRow({ ...action, id: randomUUID() } as CorporateAction, meta))
-      .select(COLS)
-      .single(),
-    ctx,
-  );
-  return mapRow(corporateActionFromRow, row, ctx);
+  const values = writable(corporateActionToRow({ ...action, id: randomUUID() } as CorporateAction, meta));
+  const row = await q(db, ctx, (k) => k.insertInto('corporate_actions').values(values).returning(COLS).executeTakeFirstOrThrow());
+  return mapRow(corporateActionFromRow, row as CorporateActionRow, ctx);
 }
 
 /** Full replace: omitting `meta.recordDate` clears record_date. */
 export async function updateCorporateAction(
-  db: Db,
+  db: PgDb,
   id: string,
   action: DistributiveOmit<CorporateAction, 'id'>,
   meta: { recordDate?: string } = {},
 ): Promise<CorporateAction> {
   const ctx = { table: 'corporate_actions', op: 'update' };
-  const { id: _id, ...fields } = corporateActionToRow({ ...action, id } as CorporateAction, meta);
+  const { id: _id, ...fields } = writable(corporateActionToRow({ ...action, id } as CorporateAction, meta));
   void _id;
-  const row = unwrapFound<CorporateActionRow>(
-    await db.from('corporate_actions').update(fields).eq('id', id).select(COLS).maybeSingle(),
-    ctx,
-  );
-  return mapRow(corporateActionFromRow, row, ctx);
+  const row = await q(db, ctx, (k) => k.updateTable('corporate_actions').set(fields).where('id', '=', id).returning(COLS).executeTakeFirst());
+  return mapRow(corporateActionFromRow, found(row, ctx) as CorporateActionRow, ctx);
 }
 
-export async function deleteCorporateAction(db: Db, id: string): Promise<void> {
+export async function deleteCorporateAction(db: PgDb, id: string): Promise<void> {
   const ctx = { table: 'corporate_actions', op: 'delete' };
-  const rows = unwrap<unknown[]>(await db.from('corporate_actions').delete().eq('id', id).select('id'), ctx);
+  const rows = await q(db, ctx, (k) => k.deleteFrom('corporate_actions').where('id', '=', id).returning('id').execute());
   if (rows.length === 0) throw new DataError('NOT_FOUND', ctx.table, ctx.op, 'not found');
 }
 

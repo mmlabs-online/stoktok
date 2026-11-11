@@ -42,10 +42,6 @@ describe('NEWS_SYNC_CONFIG', () => {
       expect(s.minIntervalMs).toBeGreaterThan(0);
     }
   });
-  test('insertChunkSize < 1000 and gapsPageSize <= 1000', () => {
-    expect(NEWS_SYNC_CONFIG.insertChunkSize).toBeLessThan(1000);
-    expect(NEWS_SYNC_CONFIG.gapsPageSize).toBeLessThanOrEqual(1000);
-  });
   test('caps match the database checks; honest user agent', () => {
     expect(NEWS_SYNC_CONFIG.maxExcerptChars).toBeLessThanOrEqual(10_000);
     expect(NEWS_SYNC_CONFIG.maxTitleChars).toBeLessThanOrEqual(500);

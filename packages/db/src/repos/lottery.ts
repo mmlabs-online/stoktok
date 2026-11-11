@@ -1,15 +1,17 @@
-/** Vietlott draws and tickets. Callers must call requireUser() first (R6); the worker uses the service client directly. */
+/** Vietlott draws and tickets. Callers must call requireUser() first (R6); the worker uses its own db handle. */
 import { RowMappingError, canonicalTicketLines } from '@stoktok/core';
 import type { GameId, TierId } from '@stoktok/core';
-import type { Db } from '../client';
-import { DataError, mapRow, unwrap, unwrapFound } from '../errors';
+import { DataError, found, mapRow } from '../errors';
 import type { Ctx } from '../errors';
 import { drawNoFromId, lotteryDrawFromRow, lotteryDrawToRow, lotteryTicketFromRow, lotteryTicketToRow } from '../mappers';
 import type { LotteryStatus, LotteryTicketInput, StoredDrawResult, StoredLotteryTicket } from '../mappers';
+import { q } from '../pg/access';
+import type { PgDb } from '../pg/client';
+import { jsonb, pickRows, upsertChunked } from '../pg/upsert';
 import type { LotteryDrawRow, LotteryTicketRow } from '../rows';
 
-const DRAW_COLS = 'game,draw_no,draw_date,numbers,bonus,jackpot_vnd,jackpot_winners,jackpot2_vnd,jackpot2_winners,source,fetched_at';
-const TICKET_COLS = 'id,game,draw_no,lines,cost_vnd,channel,purchased_at,status,prize_tier,gross_vnd,checked_at,raw_text,created_at';
+const DRAW_COLS = ['game', 'draw_no', 'draw_date', 'numbers', 'bonus', 'jackpot_vnd', 'jackpot_winners', 'jackpot2_vnd', 'jackpot2_winners', 'source', 'fetched_at'] as const;
+const TICKET_COLS = ['id', 'game', 'draw_no', 'lines', 'cost_vnd', 'channel', 'purchased_at', 'status', 'prize_tier', 'gross_vnd', 'checked_at', 'raw_text', 'created_at'] as const;
 
 /** Caller input that fails to convert is a VALIDATION error, not a row mapping error. */
 function input<T>(fn: () => T, ctx: Ctx): T {
@@ -23,55 +25,55 @@ function input<T>(fn: () => T, ctx: Ctx): T {
 
 const canonical = (t: LotteryTicketInput): LotteryTicketInput => ({ ...t, lines: canonicalTicketLines(t.lines) });
 
-export async function createLotteryTicket(db: Db, ticket: LotteryTicketInput): Promise<StoredLotteryTicket> {
+/** `lines` is jsonb: it is written only through jsonb(). */
+const withLines = <T extends { lines: number[][] }>(row: T) => ({ ...row, lines: jsonb(row.lines) });
+
+export async function createLotteryTicket(db: PgDb, ticket: LotteryTicketInput): Promise<StoredLotteryTicket> {
   const ctx = { table: 'lottery_tickets', op: 'create' };
-  const payload = input(() => lotteryTicketToRow(canonical(ticket)), ctx);
-  const row = unwrap<LotteryTicketRow>(await db.from('lottery_tickets').insert(payload).select(TICKET_COLS).single(), ctx);
-  return mapRow(lotteryTicketFromRow, row, ctx);
+  const payload = withLines(input(() => lotteryTicketToRow(canonical(ticket)), ctx));
+  const row = await q(db, ctx, (k) => k.insertInto('lottery_tickets').values(payload).returning(TICKET_COLS).executeTakeFirstOrThrow());
+  return mapRow(lotteryTicketFromRow, row as LotteryTicketRow, ctx);
 }
 
 export async function listLotteryTickets(
-  db: Db,
+  db: PgDb,
   filter: { game?: GameId; status?: LotteryStatus; drawId?: string } = {},
 ): Promise<StoredLotteryTicket[]> {
   const ctx = { table: 'lottery_tickets', op: 'list' };
-  let q = db.from('lottery_tickets').select(TICKET_COLS);
-  if (filter.game) q = q.eq('game', filter.game);
-  if (filter.status) q = q.eq('status', filter.status);
-  if (filter.drawId !== undefined) q = q.eq('draw_no', input(() => drawNoFromId(filter.drawId as string), ctx));
-  const rows = unwrap<LotteryTicketRow[]>(
-    await q.order('purchased_at', { ascending: false }).order('id', { ascending: true }),
-    ctx,
-  );
-  return rows.map((r) => mapRow(lotteryTicketFromRow, r, ctx));
+  const drawNo = filter.drawId !== undefined ? input(() => drawNoFromId(filter.drawId as string), ctx) : undefined;
+  const rows = await q(db, ctx, (k) => {
+    let b = k.selectFrom('lottery_tickets').select(TICKET_COLS);
+    if (filter.game) b = b.where('game', '=', filter.game);
+    if (filter.status) b = b.where('status', '=', filter.status);
+    if (drawNo !== undefined) b = b.where('draw_no', '=', drawNo);
+    return b.orderBy('purchased_at', 'desc').orderBy('id', 'asc').execute();
+  });
+  return rows.map((r) => mapRow(lotteryTicketFromRow, r as LotteryTicketRow, ctx));
 }
 
-export async function getLotteryTicket(db: Db, id: string): Promise<StoredLotteryTicket> {
+export async function getLotteryTicket(db: PgDb, id: string): Promise<StoredLotteryTicket> {
   const ctx = { table: 'lottery_tickets', op: 'get' };
-  const row = unwrapFound<LotteryTicketRow>(await db.from('lottery_tickets').select(TICKET_COLS).eq('id', id).maybeSingle(), ctx);
-  return mapRow(lotteryTicketFromRow, row, ctx);
+  const row = await q(db, ctx, (k) => k.selectFrom('lottery_tickets').select(TICKET_COLS).where('id', '=', id).executeTakeFirst());
+  return mapRow(lotteryTicketFromRow, found(row, ctx) as LotteryTicketRow, ctx);
 }
 
 /** An edited ticket goes back to pending with its result cleared, so a stale win is never shown. */
-export async function updateLotteryTicket(db: Db, id: string, ticket: LotteryTicketInput): Promise<StoredLotteryTicket> {
+export async function updateLotteryTicket(db: PgDb, id: string, ticket: LotteryTicketInput): Promise<StoredLotteryTicket> {
   const ctx = { table: 'lottery_tickets', op: 'update' };
   const payload = {
-    ...input(() => lotteryTicketToRow(canonical(ticket)), ctx),
+    ...withLines(input(() => lotteryTicketToRow(canonical(ticket)), ctx)),
     status: 'pending',
     prize_tier: null,
     gross_vnd: null,
     checked_at: null,
   };
-  const row = unwrapFound<LotteryTicketRow>(
-    await db.from('lottery_tickets').update(payload).eq('id', id).select(TICKET_COLS).maybeSingle(),
-    ctx,
-  );
-  return mapRow(lotteryTicketFromRow, row, ctx);
+  const row = await q(db, ctx, (k) => k.updateTable('lottery_tickets').set(payload).where('id', '=', id).returning(TICKET_COLS).executeTakeFirst());
+  return mapRow(lotteryTicketFromRow, found(row, ctx) as LotteryTicketRow, ctx);
 }
 
 /** Writes only the result columns; values come from core `checkTicket` (`topTier`, `grossVnd`). */
 export async function recordLotteryTicketResult(
-  db: Db,
+  db: PgDb,
   id: string,
   result: { status: Exclude<LotteryStatus, 'pending'>; prizeTier: TierId | null; grossVnd: number; checkedAt: string },
 ): Promise<StoredLotteryTicket> {
@@ -82,29 +84,25 @@ export async function recordLotteryTicketResult(
     gross_vnd: result.status === 'won' ? result.grossVnd : 0,
     checked_at: result.checkedAt,
   };
-  const row = unwrapFound<LotteryTicketRow>(
-    await db.from('lottery_tickets').update(payload).eq('id', id).select(TICKET_COLS).maybeSingle(),
-    ctx,
-  );
-  return mapRow(lotteryTicketFromRow, row, ctx);
+  const row = await q(db, ctx, (k) => k.updateTable('lottery_tickets').set(payload).where('id', '=', id).returning(TICKET_COLS).executeTakeFirst());
+  return mapRow(lotteryTicketFromRow, found(row, ctx) as LotteryTicketRow, ctx);
 }
 
-export async function listPendingLotteryTickets(db: Db, game: GameId, drawId: string): Promise<StoredLotteryTicket[]> {
+export async function listPendingLotteryTickets(db: PgDb, game: GameId, drawId: string): Promise<StoredLotteryTicket[]> {
   const ctx = { table: 'lottery_tickets', op: 'list_pending' };
   const drawNo = input(() => drawNoFromId(drawId), ctx);
-  const rows = unwrap<LotteryTicketRow[]>(
-    await db.from('lottery_tickets').select(TICKET_COLS).eq('status', 'pending').eq('game', game).eq('draw_no', drawNo),
-    ctx,
+  const rows = await q(db, ctx, (k) =>
+    k.selectFrom('lottery_tickets').select(TICKET_COLS).where('status', '=', 'pending').where('game', '=', game).where('draw_no', '=', drawNo).execute(),
   );
-  return rows.map((r) => mapRow(lotteryTicketFromRow, r, ctx));
+  return rows.map((r) => mapRow(lotteryTicketFromRow, r as LotteryTicketRow, ctx));
 }
 
 /**
- * Idempotent last-write-wins upsert on (game, draw_no); a later duplicate in the input wins. Sequential chunks,
- * no `.select()`. Returns the number of rows sent.
+ * Idempotent last-write-wins upsert on (game, draw_no); a later duplicate in the input wins. Chunks run in one
+ * transaction. Returns the number of unique rows written.
  */
 export async function upsertLotteryDraws(
-  db: Db,
+  db: PgDb,
   draws: readonly StoredDrawResult[],
   { chunkSize = 100 }: { chunkSize?: number } = {},
 ): Promise<number> {
@@ -115,19 +113,13 @@ export async function upsertLotteryDraws(
     byKey.set(`${row.game}|${row.draw_no}`, row);
   }
   const unique = [...byKey.values()];
-  for (let i = 0; i < unique.length; i += chunkSize) {
-    const res = await db.from('lottery_draws').upsert(unique.slice(i, i + chunkSize), { onConflict: 'game,draw_no' });
-    if (res.error) unwrap(res, ctx);
-  }
+  await upsertChunked(db, ctx, 'lottery_draws', pickRows(unique, DRAW_COLS), ['game', 'draw_no'], chunkSize);
   return unique.length;
 }
 
-export async function getLotteryDraw(db: Db, game: GameId, drawId: string): Promise<StoredDrawResult> {
+export async function getLotteryDraw(db: PgDb, game: GameId, drawId: string): Promise<StoredDrawResult> {
   const ctx = { table: 'lottery_draws', op: 'get' };
   const drawNo = input(() => drawNoFromId(drawId), ctx);
-  const row = unwrapFound<LotteryDrawRow>(
-    await db.from('lottery_draws').select(DRAW_COLS).eq('game', game).eq('draw_no', drawNo).maybeSingle(),
-    ctx,
-  );
-  return mapRow(lotteryDrawFromRow, row, ctx);
+  const row = await q(db, ctx, (k) => k.selectFrom('lottery_draws').select(DRAW_COLS).where('game', '=', game).where('draw_no', '=', drawNo).executeTakeFirst());
+  return mapRow(lotteryDrawFromRow, found(row, ctx) as LotteryDrawRow, ctx);
 }

@@ -19,13 +19,24 @@ import type {
   SettingsRow,
   SignalRules,
 } from '@stoktok/core';
-import type { Db } from '../client';
-import { DataError, mapRow, unwrap, unwrapFound } from '../errors';
+import { DataError, mapRow, type Ctx } from '../errors';
+import { q } from '../pg/access';
+import type { PgDb } from '../pg/client';
+import { jsonb, upsertInto } from '../pg/upsert';
 
-const COLS =
-  'id,fee_rate_ppm,sell_tax_rate_ppm,dividend_withholding_rate_ppm,settlement_days,holidays,cash_dividend_treatment,cost_method';
+const COLS = [
+  'id',
+  'fee_rate_ppm',
+  'sell_tax_rate_ppm',
+  'dividend_withholding_rate_ppm',
+  'settlement_days',
+  'holidays',
+  'cash_dividend_treatment',
+  'cost_method',
+] as const;
+const FULL_COLS = [...COLS, 'concentration_threshold_ppm', 'rule_configs'] as const;
 
-function toSettings(row: SettingsRow, ctx: { table: string; op: string }): LedgerSettings {
+function toSettings(row: SettingsRow, ctx: Ctx): LedgerSettings {
   try {
     return mapRow(settingsFromRow, row, ctx);
   } catch (e) {
@@ -42,34 +53,28 @@ function withEffectiveHolidays(s: LedgerSettings): LedgerSettings {
   return { ...s, holidays: effectiveHolidays(s.holidays) };
 }
 
-export async function getSettings(db: Db): Promise<LedgerSettings> {
+const readRow = (db: PgDb, ctx: Ctx) =>
+  q(db, ctx, (k) => k.selectFrom('settings').select(COLS).where('id', '=', 1).executeTakeFirst());
+
+const readFullRow = (db: PgDb, ctx: Ctx) =>
+  q(db, ctx, (k) => k.selectFrom('settings').select(FULL_COLS).where('id', '=', 1).executeTakeFirst());
+
+export async function getSettings(db: PgDb): Promise<LedgerSettings> {
   const ctx = { table: 'settings', op: 'get' };
-  let row: SettingsRow;
-  try {
-    row = unwrapFound<SettingsRow>(await db.from('settings').select(COLS).eq('id', 1).maybeSingle(), ctx);
-  } catch (e) {
-    if (e instanceof DataError && e.code === 'NOT_FOUND') {
-      throw new DataError('NOT_CONFIGURED', ctx.table, ctx.op, 'settings row missing', undefined, { cause: e });
-    }
-    throw e;
-  }
-  return withEffectiveHolidays(toSettings(row, ctx));
+  const row = await readRow(db, ctx);
+  if (row === undefined) throw new DataError('NOT_CONFIGURED', ctx.table, ctx.op, 'settings row missing');
+  return withEffectiveHolidays(toSettings(row as SettingsRow, ctx));
 }
 
 /**
  * Settings for entry validation. Never throws NOT_CONFIGURED: while the fee rate is unset the
  * ledger replay still works (fees do not affect quantities), and the caller asks for manual fees.
  */
-export async function getEntrySettings(db: Db): Promise<{ settings: LedgerSettings; feeRateConfigured: boolean }> {
+export async function getEntrySettings(db: PgDb): Promise<{ settings: LedgerSettings; feeRateConfigured: boolean }> {
   const ctx = { table: 'settings', op: 'get' };
-  let row: SettingsRow;
-  try {
-    row = unwrapFound<SettingsRow>(await db.from('settings').select(COLS).eq('id', 1).maybeSingle(), ctx);
-  } catch (e) {
-    if (e instanceof DataError && e.code === 'NOT_FOUND') {
-      return { settings: withEffectiveHolidays({ ...DEFAULT_MARKET_SETTINGS, feeRatePpm: 0 }), feeRateConfigured: false };
-    }
-    throw e;
+  const row = (await readRow(db, ctx)) as SettingsRow | undefined;
+  if (row === undefined) {
+    return { settings: withEffectiveHolidays({ ...DEFAULT_MARKET_SETTINGS, feeRatePpm: 0 }), feeRateConfigured: false };
   }
   if (row.fee_rate_ppm === null) {
     return { settings: withEffectiveHolidays(mapRow(settingsFromRow, { ...row, fee_rate_ppm: 0 }, ctx)), feeRateConfigured: false };
@@ -78,66 +83,58 @@ export async function getEntrySettings(db: Db): Promise<{ settings: LedgerSettin
 }
 
 export async function saveSettings(
-  db: Db,
+  db: PgDb,
   s: Omit<LedgerSettings, 'feeRatePpm'> & { feeRatePpm: number | null },
 ): Promise<LedgerSettings> {
   const ctx = { table: 'settings', op: 'save' };
-  const row = unwrap<SettingsRow>(await db.from('settings').upsert(settingsToRow(s), { onConflict: 'id' }).select(COLS).single(), ctx);
-  return toSettings(row, ctx);
+  const values = settingsToRow(s);
+  const row = await q(db, ctx, (k) => upsertInto(k, 'settings', [values], ['id']).returning(COLS).executeTakeFirstOrThrow());
+  return toSettings(row as SettingsRow, ctx);
 }
 
 /**
  * Separate from getSettings so the ledger settings path and saveSettings stay unchanged.
  * Returns null when the row is missing or the threshold is unset (the caller applies the default, R5).
  */
-export async function getConcentrationThreshold(db: Db): Promise<number | null> {
+export async function getConcentrationThreshold(db: PgDb): Promise<number | null> {
   const ctx = { table: 'settings', op: 'get' };
-  const res = await db.from('settings').select('concentration_threshold_ppm').eq('id', 1).maybeSingle();
-  if (!res.error && res.data === null) return null;
-  const row = unwrap<{ concentration_threshold_ppm: number | null }>(res, ctx);
-  return row.concentration_threshold_ppm === null ? null : toSafeInt(row.concentration_threshold_ppm, 'concentration_threshold_ppm', ctx.table);
+  const row = await q(db, ctx, (k) => k.selectFrom('settings').select('concentration_threshold_ppm').where('id', '=', 1).executeTakeFirst());
+  if (row === undefined || row.concentration_threshold_ppm === null) return null;
+  return toSafeInt(row.concentration_threshold_ppm, 'concentration_threshold_ppm', ctx.table);
 }
 
-const FULL_COLS = `${COLS},concentration_threshold_ppm,rule_configs`;
-
 /** Settings for the settings screen. Never throws NOT_CONFIGURED: no row gives the core defaults. */
-export async function getAppSettings(db: Db): Promise<{ settings: AppSettings; source: 'default' | 'stored' }> {
+export async function getAppSettings(db: PgDb): Promise<{ settings: AppSettings; source: 'default' | 'stored' }> {
   const ctx = { table: 'settings', op: 'get' };
-  const res = await db.from('settings').select(FULL_COLS).eq('id', 1).maybeSingle();
-  if (!res.error && res.data === null) return { settings: appSettingsFromRow(null), source: 'default' };
-  const row = unwrap<SettingsFullRow>(res, ctx);
-  return { settings: mapRow(appSettingsFromRow, row, ctx), source: 'stored' };
+  const row = await readFullRow(db, ctx);
+  if (row === undefined) return { settings: appSettingsFromRow(null), source: 'default' };
+  return { settings: mapRow(appSettingsFromRow, row as SettingsFullRow, ctx), source: 'stored' };
 }
 
 /** Market rules (lot size, price limits) from settings.rule_configs; no row gives the core defaults (R5). */
-export async function getMarketRules(db: Db): Promise<MarketRules> {
+export async function getMarketRules(db: PgDb): Promise<MarketRules> {
   const ctx = { table: 'settings', op: 'get' };
-  const res = await db.from('settings').select('rule_configs').eq('id', 1).maybeSingle();
-  if (!res.error && res.data === null) return parseMarketRules(null);
-  const row = unwrap<{ rule_configs: unknown }>(res, ctx);
-  return parseMarketRules(row.rule_configs);
+  const row = await q(db, ctx, (k) => k.selectFrom('settings').select('rule_configs').where('id', '=', 1).executeTakeFirst());
+  return parseMarketRules(row === undefined ? null : row.rule_configs);
 }
 
 /** Medium-term signal rules from settings.rule_configs.signals; no row gives the core defaults (R5). */
-export async function getSignalRules(db: Db): Promise<SignalRules> {
+export async function getSignalRules(db: PgDb): Promise<SignalRules> {
   const ctx = { table: 'settings', op: 'get' };
-  const res = await db.from('settings').select('rule_configs').eq('id', 1).maybeSingle();
-  if (!res.error && res.data === null) return parseSignalRules(null);
-  const row = unwrap<{ rule_configs: unknown }>(res, ctx);
-  return parseSignalRules(row.rule_configs);
+  const row = await q(db, ctx, (k) => k.selectFrom('settings').select('rule_configs').where('id', '=', 1).executeTakeFirst());
+  return parseSignalRules(row === undefined ? null : row.rule_configs);
 }
 
 /**
  * Saves the settings form. Read-modify-write so withholding, cost method and other rule_configs keys
  * are kept (holidays come from the input); not atomic, acceptable for a single user.
  */
-export async function saveAppSettings(db: Db, input: SettingsInput): Promise<AppSettings> {
+export async function saveAppSettings(db: PgDb, input: SettingsInput): Promise<AppSettings> {
   const ctx = { table: 'settings', op: 'save' };
-  const current = await db.from('settings').select(FULL_COLS).eq('id', 1).maybeSingle();
-  const existing = !current.error && current.data === null ? null : unwrap<SettingsFullRow>(current, ctx);
-  const row = unwrap<SettingsFullRow>(
-    await db.from('settings').upsert(settingsInputToRow(input, existing), { onConflict: 'id' }).select(FULL_COLS).single(),
-    ctx,
+  const existing = ((await readFullRow(db, ctx)) as SettingsFullRow | undefined) ?? null;
+  const values = settingsInputToRow(input, existing);
+  const saved = await q(db, ctx, (k) =>
+    upsertInto(k, 'settings', [{ ...values, rule_configs: jsonb(values.rule_configs) }], ['id']).returning(FULL_COLS).executeTakeFirstOrThrow(),
   );
-  return mapRow(appSettingsFromRow, row, ctx);
+  return mapRow(appSettingsFromRow, saved as SettingsFullRow, ctx);
 }

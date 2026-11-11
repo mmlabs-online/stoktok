@@ -1,134 +1,94 @@
 import type { PriceQuote, StoredClose } from '@stoktok/core';
-import type { Db } from '../client';
-import { DataError, fetchAll, mapRow, unwrap, unwrapFound } from '../errors';
+import { mapRow } from '../errors';
 import { priceQuoteFromRow, storedCloseFromRow, tradeDateFromRow } from '../mappers';
+import { q } from '../pg/access';
+import type { PgDb } from '../pg/client';
+import { PG_FANOUT_CONCURRENCY } from '../pg/config';
+import { mapLimit } from '../pg/fanout';
+import { pickRows, upsertChunked } from '../pg/upsert';
 import type { PriceCloseRow, PriceDailyInsert, PriceDailyRow, TradeDateRow } from '../rows';
 
-const COLS = 'symbol,trade_date,close,source,fetched_at';
+const COLS = ['symbol', 'trade_date', 'close', 'source', 'fetched_at'] as const;
+const CLOSE_COLS = [...COLS, 'volume'] as const;
+const INSERT_COLS = ['symbol', 'trade_date', 'open', 'high', 'low', 'close', 'volume', 'foreign_net', 'source', 'fetched_at'] as const;
 
 /** Latest stored close per symbol; symbols without a row are omitted. One query per symbol. */
-export async function getLatestCloses(db: Db, symbols: readonly string[]): Promise<Record<string, PriceQuote>> {
+export async function getLatestCloses(db: PgDb, symbols: readonly string[]): Promise<Record<string, PriceQuote>> {
   const ctx = { table: 'prices_daily', op: 'latest' };
-  const rows = await Promise.all(
-    symbols.map(async (symbol) => {
-      try {
-        return unwrapFound<PriceDailyRow>(
-          await db.from('prices_daily').select(COLS).eq('symbol', symbol).order('trade_date', { ascending: false }).limit(1).maybeSingle(),
-          ctx,
-        );
-      } catch (e) {
-        if (e instanceof DataError && e.code === 'NOT_FOUND') return null;
-        throw e;
-      }
-    }),
+  const rows = await mapLimit(symbols, PG_FANOUT_CONCURRENCY, (symbol) =>
+    q(db, ctx, (k) => k.selectFrom('prices_daily').select(COLS).where('symbol', '=', symbol).orderBy('trade_date', 'desc').limit(1).executeTakeFirst()),
   );
   const out: Record<string, PriceQuote> = {};
   for (const row of rows) {
-    if (row) out[row.symbol] = mapRow(priceQuoteFromRow, row, ctx);
+    if (row) out[row.symbol] = mapRow(priceQuoteFromRow, row as PriceDailyRow, ctx);
   }
   return out;
 }
 
-/** Stored trade dates of one symbol in [from, to], ascending. Paged with `.range()` to stay under the PostgREST row cap. */
-export async function listPriceDates(
-  db: Db,
-  symbol: string,
-  from: string,
-  to: string,
-  { pageSize = 1000 }: { pageSize?: number } = {},
-): Promise<string[]> {
+/** Stored trade dates of one symbol in [from, to], ascending. */
+export async function listPriceDates(db: PgDb, symbol: string, from: string, to: string): Promise<string[]> {
   const ctx = { table: 'prices_daily', op: 'list_dates' };
-  const rows = await fetchAll<TradeDateRow>(
-    (lo, hi) =>
-      db
-        .from('prices_daily')
-        .select('trade_date')
-        .eq('symbol', symbol)
-        .gte('trade_date', from)
-        .lte('trade_date', to)
-        .order('trade_date', { ascending: true })
-        .range(lo, hi),
-    ctx,
-    pageSize,
+  const rows = await q(db, ctx, (k) =>
+    k
+      .selectFrom('prices_daily')
+      .select('trade_date')
+      .where('symbol', '=', symbol)
+      .where('trade_date', '>=', from)
+      .where('trade_date', '<=', to)
+      .orderBy('trade_date', 'asc')
+      .execute(),
   );
-  return rows.map((r) => mapRow(tradeDateFromRow, r, ctx));
+  return rows.map((r) => mapRow(tradeDateFromRow, r as TradeDateRow, ctx));
 }
 
-/**
- * Stored closes (with volume) of one symbol in [from, to], **ascending** (unlike `getRecentCloses`).
- * Paged with `.range()` to stay under the PostgREST row cap.
- */
-export async function listCloseHistory(
-  db: Db,
-  symbol: string,
-  from: string,
-  to: string,
-  { pageSize = 1000 }: { pageSize?: number } = {},
-): Promise<StoredClose[]> {
+/** Stored closes (with volume) of one symbol in [from, to], **ascending** (unlike `getRecentCloses`). */
+export async function listCloseHistory(db: PgDb, symbol: string, from: string, to: string): Promise<StoredClose[]> {
   const ctx = { table: 'prices_daily', op: 'list_history' };
-  const rows = await fetchAll<PriceCloseRow>(
-    (lo, hi) =>
-      db
-        .from('prices_daily')
-        .select(`${COLS},volume`)
-        .eq('symbol', symbol)
-        .gte('trade_date', from)
-        .lte('trade_date', to)
-        .order('trade_date', { ascending: true })
-        .range(lo, hi),
-    ctx,
-    pageSize,
+  const rows = await q(db, ctx, (k) =>
+    k
+      .selectFrom('prices_daily')
+      .select(CLOSE_COLS)
+      .where('symbol', '=', symbol)
+      .where('trade_date', '>=', from)
+      .where('trade_date', '<=', to)
+      .orderBy('trade_date', 'asc')
+      .execute(),
   );
-  return rows.map((r) => mapRow(storedCloseFromRow, r, ctx));
+  return rows.map((r) => mapRow(storedCloseFromRow, r as PriceCloseRow, ctx));
 }
 
 /** Earliest stored trade date per symbol; symbols without a row are omitted. One query per symbol. */
-export async function getFirstPriceDates(db: Db, symbols: readonly string[]): Promise<Record<string, string>> {
+export async function getFirstPriceDates(db: PgDb, symbols: readonly string[]): Promise<Record<string, string>> {
   const ctx = { table: 'prices_daily', op: 'first_date' };
+  const rows = await mapLimit(symbols, PG_FANOUT_CONCURRENCY, async (symbol) => ({
+    symbol,
+    row: await q(db, ctx, (k) => k.selectFrom('prices_daily').select('trade_date').where('symbol', '=', symbol).orderBy('trade_date', 'asc').limit(1).executeTakeFirst()),
+  }));
   const out: Record<string, string> = {};
-  await Promise.all(
-    symbols.map(async (symbol) => {
-      try {
-        const row = unwrapFound<TradeDateRow>(
-          await db.from('prices_daily').select('trade_date').eq('symbol', symbol).order('trade_date', { ascending: true }).limit(1).maybeSingle(),
-          ctx,
-        );
-        out[symbol] = mapRow(tradeDateFromRow, row, ctx);
-      } catch (e) {
-        if (e instanceof DataError && e.code === 'NOT_FOUND') return;
-        throw e;
-      }
-    }),
-  );
+  for (const { symbol, row } of rows) {
+    if (row) out[symbol] = mapRow(tradeDateFromRow, row as TradeDateRow, ctx);
+  }
   return out;
 }
 
 /** Last `n` stored closes per symbol, newest first, with volume. One query per symbol; no row gives []. */
-export async function getRecentCloses(
-  db: Db,
-  symbols: readonly string[],
-  n = 2,
-): Promise<Record<string, StoredClose[]>> {
+export async function getRecentCloses(db: PgDb, symbols: readonly string[], n = 2): Promise<Record<string, StoredClose[]>> {
   const ctx = { table: 'prices_daily', op: 'recent' };
+  const perSymbol = await mapLimit(symbols, PG_FANOUT_CONCURRENCY, async (symbol) => ({
+    symbol,
+    rows: await q(db, ctx, (k) => k.selectFrom('prices_daily').select(CLOSE_COLS).where('symbol', '=', symbol).orderBy('trade_date', 'desc').limit(n).execute()),
+  }));
   const out: Record<string, StoredClose[]> = {};
-  await Promise.all(
-    symbols.map(async (symbol) => {
-      const rows = unwrap<PriceCloseRow[]>(
-        await db.from('prices_daily').select(`${COLS},volume`).eq('symbol', symbol).order('trade_date', { ascending: false }).limit(n),
-        ctx,
-      );
-      out[symbol] = rows.map((r) => mapRow(storedCloseFromRow, r, ctx));
-    }),
-  );
+  for (const { symbol, rows } of perSymbol) out[symbol] = rows.map((r) => mapRow(storedCloseFromRow, r as PriceCloseRow, ctx));
   return out;
 }
 
 /**
- * Idempotent upsert on (symbol, trade_date); a later duplicate in the input wins. Sequential chunks,
- * no `.select()` (supabase returns data: null on success). Returns the number of rows sent.
+ * Idempotent upsert on (symbol, trade_date); a later duplicate in the input wins. Chunks run in one transaction.
+ * Returns the number of unique rows written.
  */
 export async function upsertPricesDaily(
-  db: Db,
+  db: PgDb,
   rows: readonly PriceDailyInsert[],
   { chunkSize = 500 }: { chunkSize?: number } = {},
 ): Promise<number> {
@@ -136,9 +96,6 @@ export async function upsertPricesDaily(
   const byKey = new Map<string, PriceDailyInsert>();
   for (const row of rows) byKey.set(`${row.symbol}|${row.trade_date}`, row);
   const unique = [...byKey.values()];
-  for (let i = 0; i < unique.length; i += chunkSize) {
-    const res = await db.from('prices_daily').upsert(unique.slice(i, i + chunkSize), { onConflict: 'symbol,trade_date' });
-    if (res.error) unwrap(res, ctx);
-  }
+  await upsertChunked(db, ctx, 'prices_daily', pickRows(unique, INSERT_COLS), ['symbol', 'trade_date'], chunkSize);
   return unique.length;
 }

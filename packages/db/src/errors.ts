@@ -22,46 +22,10 @@ export class DataError extends Error {
   }
 }
 
-interface PgResult<T> {
-  data: T | null;
-  error: { code?: string } | null;
-}
-
-/** The caller states the row type: the untyped client does not infer it. */
-export function unwrap<T>(res: PgResult<unknown>, ctx: Ctx): T {
-  if (res.error) {
-    const pg = res.error.code;
-    if (pg === '23505') throw new DataError('CONFLICT', ctx.table, ctx.op, 'conflict', pg, { cause: res.error });
-    if (pg === '23502' || pg === '23514' || pg === '22P02') {
-      throw new DataError('VALIDATION', ctx.table, ctx.op, 'validation failed', pg, { cause: res.error });
-    }
-    throw new DataError('DB_ERROR', ctx.table, ctx.op, 'database error', pg, { cause: res.error });
-  }
-  if (res.data === null) throw new DataError('DB_ERROR', ctx.table, ctx.op, 'no data returned');
-  return res.data as T;
-}
-
-/** For `.maybeSingle()` results: no row is NOT_FOUND. */
-export function unwrapFound<T>(res: PgResult<unknown>, ctx: Ctx): T {
-  if (!res.error && res.data === null) throw new DataError('NOT_FOUND', ctx.table, ctx.op, 'not found');
-  return unwrap<T>(res, ctx);
-}
-
-/**
- * Loops `.range()` until a short page (PostgREST caps responses at max_rows).
- * Pages are separate requests and not snapshot-consistent; acceptable for a single user.
- */
-export async function fetchAll<T>(
-  page: (from: number, to: number) => PromiseLike<PgResult<T[]>>,
-  ctx: Ctx,
-  pageSize = 1000,
-): Promise<T[]> {
-  const all: T[] = [];
-  for (let from = 0; ; from += pageSize) {
-    const rows = unwrap<T[]>(await page(from, from + pageSize - 1), ctx);
-    all.push(...rows);
-    if (rows.length < pageSize) return all;
-  }
+/** For `executeTakeFirst()` results: no row is NOT_FOUND. */
+export function found<T>(row: T | undefined, ctx: Ctx): T {
+  if (row === undefined) throw new DataError('NOT_FOUND', ctx.table, ctx.op, 'not found');
+  return row;
 }
 
 export function mapRow<R, T>(fn: (row: R) => T, row: R, ctx: Ctx): T {
@@ -91,7 +55,7 @@ const MAPPED_TEXT: Partial<Record<DataErrorCode, string>> = {
 };
 
 /**
- * Maps a thrown driver error to a DataError with the same codes as unwrap. No cause is attached: pg's `detail`
+ * Maps a thrown driver error to a DataError. No cause is attached: pg's `detail`
  * echoes key values and Node net errors carry host and port.
  */
 export function toDataError(e: unknown, ctx: Ctx, map?: SqlstateMap): DataError {

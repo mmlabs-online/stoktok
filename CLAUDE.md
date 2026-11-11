@@ -36,7 +36,7 @@ Do not change the stack without Ming's explicit decision.
 |---|---|
 | R1 | **No financial calculation in UI.** Cost basis, P&L, weights, sellable quantity, fees, tax, signals live in `packages/core` only. Components format and display. |
 | R2 | **Money and prices are integers in VND** (e.g. price 125.40 thousand VND is stored as `125400`). No floats for money. Rounding rules are defined once in `packages/core`. |
-| R3 | **Service role key is server-only.** Used by Next.js server code and `apps/worker` only. Never in `NEXT_PUBLIC_*`, never in client bundles. The browser never talks to the DB directly. |
+| R3 | **Database credentials are server-only.** `STOKTOK_DATABASE_URL` is read only in `packages/db/src/pg/client.ts`, via Next.js server code (`apps/web/server/db.ts`) and `apps/worker`. Never in `NEXT_PUBLIC_*`, never in client bundles. The browser never talks to the DB directly. |
 | R4 | **Every market-data record carries `source` and `fetched_at`.** Stale or gapped data never produces a signal; gaps are recorded. |
 | R5 | **Market rules are configuration**, never hard-coded: fee rate, sell tax, price limits per exchange, settlement days, lot size. |
 | R6 | **Every server route / server action verifies the Authen JWT** (`requireUser()`). Single-user access is enforced by disabled public sign-ups in the stoktok Supabase project, not an allowlist (Ming, 2026-11-07, STK-060). See note below. |
