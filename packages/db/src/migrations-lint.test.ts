@@ -11,7 +11,9 @@ const UP_RE = /^(\d{14})_([a-z0-9_]+)\.sql$/;
 const DOWN_RE = /^(\d{14})_([a-z0-9_]+)\.down\.sql$/;
 
 // One pass so that `--` inside a string and quotes inside a comment are both handled.
-const TOKEN_RE = /--[^\n]*|\/\*[\s\S]*?\*\/|'(?:[^']|'')*'|\$([A-Za-z_]*)\$[\s\S]*?\$\1\$/g;
+// Order matters: E-strings before plain strings; quoted identifiers and digit-bearing dollar tags as Postgres reads them.
+const TOKEN_RE =
+  /--[^\n]*|\/\*[\s\S]*?\*\/|(?<![A-Za-z0-9_])[Ee]'(?:[^'\\]|\\[\s\S]|'')*'|'(?:[^']|'')*'|"(?:[^"]|"")*"|\$([A-Za-z_][A-Za-z0-9_]*)?\$[\s\S]*?\$\1\$/g;
 
 /** Removes `--` and block comments. Strings and dollar-quoted bodies stay. */
 export function stripComments(sql: string): string {
@@ -24,23 +26,26 @@ export function stripLiterals(sql: string): string {
 }
 
 const FORBIDDEN: [string, RegExp][] = [
-  'grant',
-  'create\\s+role',
-  'alter\\s+role',
-  'create\\s+user',
-  'create\\s+extension',
-  'row\\s+level\\s+security',
-  'create\\s+policy',
-  'alter\\s+default\\s+privileges',
-  'security\\s+definer',
-  'set\\s+role',
-  'set\\s+session\\s+authorization',
-  'vault',
-  'concurrently',
-  'anon',
-  'authenticated',
-  'service_role',
-].map((w) => [w, new RegExp(`\\b${w}\\b`, 'i')]);
+  ['grant', /\bgrant\b/i],
+  ['create role', /\bcreate\s+role\b/i],
+  ['alter role', /\balter\s+role\b/i],
+  ['create user', /\bcreate\s+user\b/i],
+  ['create extension', /\bcreate\s+extension\b/i],
+  ['create schema', /\bcreate\s+schema\b/i],
+  ['owner to', /\bowner\s+to\b/i],
+  ['row level security', /\brow\s+level\s+security\b/i],
+  ['create policy', /\bcreate\s+policy\b/i],
+  ['alter default privileges', /\balter\s+default\s+privileges\b/i],
+  ['security definer', /\bsecurity\s+definer\b/i],
+  ['set role', /\b(set|reset)\s+(local\s+|session\s+)?role\b/i],
+  ['set_config role', /\bset_config\s*\(\s*'role'/i],
+  ['set session authorization', /\bset\s+(local\s+|session\s+)?session\s+authorization\b/i],
+  ['vault', /\bvault\b/i],
+  ['concurrently', /\bconcurrently\b/i],
+  ['anon', /\banon\b/i],
+  ['authenticated', /\bauthenticated\b/i],
+  ['service_role', /\bservice_role\b/i],
+];
 
 const TX_RE = /^(begin|start\s+transaction|commit|end|rollback|abort|savepoint|release|prepare\s+transaction)\b/i;
 
@@ -48,7 +53,7 @@ const TX_RE = /^(begin|start\s+transaction|commit|end|rollback|abort|savepoint|r
 export function lintMigration(sql: string): string[] {
   const found: string[] = [];
   const noComments = stripComments(sql);
-  for (const [name, re] of FORBIDDEN) if (re.test(noComments)) found.push(name.replace(/\\s\+/g, ' '));
+  for (const [name, re] of FORBIDDEN) if (re.test(noComments)) found.push(name);
   for (const stmt of stripLiterals(sql).split(';')) {
     const m = TX_RE.exec(stmt.trim());
     if (m) found.push(`transaction control: ${m[1]!.toLowerCase()}`);
@@ -77,7 +82,7 @@ describe('migrations lint', () => {
     expect(sql).not.toMatch(/\bif\s+not\s+exists\b/i);
     expect(sql).not.toMatch(/\bor\s+replace\b/i);
     expect(sql).not.toMatch(/\bdrop\b/i);
-    expect(sql).not.toMatch(/\bdo\s+\$/i);
+    expect(sql).not.toMatch(/\bdo\s+(language\s+\w+\s+)?(\$|')/i);
     expect(sql.match(/\brevoke\b/gi)).toHaveLength(2);
     expect(sql.match(/\brevoke\s+execute\s+on\s+function\s[^;]*\sfrom\s+public\s*;/gi)).toHaveLength(2);
   });
@@ -92,5 +97,28 @@ describe('migrations lint', () => {
     expect(lintMigration('create function f() returns int as $$ begin return 1; end $$ language plpgsql;')).toEqual([]);
     expect(lintMigration('-- grant all\nselect 1;')).toEqual([]);
     expect(lintMigration("select 'commit;';")).toEqual([]);
+  });
+
+  test('tokeniser bypass fixtures', () => {
+    expect(lintMigration("select E'\\' -- '; grant select on t to x; -- ';")).toEqual(['grant']);
+    expect(lintMigration('create table "a--b" (c int); grant select on "a--b" to y;')).toEqual(['grant']);
+    expect(lintMigration('select $f1$ -- $f1$; grant select on t to x;')).toEqual(['grant']);
+    expect(lintMigration("select $f1$ ' $f1$; commit;")).toEqual(['transaction control: commit']);
+    expect(lintMigration("select e'it''s'; commit;")).toEqual(['transaction control: commit']);
+    expect(lintMigration('select 1 as "x;commit";')).toEqual([]);
+  });
+
+  test('role, schema and owner fixtures', () => {
+    for (const sql of ['set local role x;', 'SET SESSION ROLE x;', 'reset role;']) expect(lintMigration(sql), sql).toEqual(['set role']);
+    expect(lintMigration("select set_config('role', 'x', false);")).toEqual(['set_config role']);
+    expect(lintMigration('set local session authorization x;')).toEqual(['set session authorization']);
+    expect(lintMigration('create schema other;')).toEqual(['create schema']);
+    expect(lintMigration('alter table t owner to x;')).toEqual(['owner to']);
+    expect(lintMigration('create table t (role text, owner_id int);')).toEqual([]);
+  });
+
+  test('baseline do-block fixtures', () => {
+    const re = /\bdo\s+(language\s+\w+\s+)?(\$|')/i;
+    for (const sql of ['do $$ begin end $$;', 'do language plpgsql $$ begin end $$;', "do 'begin end';"]) expect(sql).toMatch(re);
   });
 });

@@ -42,7 +42,7 @@ if [ "$(id -u)" = 0 ]; then
 fi
 "${RUNAS[@]}" "$PG_BIN/initdb" -D "$TMP/data" --auth=trust -U postgres >/dev/null
 "${RUNAS[@]}" "$PG_BIN/pg_ctl" -D "$TMP/data" -w -l "$TMP/pg.log" \
-  -o "-c listen_addresses='' -k $TMP" start >/dev/null
+  -o "-c listen_addresses='' -k '$TMP'" start >/dev/null
 
 psql_as() { local u="$1" db="$2"; shift 2; "$PG_BIN/psql" -h "$TMP" -U "$u" -d "$db" "${PSQL_OPTS[@]}" "$@"; }
 dump() { "$PG_BIN/pg_dump" -h "$TMP" -U postgres -d "$1" --schema-only --schema=public --no-owner --no-privileges --no-tablespaces \

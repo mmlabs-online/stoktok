@@ -46,6 +46,19 @@ describe('baseline', () => {
     expect(await col<number>(`${base} and a.grantee = 0`)).toEqual([]);
   });
 
+  test('relations have no PUBLIC privileges', async () => {
+    const base = `select c.relname from pg_class c cross join lateral aclexplode(coalesce(c.relacl, acldefault((case c.relkind when 'S' then 's' else 'r' end)::"char", c.relowner))) a where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'p', 'v', 'm', 'f', 'S')`;
+    expect((await col<string>(base)).length).toBeGreaterThanOrEqual(TABLES.length);
+    expect(await col<string>(`${base} and a.grantee = 0`)).toEqual([]);
+  });
+
+  test('schema public gives PUBLIC at most USAGE; no extra schemas', async () => {
+    const base = `select a.privilege_type from pg_namespace n cross join lateral aclexplode(coalesce(n.nspacl, acldefault('n', n.nspowner))) a where n.nspname = 'public'`;
+    expect((await col<string>(base)).length).toBeGreaterThanOrEqual(1);
+    expect(await col<string>(`${base} and a.grantee = 0 and a.privilege_type <> 'USAGE'`)).toEqual([]);
+    expect(await col<string>("select nspname from pg_namespace where nspname <> 'public' and nspname <> 'information_schema' and nspname not like 'pg\\_%' order by 1")).toEqual([]);
+  });
+
   test('ai_keys keeps the STK-082 shape', async () => {
     const cols = (await c.query("select column_name, data_type, is_nullable from information_schema.columns where table_schema = 'public' and table_name = 'ai_keys' order by ordinal_position")).rows;
     expect(cols).toEqual([
