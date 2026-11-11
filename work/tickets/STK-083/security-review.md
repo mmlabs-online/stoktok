@@ -97,3 +97,35 @@
 - /home/user/stoktok/supabase/README.md
 - /home/user/stoktok/supabase/migrations/20261111000100_ai_keys_app_encryption.sql
 - /home/user/stoktok/work/tickets/STK-083/schema-diff.md
+
+## Security review: STK-083, attempt 2
+
+**Verdict: no blocking findings.** All attempt-1 items in scope are fixed. I found two new 🟡 hardening gaps and one 🟢 nit; none of them needs a REWORK. I made no file changes. Recommendation 3 is deferred to STK-086 as agreed.
+
+### Attempt-1 items
+| Item | Status |
+|---|---|
+| `TOKEN_RE`: E-strings, `"a--b"`, `$f1$` tags | **Fixed.** `migrations-lint.test.ts:15-16` handles all three. The lookbehind on `E'` avoids false matches inside identifiers. Fixtures at :102-109 cover all three cases plus `$f1$ '` hiding `commit;`. |
+| `set role` variants | **Fixed.** :40-42 now catch `SET LOCAL/SESSION ROLE`, `RESET ROLE`, `set_config('role'` (including `pg_catalog.`-qualified calls) and `SET LOCAL/SESSION SESSION AUTHORIZATION`. Fixtures are at :111-114. |
+| `create schema` / `owner to` | **Fixed.** Both are banned at :34-35, with fixtures at :115-117, including the negative case `role`/`owner_id` columns. |
+| Baseline `do` ban | **Fixed.** :85 uses `/\bdo\s+(language\s+\w+\s+)?(\$\|')/i`. |
+| Rec. 2: PUBLIC ACLs on relations and schemas, no extra schemas | **Fixed.** `baseline.test.ts:49-53` covers relkinds r/p/v/m/f/S, falling back to `acldefault` when the ACL is NULL, and checks that rows exist. :55-60 checks that `public` gives PUBLIC only USAGE and that no extra schemas exist; the `pg\_%` escape is correct. impl-log shows the test fails when a grant is injected. |
+| `-k` quoting | **Fixed.** `scripts/schema-diff.sh:45` now has `-k '$TMP'`. |
+
+### New findings
+- 🟡 `packages/db/test-db/baseline.test.ts:49-53` **does not cover column-level grants.** `grant select (col) on t to public` is stored in `pg_attribute.attacl`, not `pg_class.relacl`, so this test would not see it. The lint bans `grant`, so this only matters if the lint is bypassed (see the next item). **Fix:** add `select attrelid::regclass, attname from pg_attribute a cross join lateral aclexplode(a.attacl) x where a.attacl is not null and x.grantee = 0` filtered to the `public` namespace and expect `[]`. Optionally also assert that `pg_default_acl` is empty.
+- 🟡 `packages/db/src/migrations-lint.test.ts:16` **still has two ways to hide a statement from the tokeniser.** Both need deliberate obfuscation, so the risk is low. In each case the lint misses a `grant` that Postgres would run:
+  - **`$` inside an identifier:** `select 1 as x$a$; grant select on t to public; -- $a$`. Postgres reads `x$a$` as an identifier. The regex instead reads `$a$…$a$` as a dollar-quoted body and swallows the `grant`. **Fix:** add `(?<![A-Za-z0-9_$])` before the `\$` alternative.
+  - **Nested block comments:** `/* /* */ ' */ grant …; -- '`. Postgres nests `/* */`, so the comment ends at the second `*/`. The regex ends it at the first `*/`, then reads `' */ grant …; -- '` as a string. **Fix:** reject any file that has `/*` inside a block comment, or ban block comments in migrations entirely, which is the simplest option.
+
+  Add a fixture for each. The catalog checks remain the real gate, and with the attacl check added they would catch either bypass.
+- 🟢 `migrations-lint.test.ts:85` and `:121` each contain their own copy of the do-block regex, so the fixture tests the copy and not the regex that guards the baseline. Move it into a shared const.
+
+### Still open (unchanged from attempt 1)
+- The deployment repo's `revoke connect on database stoktok from public` is still a follow-up to raise with Ming.
+
+### Files reviewed
+- /home/user/stoktok/packages/db/src/migrations-lint.test.ts
+- /home/user/stoktok/packages/db/test-db/baseline.test.ts
+- /home/user/stoktok/scripts/schema-diff.sh
+- /home/user/stoktok/work/tickets/STK-083/impl-log.md
