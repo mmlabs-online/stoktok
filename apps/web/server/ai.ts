@@ -12,7 +12,7 @@ let ai: AiClient | undefined;
 /** Built on first use, so importing this module needs no db and no AI keys. Callers must call requireUser() first (R6). */
 export function getAi(): AiClient {
   ai ??= new AiClient({
-    // UI-saved keys (Vault) win over env; read on every generate() so a changed key needs no restart.
+    // UI-saved keys (encrypted in ai_keys, ADR 0011) win over env; read on every generate() so a changed key needs no restart.
     resolveProviders: makeProviderResolver(() => readAiKeySecrets(getDb()), () => readAiEnv(), { timeoutMs: AI_TIMEOUT_MS }),
     ledger: aiUsageLedger(getDb()),
     log: { warn: (e) => console.warn(JSON.stringify(e)) },

@@ -1,4 +1,4 @@
-/** Same bounds and charset as the key-set check in supabase/migrations/20261110000200_ai_keys.sql; keep them in sync. */
+/** Single source of the key format (20-256 printable ASCII); the database no longer checks it (ai_keys only checks the ciphertext length 20-256, ADR 0011). */
 export const AI_KEY_LENGTH = { min: 20, max: 256 } as const;
 
 export type AiKeyFormatCode = 'AI_KEY_EMPTY' | 'AI_KEY_WHITESPACE' | 'AI_KEY_LENGTH' | 'AI_KEY_CHARSET';

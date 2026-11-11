@@ -212,10 +212,13 @@ export interface AiUsageTable {
   error_code: string | null;
 }
 
-/** Current Vault shape (secret_id); STK-082 replaces it. */
+/** AES-256-GCM ciphertext written by the app (ADR 0011); never a plaintext key. */
 export interface AiKeysTable {
   provider: string;
-  secret_id: string;
+  ciphertext: Buffer;
+  iv: Buffer;
+  auth_tag: Buffer;
+  key_version: number;
   last4: string;
   updated_at: TsDef;
 }

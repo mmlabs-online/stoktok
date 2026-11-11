@@ -1,6 +1,6 @@
 import { inspect } from 'node:util';
-import { describe, expect, test } from 'vitest';
-import { createPgDb, DATABASE_URL_ENV } from './client';
+import { describe, expect, test, vi } from 'vitest';
+import { AI_KEYS_MASTER_KEY_ENV, createPgDb, DATABASE_URL_ENV } from './client';
 import { PG_POOL_PROFILES, type PgProfile, type PoolProfile } from './config';
 
 /** Builds a PgDb while spying on the pg.Pool constructor to read its config and instance. */
@@ -90,5 +90,44 @@ describe('opaque handle', () => {
     const { db } = await build('postgres://u:pw@127.0.0.1:1/x', 'worker');
     await db.end();
     await expect(db.end()).resolves.toBeUndefined();
+  });
+});
+
+describe('AI keyring on the handle', () => {
+  const URL_ = 'postgres://u:pw@127.0.0.1:1/x';
+  const VALID = Buffer.from('0123456789abcdef0123456789abcdef').toString('base64');
+
+  test('an invalid master key does not throw and logs {event:ai_keyring_invalid} once, with no value', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const bad = 'SENTINEL-not-a-key';
+      const db = createPgDb({ [DATABASE_URL_ENV]: URL_, [AI_KEYS_MASTER_KEY_ENV]: bad }, 'worker');
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0]).toEqual([JSON.stringify({ event: 'ai_keyring_invalid' })]);
+      await db.end();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('no log when the master key is absent or valid', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      await createPgDb({ [DATABASE_URL_ENV]: URL_ }, 'worker').end();
+      await createPgDb({ [DATABASE_URL_ENV]: URL_, [AI_KEYS_MASTER_KEY_ENV]: '' }, 'worker').end();
+      await createPgDb({ [DATABASE_URL_ENV]: URL_, [AI_KEYS_MASTER_KEY_ENV]: VALID }, 'worker').end();
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('with a master key set the handle stays opaque: inspect and JSON hold no key; keys are still end and stats', async () => {
+    const db = createPgDb({ [DATABASE_URL_ENV]: URL_, [AI_KEYS_MASTER_KEY_ENV]: VALID }, 'worker');
+    const shown = inspect(db, { showHidden: true, depth: Infinity, getters: false }) + JSON.stringify(db);
+    expect(shown).not.toContain(VALID);
+    expect(shown).not.toContain(Buffer.from(VALID, 'base64').toString('hex'));
+    expect(Object.keys(db)).toEqual(['end', 'stats']);
+    await db.end();
   });
 });

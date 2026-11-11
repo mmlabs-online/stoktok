@@ -10,7 +10,8 @@ alter default privileges in schema public grant all on tables to anon, authentic
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 
--- TEST ONLY (never a migration): minimal stand-in for Supabase Vault so the ai_key_* wrappers can be exercised. It stores plaintext; real Vault encrypts.
+-- TEST ONLY (never a migration): minimal stand-in for Supabase Vault. Kept only so 20261110000200 applies; delete it with the supabase/ chain in STK-083.
+-- Its schema comment is also the marker the 20261111000100 guard accepts (a real Vault is refused). It stores plaintext; real Vault encrypts.
 do $$
 begin
   if pg_catalog.to_regnamespace('vault') is null then

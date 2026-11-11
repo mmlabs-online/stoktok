@@ -14,7 +14,7 @@ afterAll(async () => {
 });
 
 // Every udt_name used by a column in public. A new type must be added here with a parser decision.
-const HANDLED = new Set(['uuid', 'int8', 'int4', 'int2', 'text', 'bool', 'date', '_date', 'timestamptz', 'jsonb', '_text', '_int2']);
+const HANDLED = new Set(['uuid', 'int8', 'int4', 'int2', 'text', 'bool', 'date', '_date', 'timestamptz', 'jsonb', '_text', '_int2', 'bytea']);
 
 describe('type parsing against real Postgres', () => {
   test('round-trips every column type used in public', async () => {

@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | IN_PROGRESS |
+| State | REVIEW |
 | Priority | P1 |
 | Areas | security, db, architecture |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-11-11 |
 | PR | — |
 

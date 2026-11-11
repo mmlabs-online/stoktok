@@ -22,6 +22,12 @@ const DRIVER_IMPORT_PG = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['
 const NEXT_PUBLIC_RE = /NEXT_PUBLIC_\w*(SERVICE|KEY|DATABASE|DB_|PASSWORD|SECRET)/;
 const DB_IMPORT_RE = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"]@stoktok\/db(?:\/pg)?['"]/;
 
+const CIPHER_CALL = /\bcreate(?:Dec|C)ipheriv\b/;
+const KEYRING_OF = /\bkeyringOf\b/;
+const KEYRING_IMPORT = /['"](?:\.\.?\/)+keyring['"]/;
+const ENV_EXAMPLE_MASTER_KEY = /^STOKTOK_AI_KEYS_MASTER_KEY=\s*(#.*)?$/m;
+const DROPPED_WRAPPERS = /\bai_key_(?:set|delete|secrets)\b/;
+
 const files = [...walk(join(ROOT, 'apps')), ...walk(join(ROOT, 'packages'))]
   .filter((p) => !p.endsWith('r3-guard.test.ts') && !p.endsWith('next-env.d.ts'))
   .map((p) => ({ path: relative(ROOT, p), text: readFileSync(p, 'utf8') }));
@@ -115,7 +121,7 @@ describe('R3 guard', () => {
     expect(fakes.test(`import("@stoktok/ai/fakes")`)).toBe(true);
   });
 
-  test('the Vault entry points (ai_key_secrets, readAiKeySecrets) appear only in the allowed files', () => {
+  test('the decrypting entry point (readAiKeySecrets) appears only in the allowed files', () => {
     const allowed = new Set([
       'packages/db/src/repos/ai-keys.ts',
       'packages/db/src/repos/ai-keys.test.ts',
@@ -126,20 +132,15 @@ describe('R3 guard', () => {
       'apps/worker/src/ai.ts',
       'apps/worker/src/ai.test.ts',
     ]);
-    const hits = files.filter((f) => /ai_key_secrets|readAiKeySecrets/.test(f.text)).map((f) => f.path).filter((p) => !allowed.has(p));
+    const hits = files.filter((f) => /\breadAiKeySecrets\b/.test(f.text)).map((f) => f.path).filter((p) => !allowed.has(p));
     expect(hits).toEqual([]);
   });
 
-  test('the write wrappers (ai_key_set, ai_key_delete) appear only in the ai-keys repo, the web ai-keys module and their tests', () => {
-    const allowed = new Set([
-      'packages/db/src/repos/ai-keys.ts',
-      'packages/db/src/repos/ai-keys.test.ts',
-      'packages/db/test-db/ai-keys.test.ts',
-      'apps/web/server/ai-keys.ts',
-      'apps/web/server/ai-keys.test.ts',
-    ]);
-    const hits = files.filter((f) => /ai_key_set|ai_key_delete/.test(f.text)).map((f) => f.path).filter((p) => !allowed.has(p));
-    expect(hits).toEqual([]);
+  test('the dropped Vault wrappers (ai_key_set, ai_key_delete, ai_key_secrets) appear in no TS/JS file', () => {
+    expect(files.filter((f) => DROPPED_WRAPPERS.test(f.text)).map((f) => f.path)).toEqual([]);
+    expect(DROPPED_WRAPPERS.test('select public.ai_key_set(')).toBe(true);
+    expect(DROPPED_WRAPPERS.test('public.ai_key_secrets()')).toBe(true);
+    expect(DROPPED_WRAPPERS.test("log('ai_key_delete_failed', provider, e)")).toBe(false);
   });
 
   test("apps/web/server/ai-keys.ts starts with import 'server-only'", () => {
@@ -155,7 +156,7 @@ describe('R3 guard', () => {
         f.path.startsWith('apps/web/components/settings/'),
     );
     expect(targets.length).toBeGreaterThanOrEqual(5);
-    expect(targets.filter((f) => /readAiKeySecrets|ai_key_secrets/.test(f.text)).map((f) => f.path)).toEqual([]);
+    expect(targets.filter((f) => /readAiKeySecrets/.test(f.text)).map((f) => f.path)).toEqual([]);
   });
 
   test("the AI keys card is a client component and imports nothing from a server path", () => {
@@ -164,7 +165,7 @@ describe('R3 guard', () => {
     expect(card.text).not.toMatch(/from\s+['"][^'"]*server\//);
   });
 
-  test('no TS/JS file references Vault objects (Vault is reached only through the SQL wrappers)', () => {
+  test('no TS/JS file references Vault objects', () => {
     const vault = /vault\.(secrets|decrypted_secrets|create_secret|update_secret)/;
     expect(files.filter((f) => vault.test(f.text)).map((f) => f.path)).toEqual([]);
     expect(vault.test('vault.decrypted_secrets')).toBe(true);
@@ -176,6 +177,58 @@ describe('R3 guard', () => {
       .map((f) => f.path)
       .filter((p) => p !== 'packages/db/src/pg/client.ts' && p !== 'packages/db/src/pg/client.test.ts');
     expect(hits).toEqual([]);
+  });
+
+  test('STOKTOK_AI_KEYS_MASTER_KEY is referenced only in packages/db/src/pg/client.ts and client.test.ts', () => {
+    const hits = files
+      .filter((f) => f.text.includes('STOKTOK_AI_KEYS_MASTER_KEY'))
+      .map((f) => f.path)
+      .filter((p) => p !== 'packages/db/src/pg/client.ts' && p !== 'packages/db/src/pg/client.test.ts');
+    expect(hits).toEqual([]);
+  });
+
+  test('createCipheriv / createDecipheriv are called only in packages/db/src/keyring.ts and keyring.test.ts', () => {
+    const hits = files
+      .filter((f) => CIPHER_CALL.test(f.text))
+      .map((f) => f.path)
+      .filter((p) => p !== 'packages/db/src/keyring.ts' && p !== 'packages/db/src/keyring.test.ts');
+    expect(hits).toEqual([]);
+    expect(CIPHER_CALL.test("createCipheriv('aes-256-gcm', k, iv)")).toBe(true);
+    expect(CIPHER_CALL.test('crypto.createDecipheriv(a, k, iv)')).toBe(true);
+    expect(CIPHER_CALL.test('createCipherivX')).toBe(false);
+  });
+
+  test('keyringOf appears only in pg/access.ts, repos/ai-keys.ts and test-db/', () => {
+    const hits = files
+      .filter((f) => KEYRING_OF.test(f.text))
+      .map((f) => f.path)
+      .filter((p) => p !== 'packages/db/src/pg/access.ts' && p !== 'packages/db/src/repos/ai-keys.ts' && !p.startsWith('packages/db/test-db/'));
+    expect(hits).toEqual([]);
+    expect(KEYRING_OF.test('keyringOf(db)')).toBe(true);
+    expect(KEYRING_OF.test('mykeyringOfX')).toBe(false);
+  });
+
+  test('a keyring module is imported only by pg/client.ts, pg/access.ts, repos/ai-keys.ts, keyring.test.ts and test-db/; no barrel mentions it', () => {
+    const allowed = new Set(['packages/db/src/pg/client.ts', 'packages/db/src/pg/access.ts', 'packages/db/src/repos/ai-keys.ts', 'packages/db/src/keyring.test.ts']);
+    const hits = files
+      .filter((f) => KEYRING_IMPORT.test(f.text))
+      .map((f) => f.path)
+      .filter((p) => !allowed.has(p) && !p.startsWith('packages/db/test-db/'));
+    expect(hits).toEqual([]);
+    for (const barrel of ['packages/db/src/index.ts', 'packages/db/src/pg/index.ts']) {
+      expect(files.find((f) => f.path === barrel)!.text).not.toMatch(/keyring/i);
+    }
+    expect(KEYRING_IMPORT.test(`from '../keyring'`)).toBe(true);
+    expect(KEYRING_IMPORT.test(`from './keyring'`)).toBe(true);
+    expect(KEYRING_IMPORT.test(`from '../../keyring'`)).toBe(true);
+    expect(KEYRING_IMPORT.test(`from '../keyrings'`)).toBe(false);
+  });
+
+  test('.env.example lists STOKTOK_AI_KEYS_MASTER_KEY with no value', () => {
+    const env = readFileSync(join(ROOT, '.env.example'), 'utf8');
+    expect(env).toMatch(ENV_EXAMPLE_MASTER_KEY);
+    expect(ENV_EXAMPLE_MASTER_KEY.test('STOKTOK_AI_KEYS_MASTER_KEY=          # 32 bytes')).toBe(true);
+    expect(ENV_EXAMPLE_MASTER_KEY.test('STOKTOK_AI_KEYS_MASTER_KEY=abc')).toBe(false);
   });
 });
 

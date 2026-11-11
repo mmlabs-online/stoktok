@@ -125,5 +125,5 @@ Ticket states: `BACKLOG` → `PLANNING` → `IN_PROGRESS` → `REVIEW` → `DONE
 
 - Language: code, comments, docs, commit messages in English. UI labels in Vietnamese.
 - Commits: `STK-xxx: <imperative summary>`.
-- Secrets: only in `.env.local` (git-ignored), the deploy repo, and — for AI provider keys entered on Settings — Supabase Vault (ADR 0009). Keys are never returned to the browser or logged. `.env.example` lists keys with no values.
+- Secrets: only in `.env.local` (git-ignored), the deploy repo, and — for AI provider keys entered on Settings — the `ai_keys` table, encrypted app-side (ADR 0011). Keys are never returned to the browser or logged. `.env.example` lists keys with no values.
 - Third-party agent definitions come from msitarzewski/agency-agents (MIT) — see `THIRD_PARTY_NOTICES.md`.

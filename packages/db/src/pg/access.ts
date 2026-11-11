@@ -11,13 +11,25 @@ import type {
   TransactionBuilder,
 } from 'kysely';
 import { run, type Ctx, type SqlstateMap } from '../errors';
+import type { AiKeyring } from '../keyring';
 import { INTERNALS, type PgDb } from './client';
 import type { Database } from './schema';
 
-export function kyselyOf(db: PgDb): Kysely<Database> {
-  const internals = (db as unknown as Record<symbol, (() => { kysely: Kysely<Database> }) | undefined>)[INTERNALS];
+type Internals = { kysely: Kysely<Database>; keyring: AiKeyring };
+
+function internalsOf(db: PgDb): Internals {
+  const internals = (db as unknown as Record<symbol, (() => Internals) | undefined>)[INTERNALS];
   if (typeof internals !== 'function') throw new Error('not a PgDb handle');
-  return internals().kysely;
+  return internals();
+}
+
+export function kyselyOf(db: PgDb): Kysely<Database> {
+  return internalsOf(db).kysely;
+}
+
+/** For repos/ai-keys.ts only (r3-guard): the AI key encryption keyring of this handle. */
+export function keyringOf(db: PgDb): AiKeyring {
+  return internalsOf(db).keyring;
 }
 
 /**
