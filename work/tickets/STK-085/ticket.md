@@ -7,7 +7,7 @@
 | Areas | architecture, db, data, security |
 | Attempts | 2 |
 | Created | 2026-11-11 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/61 |
 
 ## Goal
 Split from STK-081 (see work/tickets/STK-081/plan.md "Split proposal"; reuse the consults in work/tickets/STK-081/ and the decisions in that plan's "Specialist input used"; no new consult needed). Scope:
