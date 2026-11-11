@@ -20,6 +20,8 @@ STK-080 ticket ACs: AC1 (port), AC2 (wired), AC5 (no auth change; guard), AC7. C
 ## Acceptance criteria
 - [ ] Every item in the scope above is done, meeting the STK-080 ticket ACs listed (AC1 (port), AC2 (wired), AC5 (no auth change; guard), AC7) for this slice.
 - [ ] Production keeps working after this slice is deployed on its own (strangler path in STK-080 plan.md).
+- [ ] (from STK-080 security review attempt 3, Ming 2026-11-11) A socket drop or pool connect timeout during session setup cannot crash the process: an `'error'` listener is held during `initSession` in `packages/db/src/pg/client.ts` (or pg-pool's `onConnect` is used), with a real-PG test that terminates the backend during setup and asserts the process survives and `totalCount` returns to 0.
+- [ ] (same source) `PgDb.pool` is no longer a plain enumerable property: replace it with a narrow `stats()` or make it non-enumerable, so logging the handle cannot print `connectionString`; repos may not use it to bypass Kysely/`run()`.
 - [ ] `typecheck`, `lint`, `test`, `test:db` and `db:check` green; changed `packages/db` logic has tests.
 
 ## Notes / answers from Ming

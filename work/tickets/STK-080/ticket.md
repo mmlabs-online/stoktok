@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P1 |
 | Areas | architecture, db, data, security |
 | Attempts | 3 |
@@ -32,3 +32,4 @@ CLAUDE.md Stack (DB, Auth), R2, R3, R6; docs/spec-v1.md §7 Deployment; ADR 0008
 - 2026-11-11 (Ming, after consults): (1) Postgres runs as a container on a shared Docker network with the stoktok containers (reach it by service name, e.g. `postgres:5432`; DB port not published). (2) Squash the migration history into one plain-Postgres baseline (keep the old files for reference). (3) Driver: `pg` + Kysely. (4) Supabase Free pausing (Auth only after the move): accept the risk, no keep-alive.
 - Orchestrator note: both consults agree on app-side AES-256-GCM for AI keys (master key in server-only env) over pgcrypto, and on real-Postgres integration tests in CI; the planner may treat these as defaults. RLS (keep with one app policy vs drop) is open between the consults — planner to choose and state why. Deployment is OrbStack on an Intel Mac (ADR 0003), not WSL2; fix CLAUDE.md Stack.
 - 2026-11-11 (Ming, after review attempt 1 PASS): fix before the PR, from security-review.md attempt 1: 🟡 S1 (test-db host check also rejects `host`/`hostaddr`/`port` query params, or checks the parsed host; unit case for `?host=`), 🟡 S2 (session init fails closed: log code only and drop the client), 🟡 S3 (ADR 0010: any host off the Docker network needs `sslmode=verify-full`; note it as an STK-081 requirement), and the small 🟢: S9 (escape LIKE in teardown; drop the template if setup fails), S7a/c (widen the NEXT_PUBLIC_ guard; apps/web may import `@stoktok/db/pg` only from server/db.ts), S8 (bundle-check needles `kysely`, `pg-pool`, `pg-connection-string`, `db.invalid`), S4 (assert identifier-shaped upsert keys), S5 nit (only map real pg error codes), plus review nits `usage_id` typed `Int8` and `jsonb(undefined)`.
+- 2026-11-11 (Ming, after review attempt 3 PASS): open the PR; the two new 🟡 from security-review.md attempt 3 (crash on socket drop during session init; PgDb.pool exposes connectionString) become required ACs of STK-081.

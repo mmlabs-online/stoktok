@@ -104,3 +104,43 @@ No violations found. R3: logs carry only `{event, code}`, and the bundle needles
 
 ### Follow-ups (out of scope)
 - These remain STK-081 items, as the impl-log lists: `sslmode` enforcement, `run()` wrapping of kysely calls, optional `lock_timeout`/`idle_in_transaction_session_timeout` (S10), and the `new URL()` check (S6).
+
+## Attempt 3 — 2026-11-11
+Verdict: PASS
+
+Reviewed commit 90a0875 (code diff `7f0c2ff..90a0875`) against Attempt 2's Issue 1 and nits.
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exit 0.
+- lint: `pnpm lint` exit 0.
+- test: `pnpm test` exit 0: core 834, sources 35, ai 184, db 226 + 1 todo, worker 295, web 349. The db count drops by 1 because the fake-client test was removed, which matches the impl-log.
+- test:db: throwaway PG 16.15 (`initdb`/`pg_ctl`, 127.0.0.1:54333), `DB_TEST_URL=postgresql://postgres@127.0.0.1:54333/postgres pnpm test:db`: 4 files, 15 tests passed. Afterwards `pg_database` held only `postgres`, `template0` and `template1`. The server was stopped and removed.
+- db:check: `db:check OK`.
+- build: `pnpm build` exit 0.
+- check:service-key: exit 0. All 16 needles and the 4 sentinels have 0 hits.
+- `git diff --name-only 7f0c2ff..90a0875 -- apps` is empty.
+
+### Issue 1 (Attempt 2) — fixed, proven on real Postgres
+- `packages/db/src/pg/client.ts:30-58`: `SessionClient extends pg.Client` overrides `connect` in both the callback and promise forms. It runs `super.connect()` and then the `set_config` init. If the init fails, it logs `{event, code}`, calls `end()`, and rejects with a plain `Error('db session init failed')`. It is passed as `Pool({ Client: SessionClient })`, and the `pool.on('connect')` init is removed.
+- **My 15-run repro on the new code** (scratch script: `createPgDb(..., 'worker', { statementTimeoutMs: 'x' })`, then `pool.query('insert into race_t …')`): 15/15 calls rejected, **0 rows committed**, `totalCount` was 0 every time, and 15 log lines were each `{"event":"db_session_init_failed","code":"22023"}`, with no message text.
+- **Concurrent waiters**: 5 parallel inserts per bad pool, 15 pools per profile, `web` and `worker` profiles: 150/150 rejected, 0 committed, 0 pools with live clients.
+- **The new test guards the bug**: I copied `packages/db` outside the repo and confirmed the baseline passes (3/3). Then I replaced `client.ts` with the 7f0c2ff `on('connect')` version, changed only to also return `pool`. `test-db/session.test.ts` failed in 5 of 5 runs, at `session.test.ts:48` (`expect(rows[0]!.n).toBe(0)`, "expected 1 to be +0"). That is the committed-write bug. The copy was deleted afterwards.
+- Acceptance points (a)–(d) from the fix instruction are all asserted in `session.test.ts:38-59`: the caller rejects, no row is written, `totalCount` is 0, and a healthy pool still inserts and reads. The test also checks that the log holds the event and no message text.
+
+### Nits from Attempt 2
+- [x] `r3-guard.test.ts:23`: `DB_IMPORT_RE` now covers double quotes, `import()` and `require()`, with self-test cases at lines 69-71.
+- [x] `grep -F`: already literal (`check-no-service-key-in-client.sh` uses `grep -rlF`). No change needed.
+- [x] STK-081 wording: fixed by the orchestrator in 41daeb5 (workflow file). The impl-log says it was not done, but that is only because a different commit made the change.
+
+Scope: the code changes are only in `packages/db` (`client.ts`, `client.test.ts`, `r3-guard.test.ts`, `test-db/session.test.ts`), which is within the Issue 1 fix. The new `PgDb.pool` field is needed for the requested `totalCount` assertion.
+
+### Rules R1–R10
+No violations found. R3: the init-failure log carries only `{event, code}`, and the caller error carries no cause, host or message (verified live). R8: all checks are green, and the fix is covered by a real-PG test that fails on the old code.
+
+### Nits (do not block)
+- `client.ts:40-43`: `void done.then(ok, err)`. If pg-pool's callback ever threw synchronously, the error would become an unhandled rejection. pg-pool's callback does not throw today, so this is theoretical.
+- `client.ts:16`: `PgDb.pool` is public API that is "exposed for tests". Repos and callers could start using the raw pool and bypass Kysely and `run()`. Consider removing it in STK-081, or covering it with the `run()` wrapping rule.
+- If `super.connect()` itself fails (network or auth), the raw pg error goes up to pg-pool as before, and no `db_session_init_failed` line is logged. That is fine, but the comment could say so.
+
+### Follow-ups (out of scope)
+- These are unchanged STK-081 items: `sslmode` enforcement, `run()` wrapping, S10 timeouts and the S6 URL check.
