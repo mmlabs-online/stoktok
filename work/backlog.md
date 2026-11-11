@@ -73,3 +73,4 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-077 | AI summaries worker job and inputs (STK-064 slice b) | BACKLOG | P2 | data, security | 0 | 2026-11-10 |
 | STK-078 | Portfolio AI summary (STK-064 slice c) | BACKLOG | P2 | data, finance | 0 | 2026-11-10 |
 | STK-079 | AI summary cards on Tài sản and the symbol screen (STK-064 slice d) | BACKLOG | P2 | ui, security | 0 | 2026-11-10 |
+| STK-080 | Move the data layer from Supabase to self-hosted Postgres (keep Supabase Auth) | BACKLOG | P1 | architecture, db, data, security | 0 | 2026-11-11 |
