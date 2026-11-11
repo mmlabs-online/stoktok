@@ -1,6 +1,6 @@
 # ADR 0009: AI provider keys in Supabase Vault (STK-074 slice a)
 
-Status: accepted for slice (a) of STK-074 (2026-11-10). Slice (b), the Settings "Khóa AI" card and its server actions, is STK-076.
+Status: Superseded by ADR 0011 (2026-11-11, STK-082). Was: accepted for slice (a) of STK-074 (2026-11-10). Slice (b), the Settings "Khóa AI" card and its server actions, is STK-076.
 
 ## Context
 Spec §7 and CLAUDE.md Conventions said LLM keys live only in the deploy repo's env handling. Ming decided on 2026-11-10 that keys can be entered on Settings, stored encrypted in Supabase Vault, with the STK-072 env keys as the fallback. This ADR records that change; spec §7 and CLAUDE.md are updated to match.

@@ -5,7 +5,7 @@ import { kyselyOf } from '../src/pg/access';
 import { freshDb } from './harness';
 
 // Table-driven over every function exported by the package index, except the ai-keys functions (they are covered in
-// ai-keys.test.ts, which keeps the Vault allow-list narrow). Inputs are non-empty so no early return skips the query.
+// ai-keys.test.ts, which keeps the decrypt allow-list narrow). Inputs are non-empty so no early return skips the query.
 const ID = '00000000-0000-4000-8000-000000000000';
 const W = { fromTs: '2026-11-01T00:00:00+00:00', toTs: '2026-12-01T00:00:00+00:00' };
 const tx = { tradeDate: '2026-01-05', symbol: 'FPT', side: 'buy' as const, quantity: 100, price: 10000 };

@@ -695,154 +695,90 @@ end $$;
 do $$ -- ai_keys_columns
 begin
   perform pg_temp.assert_col('ai_keys', 'provider', 'text', true);
-  perform pg_temp.assert_col('ai_keys', 'secret_id', 'uuid', true);
+  perform pg_temp.assert_col('ai_keys', 'ciphertext', 'bytea', true);
+  perform pg_temp.assert_col('ai_keys', 'iv', 'bytea', true);
+  perform pg_temp.assert_col('ai_keys', 'auth_tag', 'bytea', true);
+  perform pg_temp.assert_col('ai_keys', 'key_version', 'smallint', true);
   perform pg_temp.assert_col('ai_keys', 'last4', 'text', true);
   perform pg_temp.assert_col('ai_keys', 'updated_at', 'timestamp with time zone', true);
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'ai_keys' and column_name = 'secret_id') then
+    raise exception 'CHECK FAILED: ai_keys_columns (secret_id still present)';
+  end if;
 end $$;
 
 do $$ -- ai_keys_privileges
+declare v text;
 begin
-  if not has_table_privilege('service_role', 'public.ai_keys', 'select') then
-    raise exception 'CHECK FAILED: ai_keys_privileges (service_role cannot select)';
-  end if;
-  if has_table_privilege('service_role', 'public.ai_keys', 'insert')
-     or has_table_privilege('service_role', 'public.ai_keys', 'update')
-     or has_table_privilege('service_role', 'public.ai_keys', 'delete') then
-    raise exception 'CHECK FAILED: ai_keys_privileges (service_role can write directly)';
-  end if;
-  if has_table_privilege('anon', 'public.ai_keys', 'select') or has_table_privilege('authenticated', 'public.ai_keys', 'select') then
-    raise exception 'CHECK FAILED: ai_keys_privileges (anon/authenticated can select)';
+  foreach v in array array['select', 'insert', 'update', 'delete'] loop
+    if not has_table_privilege('service_role', 'public.ai_keys', v) then
+      raise exception 'CHECK FAILED: ai_keys_privileges (service_role cannot %)', v;
+    end if;
+    if has_table_privilege('anon', 'public.ai_keys', v) or has_table_privilege('authenticated', 'public.ai_keys', v) then
+      raise exception 'CHECK FAILED: ai_keys_privileges (anon/authenticated can %)', v;
+    end if;
+  end loop;
+  if not (select c.relrowsecurity from pg_class c where c.oid = 'public.ai_keys'::regclass) then
+    raise exception 'CHECK FAILED: ai_keys_privileges (RLS off)';
   end if;
 end $$;
 
-do $$ -- ai_key_roundtrip
+do $$ -- ai_keys_constraints
 declare
-  key_a text := 'DUMMY-key-A-not-real-0001';
-  key_b text := 'DUMMY-key-B-not-real-0002';
-  r record;
-  id1 uuid;
-  t1 timestamptz;
+  ct20 text := 'decode(repeat(''00'', 20), ''hex'')';
+  iv12 text := 'decode(repeat(''00'', 12), ''hex'')';
+  tag16 text := 'decode(repeat(''00'', 16), ''hex'')';
   n int;
 begin
   set local role service_role;
-  select * into r from public.ai_key_set('google', key_a);
-  if r.key_last4 <> '0001' then raise exception 'CHECK FAILED: ai_key_roundtrip (last4 A: %)', r; end if;
-  if (select s.secret from public.ai_key_secrets() s where s.provider = 'google') is distinct from key_a then
-    raise exception 'CHECK FAILED: ai_key_roundtrip (secret A)';
-  end if;
-  select k.secret_id, k.updated_at into id1, t1 from public.ai_keys k where k.provider = 'google';
+  -- valid rows at the ciphertext length bounds
+  insert into public.ai_keys (provider, ciphertext, iv, auth_tag, key_version, last4) values ('anthropic', decode(repeat('00', 20), 'hex'), decode(repeat('00', 12), 'hex'), decode(repeat('00', 16), 'hex'), 1, 'abcd');
+  insert into public.ai_keys (provider, ciphertext, iv, auth_tag, key_version, last4) values ('google', decode(repeat('00', 256), 'hex'), decode(repeat('00', 12), 'hex'), decode(repeat('00', 16), 'hex'), 1, 'abcd');
+  delete from public.ai_keys;
 
-  select * into r from public.ai_key_set('google', key_b);
-  if r.key_last4 <> '0002' then raise exception 'CHECK FAILED: ai_key_roundtrip (last4 B: %)', r; end if;
-  if (select s.secret from public.ai_key_secrets() s where s.provider = 'google') is distinct from key_b then
-    raise exception 'CHECK FAILED: ai_key_roundtrip (secret B)';
-  end if;
-  if not exists (select 1 from public.ai_keys k where k.provider = 'google' and k.secret_id = id1 and k.last4 = '0002' and k.updated_at >= t1) then
-    raise exception 'CHECK FAILED: ai_key_roundtrip (replace keeps secret id, updates last4)';
-  end if;
-  reset role;
-  select count(*) into n from vault.secrets where name = 'stoktok_ai_key_google';
-  if n <> 1 then raise exception 'CHECK FAILED: ai_key_roundtrip (% vault rows after replace)', n; end if;
+  perform pg_temp.expect_fail('provider openai', format('insert into public.ai_keys values (''openai'', %s, %s, %s, 1, ''abcd'')', ct20, iv12, tag16), array['23514']);
+  perform pg_temp.expect_fail('ciphertext 19', format('insert into public.ai_keys values (''google'', decode(repeat(''00'', 19), ''hex''), %s, %s, 1, ''abcd'')', iv12, tag16), array['23514']);
+  perform pg_temp.expect_fail('ciphertext 257', format('insert into public.ai_keys values (''google'', decode(repeat(''00'', 257), ''hex''), %s, %s, 1, ''abcd'')', iv12, tag16), array['23514']);
+  perform pg_temp.expect_fail('iv 11', format('insert into public.ai_keys values (''google'', %s, decode(repeat(''00'', 11), ''hex''), %s, 1, ''abcd'')', ct20, tag16), array['23514']);
+  perform pg_temp.expect_fail('iv 13', format('insert into public.ai_keys values (''google'', %s, decode(repeat(''00'', 13), ''hex''), %s, 1, ''abcd'')', ct20, tag16), array['23514']);
+  perform pg_temp.expect_fail('tag 15', format('insert into public.ai_keys values (''google'', %s, %s, decode(repeat(''00'', 15), ''hex''), 1, ''abcd'')', ct20, iv12), array['23514']);
+  perform pg_temp.expect_fail('tag 17', format('insert into public.ai_keys values (''google'', %s, %s, decode(repeat(''00'', 17), ''hex''), 1, ''abcd'')', ct20, iv12), array['23514']);
+  perform pg_temp.expect_fail('key_version 0', format('insert into public.ai_keys values (''google'', %s, %s, %s, 0, ''abcd'')', ct20, iv12, tag16), array['23514']);
+  perform pg_temp.expect_fail('last4 3 chars', format('insert into public.ai_keys values (''google'', %s, %s, %s, 1, ''abc'')', ct20, iv12, tag16), array['23514']);
+  perform pg_temp.expect_fail('last4 5 chars', format('insert into public.ai_keys values (''google'', %s, %s, %s, 1, ''abcde'')', ct20, iv12, tag16), array['23514']);
+  perform pg_temp.expect_fail('last4 space', format('insert into public.ai_keys values (''google'', %s, %s, %s, 1, ''ab d'')', ct20, iv12, tag16), array['23514']);
+  perform pg_temp.expect_fail('last4 non-ascii', format('insert into public.ai_keys values (''google'', %s, %s, %s, 1, %L)', ct20, iv12, tag16, 'ab' || chr(233) || chr(227)), array['23514']);
 
-  set local role service_role;
-  if not public.ai_key_delete('google') then raise exception 'CHECK FAILED: ai_key_roundtrip (delete returned false)'; end if;
-  if exists (select 1 from public.ai_key_secrets() s where s.provider = 'google') or exists (select 1 from public.ai_keys k where k.provider = 'google') then
-    raise exception 'CHECK FAILED: ai_key_roundtrip (google still present after delete)';
-  end if;
-  if public.ai_key_delete('google') then raise exception 'CHECK FAILED: ai_key_roundtrip (second delete returned true)'; end if;
-  reset role;
-  if exists (select 1 from vault.secrets where name = 'stoktok_ai_key_google') then
-    raise exception 'CHECK FAILED: ai_key_roundtrip (vault row left after delete)';
-  end if;
+  perform pg_temp.expect_fail('null provider', format('insert into public.ai_keys values (null, %s, %s, %s, 1, ''abcd'')', ct20, iv12, tag16), array['23502']);
+  perform pg_temp.expect_fail('null ciphertext', format('insert into public.ai_keys values (''google'', null, %s, %s, 1, ''abcd'')', iv12, tag16), array['23502']);
+  perform pg_temp.expect_fail('null iv', format('insert into public.ai_keys values (''google'', %s, null, %s, 1, ''abcd'')', ct20, tag16), array['23502']);
+  perform pg_temp.expect_fail('null auth_tag', format('insert into public.ai_keys values (''google'', %s, %s, null, 1, ''abcd'')', ct20, iv12), array['23502']);
+  perform pg_temp.expect_fail('null key_version', format('insert into public.ai_keys values (''google'', %s, %s, %s, null, ''abcd'')', ct20, iv12, tag16), array['23502']);
+  perform pg_temp.expect_fail('null last4', format('insert into public.ai_keys values (''google'', %s, %s, %s, 1, null)', ct20, iv12, tag16), array['23502']);
 
-  -- orphan: a vault secret with the wrapper's name but no ai_keys row must not block a save
-  insert into vault.secrets (name, secret) values ('stoktok_ai_key_anthropic', 'DUMMY-orphan-not-real-0003');
-  set local role service_role;
-  perform public.ai_key_set('anthropic', key_a);
+  insert into public.ai_keys (provider, ciphertext, iv, auth_tag, key_version, last4) values ('google', decode(repeat('00', 20), 'hex'), decode(repeat('00', 12), 'hex'), decode(repeat('00', 16), 'hex'), 1, 'abcd');
+  perform pg_temp.expect_fail('duplicate provider', format('insert into public.ai_keys values (''google'', %s, %s, %s, 1, ''abcd'')', ct20, iv12, tag16), array['23505']);
+  insert into public.ai_keys (provider, ciphertext, iv, auth_tag, key_version, last4) values ('google', decode(repeat('01', 20), 'hex'), decode(repeat('00', 12), 'hex'), decode(repeat('00', 16), 'hex'), 1, 'wxyz')
+    on conflict (provider) do update set ciphertext = excluded.ciphertext, last4 = excluded.last4, updated_at = now();
+  select count(*) into n from public.ai_keys;
+  if n <> 1 or not exists (select 1 from public.ai_keys where provider = 'google' and last4 = 'wxyz') then
+    raise exception 'CHECK FAILED: ai_keys_constraints (upsert left % rows)', n;
+  end if;
+  delete from public.ai_keys;
   reset role;
-  select count(*) into n from vault.secrets where name = 'stoktok_ai_key_anthropic';
-  if n <> 1 then raise exception 'CHECK FAILED: ai_key_roundtrip (% anthropic vault rows after orphan save)', n; end if;
-  set local role service_role;
-  perform public.ai_key_delete('anthropic');
-  reset role;
-  if exists (select 1 from vault.secrets where name like 'stoktok\_ai\_key\_%') or exists (select 1 from public.ai_keys) then
-    raise exception 'CHECK FAILED: ai_key_roundtrip (cleanup)';
+end $$;
+
+do $$ -- ai_key_functions_gone
+begin
+  if exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname in ('ai_key_set', 'ai_key_delete', 'ai_key_secrets')) then
+    raise exception 'CHECK FAILED: ai_key_functions_gone (a Vault wrapper still exists)';
   end if;
 end $$;
 
-do $$ -- ai_key_negatives
-declare
-  ok text := 'DUMMY-key-not-real-0004';
-  msg text;
+do $$ -- security_definer_allowlist (empty: no definer function exists)
 begin
-  set local role service_role;
-  perform pg_temp.expect_fail('ai_key_set bad provider', format('select public.ai_key_set(''openai'', %L)', ok), array['22023']);
-  perform pg_temp.expect_fail('ai_key_set null provider', format('select public.ai_key_set(null, %L)', ok), array['22023']);
-  perform pg_temp.expect_fail('ai_key_set null key', 'select public.ai_key_set(''google'', null)', array['22023']);
-  perform pg_temp.expect_fail('ai_key_set space', format('select public.ai_key_set(''google'', %L)', ok || ' x'), array['22023']);
-  perform pg_temp.expect_fail('ai_key_set newline', format('select public.ai_key_set(''google'', %L)', ok || chr(10)), array['22023']);
-  perform pg_temp.expect_fail('ai_key_set tab', format('select public.ai_key_set(''google'', %L)', ok || chr(9)), array['22023']);
-  perform pg_temp.expect_fail('ai_key_set 19 chars', format('select public.ai_key_set(''google'', %L)', repeat('k', 19)), array['22023']);
-  perform pg_temp.expect_fail('ai_key_set 257 chars', format('select public.ai_key_set(''google'', %L)', repeat('k', 257)), array['22023']);
-  perform pg_temp.expect_fail('ai_key_set non-ascii', format('select public.ai_key_set(''google'', %L)', ok || chr(227)), array['22023']);
-  perform pg_temp.expect_fail('ai_key_delete bad provider', 'select public.ai_key_delete(''openai'')', array['22023']);
-  begin
-    perform public.ai_key_set('google', 'DUMMY-SENTINEL-with space');
-  exception when others then
-    msg := sqlerrm;
-  end;
-  if msg is null or position('DUMMY-SENTINEL' in msg) > 0 then
-    raise exception 'CHECK FAILED: ai_key_negatives (error missing or echoes the key: %)', msg;
+  if exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef) then
+    raise exception 'CHECK FAILED: security_definer_allowlist (a security definer function exists in public)';
   end if;
-  reset role;
-  if exists (select 1 from public.ai_keys) or exists (select 1 from vault.secrets) then
-    raise exception 'CHECK FAILED: ai_key_negatives (rejected calls stored something)';
-  end if;
-end $$;
-
-do $$ -- ai_key_functions_locked
-declare f text;
-begin
-  foreach f in array array['public.ai_key_set(text,text)', 'public.ai_key_delete(text)', 'public.ai_key_secrets()'] loop
-    if has_function_privilege('anon', f, 'execute') or has_function_privilege('authenticated', f, 'execute') then
-      raise exception 'CHECK FAILED: ai_key_functions_locked (anon/authenticated can execute %)', f;
-    end if;
-    if not has_function_privilege('service_role', f, 'execute') then
-      raise exception 'CHECK FAILED: ai_key_functions_locked (service_role cannot execute %)', f;
-    end if;
-  end loop;
-  if exists (
-    select 1 from pg_proc p
-    where p.pronamespace = 'public'::regnamespace and p.proname in ('ai_key_set', 'ai_key_delete', 'ai_key_secrets')
-      and (not p.prosecdef or p.proconfig is null or not ('search_path=""' = any (p.proconfig))
-           or p.proacl is null or exists (select 1 from aclexplode(p.proacl) a where a.grantee = 0))
-  ) then
-    raise exception 'CHECK FAILED: ai_key_functions_locked (not definer, search_path not empty, or PUBLIC can execute)';
-  end if;
-end $$;
-
-do $$ -- security_definer_allowlist
-declare got text[];
-begin
-  select array_agg(p.proname::text order by p.proname) into got
-    from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef;
-  if got is distinct from array['ai_key_delete','ai_key_secrets','ai_key_set'] then
-    raise exception 'CHECK FAILED: security_definer_allowlist (got %)', got;
-  end if;
-end $$;
-
-do $$ -- ai_key_vault_direct_denied (only against the db:check Vault stub; a real Vault is covered by the manual smoke test in ADR 0009)
-declare r text;
-begin
-  if pg_catalog.obj_description('vault'::regnamespace, 'pg_namespace') is distinct from 'stoktok db:check vault stub' then
-    return;
-  end if;
-  foreach r in array array['anon', 'authenticated', 'service_role'] loop
-    execute format('set local role %I', r);
-    perform pg_temp.expect_fail('vault read as ' || r, 'select * from vault.decrypted_secrets', array['42501']);
-    perform pg_temp.expect_fail('vault create as ' || r, 'select vault.create_secret(''x'')', array['42501']);
-    reset role;
-  end loop;
 end $$;
 
 do $$ -- manual_rows_nulls_dont_collide

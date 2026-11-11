@@ -2,11 +2,13 @@
 import { Kysely, PostgresDialect } from 'kysely';
 import pg from 'pg';
 import { sqlstateOf } from '../errors';
+import { createAiKeyring } from '../keyring';
 import { PG_POOL_PROFILES, type PgProfile, type PoolProfile } from './config';
 import type { Database } from './schema';
 import { buildTypeParsers } from './types';
 
 export const DATABASE_URL_ENV = 'STOKTOK_DATABASE_URL';
+export const AI_KEYS_MASTER_KEY_ENV = 'STOKTOK_AI_KEYS_MASTER_KEY';
 
 export interface PgPoolStats {
   total: number;
@@ -86,11 +88,14 @@ export function createPgDb(
   // Never log the message or the config: they can carry host and credentials.
   pool.on('error', (e) => console.error(JSON.stringify({ event: 'db_pool_error', code: sqlstateOf(e) ?? null })));
   const kysely = new Kysely<Database>({ dialect: new PostgresDialect({ pool }) });
+  // Parsed once, never throws: a bad AI master key must not stop getDb() or the worker jobs (ADR 0011). Log the event only, never the value.
+  const keyring = createAiKeyring(env[AI_KEYS_MASTER_KEY_ENV]);
+  if (keyring.state === 'invalid') console.error(JSON.stringify({ event: 'ai_keyring_invalid' }));
   let ending: Promise<void> | undefined;
   const handle = {
     end: () => (ending ??= kysely.destroy()),
     stats: (): PgPoolStats => ({ total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount }),
   };
-  Object.defineProperty(handle, INTERNALS, { value: () => ({ kysely }), enumerable: false });
+  Object.defineProperty(handle, INTERNALS, { value: () => ({ kysely, keyring }), enumerable: false });
   return Object.freeze(handle);
 }

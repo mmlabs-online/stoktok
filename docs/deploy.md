@@ -136,6 +136,7 @@ Names only. Values live in the `stoktok` environment secrets of the deployment r
 | `SUPABASE_SERVICE_ROLE_KEY` | web, worker | required now | y |
 | `SUPABASE_ANON_KEY` | none | reserved | y |
 | `STOKTOK_DATABASE_URL` | web, worker | reserved | y |
+| `STOKTOK_AI_KEYS_MASTER_KEY` | web, worker | reserved | y |
 | `AUTHEN_SUPABASE_URL` | web | required now | n |
 | `AUTHEN_SUPABASE_ANON_KEY` | web | required now | y |
 | `ANTHROPIC_API_KEY` | web, worker | optional | y |

@@ -14,7 +14,7 @@ Set `DB_CHECK_URL` (host must be `localhost` or `127.0.0.1`) to run against an e
 Optional: `supabase db reset` with the Supabase CLI (needs Docker; there is no `config.toml` yet).
 
 ## Vault
-`20261110000200_ai_keys.sql` requires the `supabase_vault` extension (it refuses to apply otherwise) and stores AI provider keys there. `pnpm db:check` runs on plain Postgres with a plaintext Vault stub from `scripts/db-check/bootstrap-roles.sql`, so real encryption and privileges are checked only by the manual smoke test in [ADR 0009](../docs/adr/0009-ai-provider-keys-in-vault.md). Rolling back that migration deletes the stored keys.
+`20261110000200_ai_keys.sql` still requires the `supabase_vault` extension (or the plaintext stub from `scripts/db-check/bootstrap-roles.sql`, which `pnpm db:check` uses and which STK-083 deletes). `20261111000100_ai_keys_app_encryption.sql` replaces it: AI keys are encrypted app-side and stored as ciphertext ([ADR 0011](../docs/adr/0011-ai-provider-keys-app-side-encryption.md), which supersedes ADR 0009). That migration is **never applied to the Supabase project** (the running release still calls the Vault wrappers it drops) and it refuses a database with a real Vault. It exists for `pnpm db:check`, `pnpm test:db` and the STK-083 baseline. Rolling back drops `ai_keys` and does not restore the Vault shape.
 
 ## No `lots` table
 Spec §5 lists `lots`, but lots are derived in `packages/core` (`buildLedger`) from transactions and corporate actions, so they are not stored. A snapshot, if needed, would be a rebuildable cache in its own ticket.

@@ -10,7 +10,7 @@ export function createWorkerAi(opts: { env?: Record<string, string | undefined>;
   const env = opts.env ?? process.env;
   const { db } = opts;
   return new AiClient({
-    // UI-saved keys (Vault) win over env; read on every generate() so a changed key needs no restart.
+    // UI-saved keys (encrypted in ai_keys, ADR 0011) win over env; read on every generate() so a changed key needs no restart.
     resolveProviders: makeProviderResolver(() => readAiKeySecrets(db), () => readAiEnv(env), { timeoutMs: AI_TIMEOUT_MS }),
     ledger: aiUsageLedger(db),
     log: { warn: (e) => console.warn(JSON.stringify(e)) },

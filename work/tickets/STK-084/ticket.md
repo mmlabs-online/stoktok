@@ -31,6 +31,7 @@ CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010 (from STK-080). Reference repos: `
 ## Acceptance criteria
 - [ ] Every item in the scope above is done, following the shared-Postgres standard.
 - [ ] Production keeps working: until STK-084's cutover no stoktok release is cut, and nothing in this slice changes the running release.
+- [ ] (from STK-082 plan F1/F3 and security review 🟡1–2) AI master key: generate (`head -c 32 /dev/urandom | base64`), set the `stoktok` environment secret `STOKTOK_AI_KEYS_MASTER_KEY` (copy in Ming's password manager, never in the deployment repo), wire the deploy workflow and `check-deploy-env.sh` (required, format `^[A-Za-z0-9+/]{43}=$`), switch its `docs/deploy.md` row from `reserved` to required, host env file mode 0600. At cutover issue NEW provider keys at Anthropic/Google and enter those on Settings, then revoke the old keys; delete the `stoktok_ai_key_%` rows from Supabase Vault only after the rollback window closes. Confirm `ai_keyring_invalid` never appears in the logs after cutover.
 - [ ] `typecheck`, `lint`, `test`, `test:db` and `db:check` green; changed `packages/db` logic has tests.
 
 ## Notes / answers from Ming
