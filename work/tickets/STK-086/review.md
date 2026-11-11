@@ -118,3 +118,78 @@ Version-specific notes:
 - Check whether the deployment repo's `add-app-db.sh` / `10-app-dbs.sh` reject system names (same class as Issue 1).
 - ADR 0011:56 and ADR 0009:29 still name `scripts/db-check/bootstrap-roles.sql` (plan A7).
 - Large-object ACLs (`pg_largeobject_metadata.lomacl`) are not covered by `checks-acl.sql`.
+
+## Attempt 2 — 2026-11-11
+Verdict: PASS
+
+Reviewed commit d6612c8. Compared with attempt 1 (`git diff 1c6fb4f d6612c8`), only two code files changed: `scripts/db-check.sh` and `scripts/db-check/checks-acl.sql`. The other changes are orchestrator files under `work/`. All runs below used a throwaway PG16.15 TCP cluster with scram (`initdb --auth-local=trust --auth-host=scram-sha-256`, 127.0.0.1:55433), deleted afterwards. There is no PG17 and no Docker here.
+
+### Checks (run by reviewer)
+- typecheck: pass (`pnpm typecheck`, exit 0).
+- lint: pass (`pnpm lint`, exit 0).
+- test: pass (exit 0). core 834, sources 35, ai 184, db 115, worker 299, web 352. This matches impl-log.
+- format: the repo has no format script.
+- test:db (`DB_TEST_URL` = the scram cluster): `Test Files 23 passed (23)`, `Tests 127 passed (127)`. Afterwards only `template0,postgres,template1` and role `postgres` remained.
+- db:check, throwaway mode: exit 0. Output:
+  - `WARNING: Postgres major 16, expected 17`;
+  - `owner role flags: f|f|f|f|f`;
+  - 14 canaries caught, including `no_role_memberships`;
+  - `after rollback: 0|0|0`, `snapshot unchanged`, `db:check OK`.
+- `CI=true` db:check: exit 1 in throwaway mode and in URL mode, with `db:check: Postgres major 16, expected 17 (production)`.
+- db:check, URL mode:
+  - run 1 (with `PGHOSTADDR=10.255.255.1 PGHOST=example.com PGPORT=1 PGSERVICE=nonexist` exported): exit 0, all 14 canaries, `db:check OK`. The superuser password appears 0 times in the output.
+  - run 2: exit 0, `db:check OK`, 14 canaries caught.
+  - After both runs, only the system databases and role `postgres` remained. The only change is the documented D4 `datacl` side effect.
+- `bash scripts/schema-diff.sh`: exit 0, with `owner role flags: f|f|f|f|f`, `after rollback …: 0|0|0` and `A' vs B: identical`.
+- `cmp scripts/db-check/app-db.sql /home/user/deployment/postgres/sql/app-db.sql`: identical.
+
+### Attempt 1 issues
+- **Issue 1 (blocker): fixed.** `db-check.sh:36-40` rejects the names, and `:145` adds a same-name database count to the refusal.
+  - `DB_CHECK_APP=template1`, `postgres`, `template0` and `pg_x` all exit 1 with `DB_CHECK_APP must not be a system database name`.
+  - Before and after every refusal run, `pg_database` (owners plus `datacl`), the non-`pg_` roles and the `pg_class` count in `postgres.public` (0) were identical.
+  - An existing database `stoktok` exits 1 with `… a database named stoktok (1) …`. The database was left untouched (owner postgres, `datacl` null).
+- **Issue 2 (should-fix): fixed.** `db-check.sh:59-61` uses one anchored regex with a fixed message, and `$DB_CHECK_URL` and `$host` are no longer echoed. Uppercase `POSTGRESQL://…`, mixed-case `Postgresql://…` and keyword conninfo `host=… password=…` all exit 1 with the fixed text. The password count in the output was 0 in every case.
+- **Issue 3 (should-fix): fixed.** All of these exit 1 with the fixed message, before any connection:
+  - `?%70ort=55433` (with a dead port in the authority);
+  - `?%68ost=example.com`;
+  - multi-host `127.0.0.1:55433,example.com:5432` and `localhost,example.com`;
+  - `?sslmode=disable&hostaddr=10.0.0.1`;
+  - `?service=x`;
+  - `?HOST=x`;
+  - `[::1]`.
+
+  `db-check.sh:21` unsets the PG target environment variables, and URL run 1 above shows they are ignored. I also probed newline injection into the query (`?sslmode=disable&\nport=55433`). It slips past the line-based grep, but libpq rejects it (`invalid URI query parameter`), so the script exits 1 with nothing created. No bypass.
+- **Rec. 4 (optional, security review): done.**
+  - `checks-acl.sql:35-42` adds `no_role_memberships`, and `db-check.sh:161` adds memberships to the snapshot.
+  - The canary at `:196` is caught by its own name.
+  - Negative proof on a scratch copy with the check removed: `db:check: canary no_role_memberships was not caught`, exit 1.
+  - The snapshot is taken after `$NOBODY` is created (`:156` before `:165`), so the `::regrole` casts are safe.
+  - Attempt 1's nit about `nobody_sequence_privileges` is also addressed (an `n >= 1` guard at `:57-62`).
+
+### Acceptance criteria
+- [x] 1–4, 6–12: unchanged since attempt 1, and they still hold. Evidence: re-ran throwaway and URL modes, `cmp`, schema-diff and `CI=true`. Scope is still limited to the plan's files.
+- [x] 5 URL-mode safety. Evidence: the refusal set above. Attempt 1's cases (a)–(f) are still covered by the same code path plus the new strict regex.
+- [x] 13 typecheck, lint, test, test:db and db:check are green locally, and schema-diff passes. PG17 is proven only by CI on the PR: my attempt 1 assessment still applies, and attempt 2 does not touch the CI path except to add the membership check and canary. `pg_read_server_files` and `pg_auth_members` behave the same in 17.
+
+### Issues
+None.
+
+### Rules R1–R10
+- R3: the superuser URL is no longer echoed. The owner password stays out of argv (`db-check.sh:70,94,155`).
+- R7: the two changed files map to Issues 1–3 and rec. 4, as asked by the orchestrator.
+- R8: the new SQL check has a canary and a negative proof.
+- No violations found.
+
+### Nits (do not block)
+- `db-check.sh:101`: a URL that passes the regex but that libpq rejects (e.g. a newline in the query) still ends in the bash arithmetic error on `major` rather than a clear message. This is the same nit as in attempt 1.
+- `db-check.sh:60`: the refusal text does not mention that `%` in the query is also refused.
+- `db-check.sh:14-17` (header): does not mention the system-name refusal.
+- `DB_CHECK_APP=stoktok_nobody` or `dbcheck_canary` would collide with the fixed role names. It fails safely, at `create role`.
+- `same` (`:145`) is now redundant with `other` plus the name check (defence in depth; fine).
+
+### Follow-ups (out of scope)
+- These are carried over from attempt 1 and are still open:
+  - security recs 5 and 6;
+  - the deployment repo `add-app-db.sh` system-name check;
+  - the bootstrap-roles references in ADR 0011 and ADR 0009;
+  - large-object ACLs.
