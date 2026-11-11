@@ -82,3 +82,46 @@ No violations found.
 ### Follow-ups (out of scope)
 - F1-F6 as listed in plan.md and impl-log: STK-084 runbook and deploy wiring, including changing `docs/deploy.md` `STOKTOK_AI_KEYS_MASTER_KEY` from `reserved` to required with a format check; the STK-083 baseline; the `ai_keyring_invalid` log watch; a Settings `NOT_CONFIGURED` error code; per-provider read status; a multi-version keyring.
 - This diff touches migrations, env and secrets, so the `security-ai-generated-code-auditor` should run at REVIEW per CLAUDE.md. No `security-review.md` exists for this ticket yet.
+
+## Attempt 2 — 2026-11-11
+Verdict: PASS
+
+Reviewed commit d640e68 (`git diff 85902a3 HEAD`, i.e. everything since the attempt 1 review).
+
+### Checks (run by reviewer)
+- lint: `pnpm lint` exit 0, all workspaces Done.
+- test: `pnpm test` exit 0. core 834, sources 35, ai 184, db 108 (20 files), worker 299, web 352 passed. Identical to attempt 1 and matches impl-log attempt 2.
+- typecheck: `pnpm typecheck` exit 0 (extra; no code changed).
+- build, test:db, db:check, check:service-key: not re-run. No code, SQL, script or config file changed since attempt 1, where all were green.
+
+### Scope
+`git diff --stat 85902a3 HEAD`: `docs/adr/0011-ai-provider-keys-app-side-encryption.md` (+5/-2), `work/tickets/STK-082/impl-log.md` (attempt 2 section), plus orchestrator bookkeeping in `ticket.md` (Ming's note, Attempts 2) and `work/backlog.md` (attempts 2). No code changed. Nothing else changed.
+
+### Ming's note vs ADR text
+🟡2 (cutover), ADR 0011 Consequences bullet 3:
+- [x] New keys at Anthropic and Google, entered on Settings (not the old values), then the old keys revoked. In that order.
+- [x] `stoktok_ai_key_%` Vault rows deleted only after the rollback window closes (proposed 14 days, as in security-review.md), with the reason (an early delete makes a rollback silently drop to env keys or no keys).
+- [x] "or" replaced by "and": the bullet explains that deleting Vault rows does not purge Supabase backups/PITR, so the provider keys are replaced as well.
+
+🟡3 (master-key rotation), ADR 0011 Rotation runbook:
+- [x] Step 1: "or accept that they are discarded" is gone. Old-key rows are not discarded; reads fail with `MAPPING`, and both providers stay disabled until the rows are deleted.
+- [x] Step 5: on suspected master-key compromise, rotate the provider keys too.
+- [x] Step 6: backups (7d/4w/6m, matching the pg-backup retention) hold old-key ciphertext. Either rotate the provider keys or destroy the old master-key copy once those backups have aged out.
+
+### ADR vs code behaviour
+- Rows sealed under another key → `MAPPING`: `packages/db/src/repos/ai-keys.ts:89-93`. `keyring.open` throws on a GCM auth failure, which is rethrown as `DataError('MAPPING', 'ai_keys', 'read', …)`.
+- Both providers disabled: `readAiKeySecrets` is all-or-nothing (`ai-keys.ts:70-99`; any row failing throws, never a partial map). The resolver turns the throw into `provider_unavailable` (attempt 1 fail-closed matrix), so the env fallback does not engage for either provider. The ADR's "both providers stay disabled" is correct.
+- Delete without a key: `deleteAiKey` (`ai-keys.ts:53-57`) never calls `keyringOf`, so step 1 and the Loss procedure ("delete needs no keyring") are both correct.
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations. R7: doc-only, inside the plan's ADR file and Ming's note.
+
+### Nits (do not block)
+- Rotation steps 5 and 6 overlap a little (both may say to rotate provider keys). They are still accurate. Merging them into one step would be tighter.
+- impl-log attempt 2 says "not committed", but the orchestrator committed it as d640e68. This is bookkeeping only.
+
+### Follow-ups (out of scope)
+- The STK-084 ticket should carry the same cutover order (new provider keys → revoke old → delete Vault rows after the rollback window), as security-review.md 🟡2 asks ("one runbook line in ADR 0011 and in STK-084"). The ticket.md edit is orchestrator-owned.
