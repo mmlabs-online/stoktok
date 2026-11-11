@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P1 |
 | Areas | db, security |
 | Attempts | 2 |
@@ -39,3 +39,4 @@ CLAUDE.md R2, R3, R7, R8; ADR 0010, ADR 0011. Reference: `/home/user/deployment/
 - 2026-11-11 (orchestrator): from STK-083 security review attempt 2 — add column-level PUBLIC ACL (pg_attribute.attacl) and empty pg_default_acl checks; migration lint: `$` inside identifiers (lookbehind before the dollar-tag alternative), nested/any block comments in migrations (ban), shared do-block regex const.
 - 2026-11-11 (orchestrator): from STK-083 review attempt 2 — non-ASCII dollar tags (`$é$`) also bypass the lint tokeniser; add a catalog check that allows no ACL entry except the owner's (plus PUBLIC USAGE on schema public), which catches grants to any role.
 - 2026-11-11 (orchestrator, after planning): the migration-lint gaps and the legacy-reference guard moved to STK-088 per plan.md; this ticket is the db:check rewrite only.
+- 2026-11-11 (Ming, after review attempt 2 PASS): open the PR; the remaining 🟡 (an `@` in the query moves the libpq host) moves to STK-088.

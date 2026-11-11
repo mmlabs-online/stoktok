@@ -43,6 +43,7 @@ CLAUDE.md R3, R7, R8; ADR 0010. Depends on STK-086; run after STK-087 (both edit
 
 ## Acceptance criteria
 - [ ] Every item in the scope above is done, with a fixture per lint case.
+- [ ] (from STK-086 security review attempt 2, Ming 2026-11-11) `scripts/db-check.sh` URL regex: refuse an `@` after the authority (path/query `(/[^?@]*)?(\?[^@]*)?$`) so `postgresql://localhost?@remote/postgres` is refused; add a refusal proof. Optional nits: refuse `DB_CHECK_APP` = `stoktok_nobody`/`dbcheck_canary` with a clear message; clear error when libpq rejects the URL; mention `%` and system names in the refusal text and header.
 - [ ] Production keeps working: no stoktok release is cut until STK-084.
 - [ ] `typecheck`, `lint`, `test`, `test:db` and `db:check` green.
 
