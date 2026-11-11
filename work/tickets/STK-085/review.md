@@ -119,3 +119,55 @@ No violations found.
 - The STK-081 handle: `end()` on a handle that never ran a query is a no-op in Kysely, and a later query reopens the pool (impl-log deviation 3). Consider making `end()` mark the handle as closed so `run()` rejects afterwards regardless of pool state.
 - The plan follow-ups stand: collapse the fan-outs; remove `linesSymbolChunk`, `financialsSymbolChunk`, `resolveChunkSize` and the "PostgREST row cap" comments; `settings.updated_at` never advances on save; the STK-084 env cleanup; STK-082 removes the ai-keys test:db cases and their allow-list path.
 - `db:check` in `DB_CHECK_URL` mode cannot be re-run on an already-migrated database (pre-existing).
+
+## Attempt 2 — 2026-11-11
+Verdict: PASS
+
+Reviewed commit `c132c36` (code diff against `1d86094`: `.env.example`, `apps/web/test/healthz.test.ts`, `apps/worker/README.md`, `scripts/check-image.sh`, plus work/ state files). Ming's note in ticket.md (2026-11-11, after review attempt 1) accepts the single commit `ba3dc6c`. So the attempt-1 Issue 1 (AC1 commit order) is closed by Ming's decision and is not re-raised. The G0 content was already verified in attempt 1.
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exit 0.
+- lint: `pnpm lint` exit 0.
+- test: `pnpm test` exit 0. Results: core 834, sources 35 (1 file skipped), ai 184, db 88, worker 299 (1 file skipped), web 352. These match the impl-log.
+- build: `pnpm build` exit 0.
+- db:check: `db:check OK`.
+- check:service-key: `OK: no secret or AI SDK material in client bundle`.
+- check:deploy-env: `OK: deploy env lists consistent`.
+- `bash -n scripts/check-image.sh`: OK.
+- test:db: not re-run. Attempt 2 changes nothing under `packages/db` or any repo (`git show --stat c132c36`), so the attempt-1 run (22 files, 109 tests) still holds.
+- Local equivalent of the new combined-stream worker smoke:
+  - Command: `STOKTOK_DATABASE_URL=postgres://smoke:smoke-pw@127.0.0.1:9/smoke timeout 20 node apps/worker/dist/cli.js signals > out 2>&1`.
+  - Result: exit 1. The output is only `settings.get: database error`, with 0 matches for `smoke-pw|127\.0\.0\.1`.
+  - The stricter stdout+stderr leak check therefore passes on the current build.
+
+### Attempt-2 fixes (each verified)
+- [x] **`apps/worker/README.md:14`** now names `STOKTOK_DATABASE_URL`, server-only. It says no service-role key is needed, and no `SUPABASE_*` remains in the file.
+- [x] **`apps/web/test/healthz.test.ts:28-30`**: the stale `SUPABASE_URL` stub is gone. The R3 guard forbids naming `STOKTOK_DATABASE_URL` outside `pg/client.ts`, so dropping the stub, rather than replacing it, is correct. `vi` is still used (`stubEnv` and `unstubAllEnvs`), and lint is green.
+- [x] **`.env.example:10`**: the example URL uses the per-app role `stoktok:<password>`, and no value was added. check:deploy-env is green.
+- [x] **`scripts/check-image.sh:42`**: the worker smoke now writes `> "$err" 2>&1`, so the leak grep covers both streams. Line 15 adds `DATABASE_URL` to the secret-name regex. Neither Dockerfile sets an env name that would trip it: they set only `NODE_ENV`, `NEXT_TELEMETRY_DISABLED`, `HOSTNAME` and `PORT`. The exit-code capture logic is unchanged and still correct (no `set -e`; `code=$?` comes right after `timeout`).
+
+### Acceptance criteria
+- AC1: satisfied by Ming's decision (single commit accepted; G0 content and mutation proofs verified in attempt 1).
+- AC2 to AC9: still met, with the attempt-1 evidence. Attempt 2 touches no repo, `q()` or guard code, and every check above is green.
+
+### Scope
+Only the files named in Ming's note changed, plus the `work/` state rows. There are no unjustified out-of-plan changes. The four attempt-1 nits stay unchanged as unreachable or design-only. That is acceptable, because nits do not block.
+
+### Rules R1–R10
+No violations. R3: the README and `.env.example` no longer point at a service-role key, and the image check now also rejects any env name containing `DATABASE_URL`.
+
+### Nits (do not block)
+- The `healthz.test.ts` case is named "answers with no env set", but it unsets nothing. It passes because the route reads only `STOKTOK_VERSION`. A name like "answers without any db env" would be more accurate.
+
+### PR carry-over (CI, not reviewer-verifiable here)
+- The first in-image run of `check-image.sh` happens in the CI image job. It covers:
+  - the worker `pg`/`kysely` resolve;
+  - the worker no-hang smoke, which now checks stdout and stderr for leaks;
+  - the web `pg-<hex>` alias import;
+  - the new `DATABASE_URL` env-name rule.
+
+  If any of these fails, it is a fix inside this ticket.
+
+### Follow-ups (out of scope)
+- These are unchanged from attempt 1: STK-081 `end()` marks the handle closed; collapse the fan-outs and remove the PostgREST chunk helpers; `settings.updated_at`; STK-084 env cleanup; STK-082 ai-keys test:db removal; `db:check` re-run in `DB_CHECK_URL` mode.
+- Security's blackholed-host smoke suggestion is not done; it is optional.
