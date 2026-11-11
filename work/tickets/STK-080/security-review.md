@@ -135,3 +135,67 @@
 
 ### Open questions
 - Should N1 block slice a, or move to STK-081? Nothing in `apps/` uses the pool yet (I confirmed in attempt 1 that `@stoktok/db/pg` has no importers), so there is no live exposure in this slice.
+
+## Security review: STK-080 slice a, attempt 3
+
+Commit 90a0875. Read-only static review against pg 8.23.1 and pg-pool 3.14.0 in node_modules. I did not run anything.
+
+**Verdict:** N1 and N2 are fixed. Nothing leaks credentials. There is one new crash risk (🟡 1, below) that should be fixed in this attempt; it is about a 3-line change. 🟡 2 can go to STK-081.
+
+### 🟢 N1 is fixed: session setup now fails closed
+- **How it works (`/home/user/stoktok/packages/db/src/pg/client.ts:30-67`):** setup now runs inside `connect()`, before pg-pool's `client.connect(cb)` callback fires (`pg-pool/index.js:266`). Until that callback succeeds, the client is never handed out and no caller query can be queued on it. That closes the race from attempt 2.
+- **No pool-slot leak on a setup failure:**
+  - pg-pool removes the failed client from `_clients` and moves the queue on (`pg-pool/index.js:274,280`).
+  - `this.end()` (client.ts:54) closes the socket gracefully, because the client is still queryable and has no active query (`pg/lib/client.js:799-824`).
+  - If `end()` stalls, pg-pool's connect timer is still running (it is only cleared inside the callback), so the socket is destroyed after 5 s at most. Close is bounded.
+  - `session.test.ts:39-59` proves this against real PG: the caller rejects, no row is written, `totalCount === 0`, and the healthy pool keeps working.
+- **No leak in the error or the log:**
+  - The rethrown `Error('db session init failed')` has no cause and no message from the original error. The lint disable at client.ts:55 is justified.
+  - The log line (client.ts:53) carries only the SQLSTATE, filtered through `sqlstateOf` (`errors.ts:79-82`).
+  - The `set_config` values are passed as parameters, and both come from config.
+  - pg-pool's `this.log(...)` does nothing because no `log` option is set.
+- **Connect failures still pass the raw pg error through:** `super.connect()` at client.ts:45 is outside the try, so an error like `connect ECONNREFUSED host:port` or `password authentication failed for user "x"` reaches the caller unchanged. This behaved the same before this attempt. `run()` turns it into a clean error (`test-db/errors.test.ts:33-40`). Wrapping every call site in `run()` is already a STK-081 follow-up.
+
+### 🟢 N2 is fixed
+- `DB_IMPORT_RE` (`/home/user/stoktok/packages/db/src/r3-guard.test.ts:23`) now matches `from`, `import()`, `require()` and side-effect imports, with single or double quotes, for `@stoktok/db` and `@stoktok/db/pg`.
+- Those are the only two exports in `packages/db/package.json:7-10`, so no other subpath can slip past.
+- Self-tests at r3-guard.test.ts:67-72, including a negative case for `@stoktok/dbx`.
+
+### 🟡 1. New regression: a dropped socket during session setup can crash the process
+**Where:** client.ts:44-50.
+
+**Why it happens:**
+- Once `super.connect()` has resolved, pg no longer treats the client as connecting.
+- pg-pool only attaches its `'error'` listener inside the connect callback (`pg-pool/index.js:270`), which runs after `initSession` settles.
+- If the socket dies during the `set_config` query, pg rejects the query and then emits `'error'` on the client in the same tick (`pg/lib/client.js:203-222` → `_handleErrorEvent` at :416-423). At that moment the client has no listener. An `'error'` event with no listener becomes an uncaught exception, and the web or worker process crashes.
+- Two things can trigger it:
+  - a network blip or Postgres restart in that window;
+  - pg-pool's own connect timeout: if setup takes past `connectionTimeoutMillis` (5 s), pg-pool calls `stream.destroy()` (`pg-pool/index.js:252-255`). That is an unexpected end, so the same `'error'` event fires.
+- The old `pool.on('connect')` approach did not have this problem, because pg-pool's listener was already attached by then.
+- It fails closed (no wrong-session write) and no credentials leak. It is an availability/DoS problem.
+- Confidence is medium-high from reading the code; it is not reproduced, and `session.test.ts` does not cover it.
+
+**Fix (one of):**
+- **(a) Smallest change:** in `initSession`, after `await super.connect()`, add `const swallow = () => {}; this.on('error', swallow);` and remove it in a `finally`. The query still rejects, so fail-closed behaviour is unchanged.
+- **(b) Use pg-pool 3.14's own `onConnect` option** (`pg-pool/index.js:288-302`). It runs after the listener is attached, ends the client and frees the slot itself. Throw the sanitized `Error('db session init failed')` from the hook, because pg-pool passes the hook's error straight to the caller. Check that `@types/pg` declares the option.
+
+**Test:** add a real-PG case that kills the backend during setup, e.g. `pg_terminate_backend` from the good pool on the `application_name`, or a long setup with a short `connectionTimeoutMillis`. Assert that the process survives and `totalCount` is 0.
+
+### 🟡 2. Exposing `PgDb.pool` adds an easy way to log the database password
+**Where:** client.ts:15-16, 71; exported as a type via `/home/user/stoktok/packages/db/src/pg/index.ts:3`.
+- pg-pool hides `options.password` from logging, but not `options.connectionString` (`pg-pool/index.js:69-80`). Our URL, password included, goes in as `connectionString`.
+- With the pool now a plain property, `console.log(db)` or `util.inspect(db)` shows `pool.options.connectionString`: it sits at depth 2, and Node prints that deep by default.
+- Before this attempt, the pool was only reachable inside Kysely's internals.
+- For R3, this does not give importers more database power than `kysely` (raw `sql` is already possible). The guard still limits importers in `apps/web` to `server/db.ts`. Today nothing outside `packages/db` calls `createPgDb`, so the risk is latent.
+
+**Fix:** replace `pool` with a narrow `stats(): { total: number; idle: number; waiting: number }`, or make `pool` non-enumerable (`Object.defineProperty`). Update `session.test.ts:46` to match. This can go to STK-081 if the orchestrator prefers, since no production code uses it yet.
+
+### 🟢 Minor, no action needed
+- **Pool callback throwing (client.ts:38-41):** if pg-pool's callback threw on the success path, it would become an unhandled rejection. pg-pool's callback does not throw in practice.
+- **Test coverage gap:** `session.test.ts` checks that the log holds no `statement_timeout` text, but not the host or the password. The URL is local, so this is a coverage gap, not a leak.
+
+### Risks
+- 🟡 1 is the only new runtime risk, and it shows up when the database is under load or restarting, which is exactly when the connect timeout fires.
+
+### Open questions
+- Should we switch to pg-pool's built-in `onConnect` (option b) instead of the subclass? It is less code and matches pg-pool's own timeout and cleanup handling. It depends on the pg-pool ≥3.14 pin and on the typings.
