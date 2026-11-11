@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P1 |
 | Areas | security, db, architecture |
-| Attempts | 1 |
+| Attempts | 2 |
 | Created | 2026-11-11 |
 | PR | — |
 
@@ -39,3 +39,4 @@ CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010 (from STK-080). Reference repos: `
 - Ming's manual step: none until STK-084 (master key is set during the cutover; AI keys are re-entered on Settings after it). Open: master key stored in the deployment repo next to the DB password file (shared-Postgres style) or as a GitHub environment secret — decide in this ticket's plan.
 - 2026-11-11 (Ming, after consults): (1) the AI master key is a GitHub environment secret `STOKTOK_AI_KEYS_MASTER_KEY` in the `stoktok` environment (written to the host env file by the deploy workflow in STK-084), with a copy in Ming's password manager; never committed to the deployment repo. (2) Rotation in v1 is a manual runbook in ADR 0011 (delete keys on Settings → swap secret → redeploy → re-enter); a multi-version keyring is a follow-up.
 - Orchestrator note: both consults agree the new migration must NEVER be applied to the live Supabase project (the running release still calls the Vault RPCs); the Vault cleanup on Supabase belongs to the STK-084 runbook. The Vault stub in db:check stays until STK-083.
+- 2026-11-11 (Ming, after review attempt 1 PASS): fix ADR 0011 before the PR, from security-review.md attempt 1: 🟡2 (cutover: issue NEW provider keys at Anthropic/Google, enter those on Settings, revoke the old ones; delete the `stoktok_ai_key_%` Supabase Vault rows only after the rollback window closes — "and", not "or") and 🟡3 (master-key rotation runbook: rows sealed under the old key are not discarded automatically, they disable both providers until deleted on Settings; on suspected master-key compromise also rotate the provider keys; old-key copies must be destroyed once backups sealed under it have aged out, or rotate provider keys). Doc-only; no code change.
