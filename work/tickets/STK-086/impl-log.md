@@ -58,3 +58,38 @@ None. (The extra sentence in `supabase/README.md` and the reworded `ai_key_funct
 ### Scope self-check
 - Could the diff be smaller? No. The bulk is the required rewrite and the new ACL checks file.
 - Diff size: tracked files +234 / -146 per `git diff --stat HEAD`, plus new files `app-db.sql` (37 lines, vendored), `checks-acl.sql` (183 lines) and this log. Nothing committed (per instruction).
+
+## Attempt 2 (REWORK, fixes review Attempt 1 issues 1-3 plus security rec. 4)
+
+### Files touched
+- `scripts/db-check.sh`: required by issues 1-3 and rec. 4.
+  - Issue 1: `DB_CHECK_APP` rejects `postgres`, `template0`, `template1` and `pg_*` (fixed message, exit 1). The URL-mode refusal also counts `pg_database` rows named `$APP`.
+  - Issue 2/3: the URL must match one anchored regex (`postgres(ql)://`, optional userinfo, host `localhost|127.0.0.1`, optional port, path, query) or a fixed message is printed and the script exits 1. `$DB_CHECK_URL` is never echoed. The query string is refused if it contains `%` or a `host`, `hostaddr`, `port` or `service` key (case-insensitive). `host` and `port` now come from the regex groups. `unset PGHOST PGHOSTADDR PGPORT PGSERVICE PGSERVICEFILE PGDATABASE PGUSER PGOPTIONS` near the top.
+  - Rec. 4: role memberships of `$APP` and `$NOBODY` (as role or member) added to `snapshot()`; new canary `no_role_memberships` (`grant pg_read_server_files to $APP`).
+- `scripts/db-check/checks-acl.sql`: new check `no_role_memberships` (`pg_auth_members` empty for app and nobody); `nobody_sequence_privileges` now has an `n >= 1` guard.
+
+### Refusal tests (throwaway PG16.15 TCP cluster, scram, 127.0.0.1:55433, deleted afterwards)
+All exit 1, with nothing created (only `template0 postgres template1` and role `postgres` remained; the superuser password never appeared in the output, `grep -c` = 0):
+- `DB_CHECK_APP=template1`, `postgres`, `pg_x`, `template0`: `DB_CHECK_APP must not be a system database name`.
+- `POSTGRESQL://...` uppercase scheme and keyword conninfo `host=127.0.0.1 port=55433 user=postgres password=... dbname=postgres`: fixed refusal message, no URL echoed.
+- `?%70ort=1`, `?%68ost=example.com`, `?service=x`, `?sslmode=disable&hostaddr=10.0.0.1`, and multi-host `127.0.0.1:55433,example.com:5432`: fixed refusal message.
+- An existing database named `stoktok`: `db:check refuses: ... a database named stoktok (1) ...`; the database was left in place.
+- `PGHOSTADDR=10.255.255.1` in the environment with a valid URL: run succeeded (`db:check OK`), proving the variable is unset and not used.
+
+### Checks
+- `db:check` throwaway mode: exit 0; 14 canaries caught (including `no_role_memberships`), `snapshot unchanged`, `db:check OK`; only the PG16 WARNING.
+- `db:check` URL mode on the scram cluster, run twice: both `db:check OK`, exit 0.
+- `CI=true` db:check: exit 1 in both modes, `Postgres major 16, expected 17 (production)`.
+- `pnpm test`: core 834, sources 35, ai 184, db 115, worker 299, web 352, all passed.
+- `pnpm test:db` (scram TCP cluster): `Test Files 23 passed`, `Tests 127 passed`.
+- `bash scripts/schema-diff.sh`: exit 0, `after rollback ...: 0|0|0`, `A' vs B: identical`.
+- `pnpm typecheck` and `pnpm lint`: pass. No format script exists.
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+- Still open from the review: security rec. 5 (restore PUBLIC CONNECT on `postgres`/`template1`) and rec. 6 (superuser password in psql argv in URL mode); check the deployment repo's add-app-db scripts for system names; ADR 0011/0009 references; large-object ACLs.
+
+### Scope self-check
+Only the two listed files changed; each edit maps to an issue or to the requested rec. 4. Nothing committed.

@@ -32,6 +32,15 @@ begin
   end if;
 end $$;
 
+do $$ -- no_role_memberships (a membership such as pg_read_server_files would widen access without any ACL entry)
+declare n int;
+begin
+  select count(*) into n from pg_auth_members
+    where roleid in (current_setting('dbcheck.app')::regrole, current_setting('dbcheck.nobody')::regrole)
+       or member in (current_setting('dbcheck.app')::regrole, current_setting('dbcheck.nobody')::regrole);
+  if n <> 0 then raise exception 'CHECK FAILED: no_role_memberships (% found)', n; end if;
+end $$;
+
 do $$ -- nobody_table_privileges
 declare nobody name := current_setting('dbcheck.nobody'); n int; bad int;
 begin
@@ -45,11 +54,11 @@ begin
 end $$;
 
 do $$ -- nobody_sequence_privileges
-declare nobody name := current_setting('dbcheck.nobody'); bad int;
+declare nobody name := current_setting('dbcheck.nobody'); n int; bad int;
 begin
-  select count(*) into bad from pg_class
-    where relnamespace = 'public'::regnamespace
-      and case when relkind = 'S' then has_sequence_privilege(nobody, oid, 'USAGE,SELECT,UPDATE') else false end;
+  select count(*), count(*) filter (where has_sequence_privilege(nobody, oid, 'USAGE,SELECT,UPDATE')) into n, bad
+    from pg_class where relnamespace = 'public'::regnamespace and relkind = 'S';
+  if n < 1 then raise exception 'CHECK FAILED: nobody_sequence_privileges (no sequences seen)'; end if;
   if bad <> 0 then raise exception 'CHECK FAILED: nobody_sequence_privileges (% sequences accessible)', bad; end if;
 end $$;
 

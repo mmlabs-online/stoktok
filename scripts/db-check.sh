@@ -18,6 +18,7 @@
 # The generated owner password lives only in a shell variable, a stdin pipe and a per-command PGPASSWORD (never argv).
 # The server major must be 17 (production): a mismatch fails when CI is set and warns otherwise.
 set -euo pipefail
+unset PGHOST PGHOSTADDR PGPORT PGSERVICE PGSERVICEFILE PGDATABASE PGUSER PGOPTIONS
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PSQL_OPTS=(-X -q -v ON_ERROR_STOP=1)
@@ -32,6 +33,11 @@ if ! [[ "$APP" =~ ^[a-z][a-z0-9_]*$ ]]; then
   echo "db:check: DB_CHECK_APP must match ^[a-z][a-z0-9_]*\$" >&2
   exit 1
 fi
+case "$APP" in
+  postgres|template0|template1|pg_*)
+    echo "db:check: DB_CHECK_APP must not be a system database name" >&2
+    exit 1 ;;
+esac
 PW="$(od -An -tx1 -N24 /dev/urandom | tr -d ' \n')"
 
 cleanup() {
@@ -49,16 +55,14 @@ cleanup() {
 trap cleanup EXIT
 
 if [ -n "${DB_CHECK_URL:-}" ]; then
-  host="$(printf '%s' "$DB_CHECK_URL" | sed -E 's#^[a-z]+://([^@/]*@)?(\[[^]]*\]|[^:/?]*).*#\2#')"
-  case "$host" in
-    localhost|127.0.0.1) ;;
-    *) echo "db:check refuses non-local DB_CHECK_URL host '$host'" >&2; exit 1 ;;
-  esac
-  if printf '%s' "$DB_CHECK_URL" | grep -qE '[?&](host|hostaddr|port)='; then
-    echo "db:check refuses a DB_CHECK_URL with host, hostaddr or port query parameters" >&2
-    exit 1
-  fi
-  port="$(printf '%s' "$DB_CHECK_URL" | sed -E 's#^[a-z]+://([^@/]*@)?(\[[^]]*\]|[^:/?]*)(:([0-9]+))?.*#\4#')"
+  # Fail closed: the whole URL must match, so anything unexpected (scheme case, keyword conninfo, multi-host) is refused.
+  url_re='^postgres(ql)?://([^@/?]*@)?(localhost|127\.0\.0\.1)(:[0-9]+)?(/[^?]*)?(\?.*)?$'
+  refuse_url() { echo "db:check refuses DB_CHECK_URL: host must be localhost or 127.0.0.1, with no host, hostaddr, port or service parameters" >&2; exit 1; }
+  [[ "$DB_CHECK_URL" =~ $url_re ]] || refuse_url
+  host="${BASH_REMATCH[3]}"
+  port="${BASH_REMATCH[4]#:}"
+  query="${BASH_REMATCH[6]}"
+  if [[ "$query" == *%* ]] || printf '%s' "$query" | grep -qiE '[?&](host|hostaddr|port|service)(=|&|$)'; then refuse_url; fi
   port="${port:-5432}"
   APP_URL="$(printf '%s' "$DB_CHECK_URL" | sed -E "s#^([a-z]+://[^/?]*)(/[^?]*)?#\\1/$APP#")"
   su_psql() { psql "$DB_CHECK_URL" "${PSQL_OPTS[@]}" "$@"; }
@@ -138,9 +142,10 @@ run_checks() {
 # URL mode: only run on a server that holds nothing else, then clean up what we create.
 if [ -n "${DB_CHECK_URL:-}" ]; then
   other="$(su_psql -At -c "select count(*) from pg_database where datname not in ('postgres','template0','template1')")"
+  same="$(su_psql -At -c "select count(*) from pg_database where datname = '$APP'")"
   roles="$(su_psql -At -c "select count(*) from pg_roles where rolname in ('$APP','$NOBODY','$CANARY_ROLE')")"
-  if [ "$other" != 0 ] || [ "$roles" != 0 ]; then
-    echo "db:check refuses: the server has a non-system database ($other) or one of the roles $APP, $NOBODY, $CANARY_ROLE ($roles); use a throwaway server" >&2
+  if [ "$other" != 0 ] || [ "$roles" != 0 ] || [ "$same" != 0 ]; then
+    echo "db:check refuses: the server has a non-system database ($other), a database named $APP ($same) or one of the roles $APP, $NOBODY, $CANARY_ROLE ($roles); use a throwaway server" >&2
     exit 1
   fi
   CREATED=1
@@ -153,6 +158,7 @@ echo "owner role flags: $(su_psql -At -F'|' -c "select rolsuper, rolcreatedb, ro
 
 snapshot() {
   su_app -At -c "select (select string_agg(concat_ws(',', rolname, rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls, rolcanlogin, rolinherit, rolconnlimit), ';' order by rolname) from pg_roles where rolname in ('$APP', '$NOBODY'))
+    || ' | ' || coalesce((select string_agg(roleid::regrole || '>' || member::regrole, ';' order by roleid, member) from pg_auth_members where roleid in ('$APP'::regrole, '$NOBODY'::regrole) or member in ('$APP'::regrole, '$NOBODY'::regrole)), 'none')
     || ' | ' || (select concat_ws(',', nspowner::regrole, coalesce(nspacl::text, 'null')) from pg_namespace where nspname = 'public')
     || ' | ' || (select concat_ws(',', datdba::regrole, coalesce(datacl::text, 'null')) from pg_database where datname = current_database())"
 }
@@ -187,6 +193,7 @@ canary acl_owner_only_types "create role $C nologin; create type public.dbcheck_
 canary acl_owner_only_schema "create role $C nologin; grant usage on schema public to $C"
 canary acl_owner_only_database "create role $C nologin; grant connect on database $APP to $C"
 canary default_acl_empty "create role $C nologin; alter default privileges for role $APP in schema public grant select on tables to $C"
+canary no_role_memberships "grant pg_read_server_files to $APP"
 canary no_extra_schemas "create schema dbcheck_extra authorization $APP"
 canary owned_by_app "create role $C nologin; alter table public.watchlist owner to $C"
 
