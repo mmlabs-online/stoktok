@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P1 |
 | Areas | architecture, db, data, security |
-| Attempts | 1 |
+| Attempts | 2 |
 | Created | 2026-11-11 |
 | PR | — |
 
@@ -76,3 +76,4 @@ CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010. Depends on STK-081.
 ## Notes / answers from Ming
 - 2026-11-11 (orchestrator): split from STK-081 per its plan.md; Ming's decisions are in work/tickets/STK-080/ticket.md and the shared-Postgres standard above.
 - Ming's manual step: none.
+- 2026-11-11 (Ming, after review attempt 1 REWORK): accept the single commit `ba3dc6c` containing G0–G9. The intent of the "first commit" AC (q() escape hardening and the log guard land before any repo is ported) is met: the reviewer verified the G0 content and its mutation proofs. No history rewrite. Attempt 2 fixes only the small items: `apps/worker/README.md` env instructions (STOKTOK_DATABASE_URL, no service-role key), `apps/web/test/healthz.test.ts` stale SUPABASE_URL stub, `.env.example` example URL with the per-app role, `check-image.sh` leak check also on stdout and `DATABASE_URL` in the secret-name regex, plus any review.md attempt 1 nits that stay in scope.
