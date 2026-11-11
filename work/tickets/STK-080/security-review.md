@@ -85,3 +85,53 @@
 ### Open questions
 - Does the Supabase session pooler need Supabase's root CA for `verify-full` from Node? This decides the STK-081 URL format.
 - Should `createPgDb` enforce an `sslmode` itself, or should `check-deploy-env.sh` own that check?
+
+## Security review: STK-080 slice a, attempt 2
+
+**Verdict: no 🔴.** Eight of the nine requested items are fixed. S2 is only partly fixed: the logging and the discard are correct, but its fail-closed claim does not hold, because the first queued query is usually sent before `client.end()` runs (see 🟡 N1). I only read the code; I ran no tests or builds. S7b and the STK-081 follow-ups are deferred and not raised here.
+
+### Status of the requested items
+| Item | Status | Evidence |
+|---|---|---|
+| S1 `?host=` bypass | ✅ Fixed | `packages/db/test-db/global-setup.ts:10-23` rejects `host`, `hostaddr` and `port` before the hostname check. I checked this against `pg-connection-string@2.14.1/index.js:40-64`: only those query keys override the URL host and port, and both sides decode param names the same way. Unit cases are in `packages/db/src/test-db-guard.test.ts:15-19`. |
+| S2 session init fails open | ⚠️ Partly fixed | `packages/db/src/pg/client.ts:40-44` logs the code only (tested in `client.test.ts:67-81`) and ends the client. It is still not fail-closed (N1). |
+| S3 TLS for the interim hop | ✅ Fixed | `docs/adr/0010-self-hosted-postgres-data-layer.md:10` now requires `verify-full` off the Docker network and makes enforcement an STK-081 obligation. |
+| S4 identifier hardening (optional) | ✅ Done | `packages/db/src/pg/upsert.ts:10-18`. The error message shows only the key, never a value. `jsonb(undefined)` now throws (`:61`). |
+| S5 nit (errno mislabelled as pgCode) | ✅ Fixed | `packages/db/src/errors.ts:79-82`. `sqlstateOf` rejects all-letter `E…` codes; no SQLSTATE class starts with E. The pool error log and the session-init log also use it. |
+| S7a `NEXT_PUBLIC_` regex | ✅ Fixed | `packages/db/src/r3-guard.test.ts:22`, with a self-test at `:63-66`. |
+| S7c `@stoktok/db/pg` importer rule | ✅ Fixed | `r3-guard.test.ts:23,58-59,67-69`. |
+| S8 bundle needles | ✅ Fixed | `scripts/check-no-service-key-in-client.sh:8` adds `kysely`, `pg-pool`, `pg-connection-string` and `db.invalid`. |
+| S9 LIKE overlap / template leak | ✅ Fixed | `global-setup.ts:60` escapes the pattern (`stoktok\_test\_%\_<pid>`), so `…_91234` no longer matches run 1234. `:67-73` drops the template and exits 1 when the migration fails. |
+
+### New findings
+
+🟡 **N1. The S2 fail-closed path loses the race it depends on.** `packages/db/src/pg/client.ts:34-44`
+- The impl-log assumes the `.catch` handler runs before pg sends the next queued query. pg@8.23.1 works the other way round:
+  - On an ErrorResponse, `Query.handleError` calls `reject()` synchronously (`query.js:130-131`). Your `.catch` therefore runs later, as a microtask.
+  - Postgres sends ReadyForQuery right after the ErrorResponse, normally in the same TCP read. The parser handles it in the same synchronous pass. `_handleReadyForQuery`, then `_pulseQueryQueue` (`client.js:373-395, 616-628`), then writes Kysely's queued first query to the socket.
+  - Only after that does `client.end()` run. A query is active by then, so it calls `stream.destroy()` (`client.js:822-824`).
+- **Effect:**
+  - Reads fail, with a connection-terminated error mapped to `DB_ERROR`. No mis-shaped data is served, and nothing leaks.
+  - A write that was already sent can still be executed and committed by the server, without `statement_timeout` and without `TimeZone=UTC`, while the caller sees an error.
+  - The trigger is realistically a config error, such as a bad timeout value or a pooler that rejects `set_config`. That makes this a correctness and claim gap, not an exploit.
+- The unit test uses a fake client with no queue, so it cannot catch this.
+- **Fix (small):** run the session SET before the client is handed out, rather than in a fire-and-forget `connect` listener. Pass Kysely a pool wrapper whose `connect()` does `const c = await pool.connect(); if (!inited.has(c)) { try { await c.query(INIT, …); inited.add(c) } catch (e) { log code; c.release(e as Error); throw e } } return c;`. A `WeakSet` works for `inited`. `release(err)` makes pg-pool destroy the client.
+- Do not use Kysely's `onCreateConnection` for this. If it throws, the pg client is never released (`kysely/dist/dialect/postgres/postgres-driver.js:22-43`), so the pool slot leaks.
+- **Options:** fix this in this slice so ADR §3 and the S2 claim become true, or carry it as an STK-081 acceptance criterion and correct the "handler normally runs first" note in impl-log.md now. Ming's call.
+
+🟢 **N2. The importer regex only matches the `from '…'` form with single quotes.** `packages/db/src/r3-guard.test.ts:23`
+- `import('@stoktok/db/pg')`, `require(...)` and double quotes are not caught. The `'use client'` rule (`:50`) and the driver-import rule still cover the dangerous cases.
+- Optional: reuse the `(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"]` prefix from `:99`.
+
+🟢 **N3.** `packages/db/src/test-db-guard.test.ts:2` imports `test-db/global-setup.ts`, which imports `pg`, into the default `pnpm test` run. It is inside `packages/db/`, so the driver rule (`r3-guard.test.ts:180-183`) still holds, and the module has no import-time side effects. No action needed.
+
+### Recommendations
+- **AC2 / R3:** resolve N1, either now or as an explicit STK-081 acceptance criterion. Either way, correct the S2 claim in impl-log.md.
+- **AC11:** satisfied (S1, S9).
+- Optional: N2.
+
+### Risks
+- Until N1 is fixed, ADR §3 ("Each new connection runs set_config") still overstates the guarantee if init fails.
+
+### Open questions
+- Should N1 block slice a, or move to STK-081? Nothing in `apps/` uses the pool yet (I confirmed in attempt 1 that `@stoktok/db/pg` has no importers), so there is no live exposure in this slice.
