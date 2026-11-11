@@ -1,8 +1,8 @@
-# STK-081: Data layer on pg + Kysely: port repos and callers (STK-080 slice b)
+# STK-081: pg handle hardening: opaque PgDb, q(), session-init crash fix (STK-080 slice b1)
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P1 |
 | Areas | architecture, db, data, security |
 | Attempts | 0 |
@@ -40,3 +40,4 @@ CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010 (from STK-080). Reference repos: `
 - 2026-11-11 (orchestrator): split from STK-080 per its plan.md; Ming's decisions are in work/tickets/STK-080/ticket.md (Postgres container on a shared Docker network, squashed baseline, pg + Kysely, accept Supabase Free pausing).
 - 2026-11-11 (Ming): re-scoped to the deployment repo's shared-Postgres standard (see above); replaces the earlier interim plan of pointing production at Supabase's Postgres over TLS and the stoktok_owner/stoktok_app role pair.
 - Ming's manual step: none (no release is cut for this slice).
+- 2026-11-11 (orchestrator, after planning): narrowed to slice b1 (handle hardening: opaque PgDb + stats(), q()/kyselyOf + run() map hook, session-init crash fix with proxy tests, idempotent end(), jsonb typing, S5 guards) per plan.md; the 17-repo port, callers, bundling and remaining guards moved to STK-085.

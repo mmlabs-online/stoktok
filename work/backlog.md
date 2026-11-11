@@ -74,7 +74,8 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-078 | Portfolio AI summary (STK-064 slice c) | BACKLOG | P2 | data, finance | 0 | 2026-11-10 |
 | STK-079 | AI summary cards on Tài sản and the symbol screen (STK-064 slice d) | BACKLOG | P2 | ui, security | 0 | 2026-11-10 |
 | STK-080 | Postgres driver foundation: pg + Kysely in packages/db (self-hosted Postgres, slice a) | DONE | P1 | architecture, db, data, security | 3 | 2026-11-11 |
-| STK-081 | Data layer on pg + Kysely: port repos and callers (STK-080 slice b) | PLANNING | P1 | architecture, db, data, security | 0 | 2026-11-11 |
+| STK-081 | pg handle hardening: opaque PgDb, q(), session-init crash fix (STK-080 slice b1) | IN_PROGRESS | P1 | architecture, db, data, security | 0 | 2026-11-11 |
 | STK-082 | AI provider keys encrypted app-side, replacing Vault (STK-080 slice c) | BACKLOG | P1 | security, db, architecture | 0 | 2026-11-11 |
 | STK-083 | Plain-Postgres baseline migration, migrate runner and db:check rewrite (STK-080 slice d) | BACKLOG | P1 | db, security | 0 | 2026-11-11 |
 | STK-084 | Register stoktok on the shared Postgres, move data from Supabase, cutover and docs (STK-080 slice e) | BACKLOG | P1 | db, data, architecture, security | 0 | 2026-11-11 |
+| STK-085 | Data layer on pg + Kysely: port the 17 repos, callers, bundling and guards (STK-080 slice b2) | BACKLOG | P1 | architecture, db, data, security | 0 | 2026-11-11 |
