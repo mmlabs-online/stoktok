@@ -31,6 +31,7 @@ CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010 (from STK-080). Reference repos: `
 ## Acceptance criteria
 - [ ] Every item in the scope above is done, following the shared-Postgres standard.
 - [ ] Production keeps working: until STK-084's cutover no stoktok release is cut, and nothing in this slice changes the running release.
+- [ ] (from STK-082 plan F2) The baseline reproduces the STK-082 `ai_keys` shape (ciphertext/iv/auth_tag/key_version/last4/updated_at with their checks) without the real-Vault guard, RLS or grants; drops the db:check Vault stub; lists `ai_keys` as an intentional difference from Supabase in the recorded schema diff.
 - [ ] `typecheck`, `lint`, `test`, `test:db` and `db:check` green; changed `packages/db` logic has tests.
 
 ## Notes / answers from Ming
