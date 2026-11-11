@@ -1,8 +1,8 @@
-# STK-080: Move the data layer from Supabase to Ming's self-hosted Postgres (keep Supabase Auth for now)
+# STK-080: Postgres driver foundation: pg + Kysely in packages/db (self-hosted Postgres, slice a)
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P1 |
 | Areas | architecture, db, data, security |
 | Attempts | 0 |
