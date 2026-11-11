@@ -1,8 +1,5 @@
-// Runs over the migrated template: the 20261111000100 shape (ciphertext columns, no Vault wrappers).
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+// Runs over the migrated template (db/migrations baseline).
 import { sql } from 'kysely';
-import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { DataError } from '../src/errors';
 import { kyselyOf } from '../src/pg/access';
@@ -216,26 +213,5 @@ describe('errors and ended handle', () => {
       expect(String(e)).not.toContain('SENTINEL');
     }
     await dead.drop();
-  });
-});
-
-describe('migration guard', () => {
-  test('refuses a database with a real (non-stub) Vault and leaves ai_keys unchanged', async () => {
-    const own = await freshDb();
-    const file = readFileSync(join(__dirname, '..', '..', '..', 'supabase', 'migrations', '20261111000100_ai_keys_app_encryption.sql'), 'utf8');
-    const c = new pg.Client({ connectionString: own.url });
-    await c.connect();
-    try {
-      await c.query("comment on schema vault is 'x'");
-      await c.query('begin');
-      const err = await c.query(file).then(() => undefined, (e: Error) => e);
-      await c.query('rollback');
-      expect(err?.message).toContain('refusing');
-      const cols = await c.query("select column_name from information_schema.columns where table_name = 'ai_keys' and column_name = 'ciphertext'");
-      expect(cols.rowCount).toBe(1);
-    } finally {
-      await c.end();
-      await own.drop();
-    }
   });
 });

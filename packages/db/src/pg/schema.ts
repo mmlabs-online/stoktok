@@ -1,5 +1,5 @@
 /**
- * Mirrors supabase/migrations; update in the same PR as any migration (until STK-083 makes db/migrations the source).
+ * Mirrors db/migrations; update in the same PR as any migration.
  * Type conventions: bigint -> string on read (R2: core's toSafeInt checks the range), date -> 'YYYY-MM-DD',
  * timestamptz -> ISO string, jsonb is written through jsonb() from ./upsert.
  */

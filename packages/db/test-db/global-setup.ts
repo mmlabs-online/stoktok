@@ -76,10 +76,12 @@ export default async function setup() {
 
 async function migrate(tplUrl: string) {
   await withClient(tplUrl, async (c) => {
-    const roles = readFileSync(join(ROOT, 'scripts/db-check/bootstrap-roles.sql'), 'utf8');
-    await c.query(roles);
-    const dir = join(ROOT, 'supabase/migrations');
-    for (const f of readdirSync(dir).filter((n) => n.endsWith('.sql')).sort()) {
+    const dir = join(ROOT, 'db/migrations');
+    const files = readdirSync(dir).filter((n) => n.endsWith('.sql'));
+    for (const f of files) {
+      if (!/^\d{14}_[a-z0-9_]+\.sql$/.test(f)) throw new Error(`unexpected file in db/migrations: ${f}`);
+    }
+    for (const f of files.sort()) {
       await c.query(`begin;\n${readFileSync(join(dir, f), 'utf8')}\ncommit;`);
     }
   });
