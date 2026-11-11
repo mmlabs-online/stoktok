@@ -12,7 +12,7 @@ IMAGE="$2"
 
 echo "== no secrets in image"
 if docker image inspect "$IMAGE" --format '{{range .Config.Env}}{{println .}}{{end}}' \
-  | cut -d= -f1 | grep -Ei 'KEY|SECRET|TOKEN|PASSWORD'; then
+  | cut -d= -f1 | grep -Ei 'KEY|SECRET|TOKEN|PASSWORD|DATABASE_URL'; then
   echo "::error::secret-like env name in image"; exit 1
 fi
 found=$(docker run --rm --user 0 --entrypoint sh "$IMAGE" -c "find / -xdev -name '.env*' -not -path '/proc/*' 2>/dev/null; true")
@@ -39,7 +39,7 @@ if [ "$APP" = worker ]; then
   err="$(mktemp)"
   timeout 20 docker run --rm --name "$NAME" \
     -e STOKTOK_DATABASE_URL=postgres://smoke:smoke-pw@127.0.0.1:9/smoke \
-    "$IMAGE" signals 2> "$err"
+    "$IMAGE" signals > "$err" 2>&1
   code=$?
   cat "$err"
   leaked="$(grep -cE 'smoke-pw|127\.0\.0\.1' "$err" || true)"

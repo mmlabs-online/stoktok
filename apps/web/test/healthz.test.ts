@@ -25,8 +25,7 @@ describe('GET /healthz', () => {
     expect(GET().headers.get('cache-control')).toBe('no-store');
   });
 
-  it('answers with the Supabase env unset', () => {
-    vi.stubEnv('SUPABASE_URL', undefined);
+  it('answers with no env set', () => {
     expect(GET().status).toBe(200);
   });
 

@@ -146,3 +146,35 @@ None. (The plan says "`pg/client.ts`, `pg/schema.ts` unless typecheck shows a mi
 ### Scope self-check
 - Could the diff be smaller? Not materially: about 70 % of it is the 17-repo port and its moved tests. The deletions (fake-client tests, `client.ts`, `unwrap`/`fetchAll`) are required by the ticket.
 - Diff size: 84 files, +2664 / -1918 lines (including the new untracked files counted via `git add -N`).
+
+## Attempt 2 — 2026-11-11 (REWORK; Ming accepted single commit `ba3dc6c`, no history rewrite, no git used)
+
+### Files touched
+- `apps/worker/README.md`: env line now says `STOKTOK_DATABASE_URL`, server-only, no service-role key. Required because review/security flagged the stale instruction.
+- `apps/web/test/healthz.test.ts`: dropped the stale `SUPABASE_URL` stub; the case is now "answers with no env set". (First tried stubbing `STOKTOK_DATABASE_URL`, but the R3 guard rightly forbids naming it outside `pg/client.ts`.)
+- `.env.example`: example URL comment now `postgres://stoktok:<password>@localhost:5432/stoktok`. No values added.
+- `scripts/check-image.sh`: worker no-hang smoke captures stdout and stderr (`> "$err" 2>&1`) so the leak grep sees both; `DATABASE_URL` added to the secret-name regex.
+
+### Tests added
+None (no logic change).
+
+### Checks
+- `bash -n scripts/check-image.sh`: ok
+- typecheck, lint: exit 0
+- test: core 834, sources 35, ai 184, db 88, worker 299, web 352, all passed
+- build: exit 0
+- db:check: `db:check OK`
+- check:service-key: `OK: no secret or AI SDK material in client bundle`
+- check:deploy-env: `OK: deploy env lists consistent`
+- test:db not run: nothing under `packages/db` changed.
+- No root `format:check` script exists; the one edited TS file was run through oxfmt.
+
+### Out-of-plan files
+None beyond the files Ming's note names.
+
+### Follow-ups / not done
+- Review nits left unchanged as unreachable or design-only: `writable()` `toSafeInt` outside `q()` (assets, corporate-actions), `getAiMonthSpend` NULL mapping, `INSERT_CHUNK_SIZE` constant, `ai-keys.test.ts` format-rejection test name.
+- Security suggestion (blackholed-host smoke) not done.
+
+### Scope self-check
+Only the items in Ming's note changed. Nothing committed.
