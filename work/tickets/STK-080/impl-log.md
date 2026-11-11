@@ -98,3 +98,44 @@ None. (`test-db-guard.test.ts` is a new test file inside `packages/db`, needed f
 
 ### Scope self-check
 - Only the requested items were changed; no commit made.
+
+## Attempt 3 — 2026-11-11 (REWORK: review.md Attempt 2 Issue 1 + nits; not committed)
+
+### Correction to the Attempt 2 S2 claim
+The Attempt 2 note ("the handler normally runs first") was wrong. pg sends the next queued query in the same pass that handles ReadyForQuery, before the rejection handler runs, so a caller write could be committed on an un-initialised session. The `pool.on('connect')` approach is removed.
+
+### Files touched
+| File | Required because |
+|---|---|
+| `packages/db/src/pg/client.ts` | Issue 1: a `SessionClient extends pg.Client` (passed as `Pool({ Client })`) overrides `connect()` (callback and promise forms) to run the `set_config` init before the connection is reported ready. On failure it logs `{event:'db_session_init_failed', code}` only, calls `end()`, and fails the connect with a plain `Error('db session init failed')` (no cause, no message, no host). pg-pool then drops the client and frees the slot. `on('connect')` init removed. `PgDb` now also exposes `pool` so tests can read `totalCount`. Kysely's `onCreateConnection` is not used (slot leak, per N1). |
+| `packages/db/src/pg/client.test.ts` | The fake-client unit test cannot observe the new hook; removed and replaced by the real-PG test below |
+| `packages/db/test-db/session.test.ts` | New real-PG test, see below |
+| `packages/db/src/r3-guard.test.ts` | N2 nit: `DB_IMPORT_RE` now matches double quotes and `import()`/`require()`; self-test cases added |
+
+### Tests added
+- `test-db/session.test.ts` "session setup fails closed": a pool with `statementTimeoutMs: 'x'` (invalid value, so `set_config` fails). Asserts: the caller's `insert` rejects; no row was written; `pool.totalCount` is 0; the log holds the `db_session_init_failed` event and no message text; a healthy pool on the same DB still inserts and reads.
+- `r3-guard.test.ts`: 3 more `DB_IMPORT_RE` cases.
+- Removed: the `client.test.ts` fake-client test (-1).
+
+### Checks (actual output summary)
+Local PG 16 via `initdb`/`pg_ctl` on port 54333 (stopped and removed afterwards).
+- typecheck: all packages Done, no errors
+- lint: all packages Done, no errors (one `preserve-caught-error` disable with a reason: the cause message can carry host/credentials)
+- test: core 834, sources 35, ai 184, db 226 + 1 todo, worker 295, web 349, all passed
+- test:db: 4 files, 15 tests passed
+- db:check: `db:check OK`
+- check:service-key: OK, all needles 0 hits
+
+### Out-of-plan files
+None.
+
+### Notes
+- Nit "grep -F": `check-no-service-key-in-client.sh` already scans with `grep -rlF -- "$needle"` (line 31), so `db.invalid` is already matched literally; no change needed.
+- Nit on STK-081 ticket wording ("cover" -> "keep" for the S7c importer rule) not done: that file is outside this attempt's scope and the review marked it non-blocking.
+- I did not run the new test against the old `on('connect')` code, so I have not shown that it fails there. The reviewer's repro showed the old behaviour.
+
+### Follow-ups
+Unchanged from Attempt 2 (STK-081: sslmode enforcement, `run()` wrapping, S10 timeouts, S6 URL check).
+
+### Scope self-check
+Only Issue 1 and the N2 nit were changed. No commit made.

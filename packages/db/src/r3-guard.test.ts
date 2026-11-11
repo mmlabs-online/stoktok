@@ -20,7 +20,7 @@ const SDK_IMPORT = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"](?:@
 const DRIVER_IMPORT = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"](?:pg|pg-[\w-]+|kysely)(?:\/[\w/-]+)?['"]/;
 
 const NEXT_PUBLIC_RE = /NEXT_PUBLIC_\w*(SERVICE|KEY|DATABASE|DB_|PASSWORD|SECRET)/;
-const DB_IMPORT_RE = /from '@stoktok\/db(?:\/pg)?'/;
+const DB_IMPORT_RE = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"]@stoktok\/db(?:\/pg)?['"]/;
 
 const files = [...walk(join(ROOT, 'apps')), ...walk(join(ROOT, 'packages'))]
   .filter((p) => !p.endsWith('r3-guard.test.ts') && !p.endsWith('next-env.d.ts'))
@@ -66,6 +66,9 @@ describe('R3 guard', () => {
     expect(NEXT_PUBLIC_RE.test('NEXT_PUBLIC_SUPABASE_URL')).toBe(false);
     expect(DB_IMPORT_RE.test(`from '@stoktok/db'`)).toBe(true);
     expect(DB_IMPORT_RE.test(`from '@stoktok/db/pg'`)).toBe(true);
+    expect(DB_IMPORT_RE.test(`from "@stoktok/db"`)).toBe(true);
+    expect(DB_IMPORT_RE.test(`await import('@stoktok/db/pg')`)).toBe(true);
+    expect(DB_IMPORT_RE.test(`require("@stoktok/db")`)).toBe(true);
     expect(DB_IMPORT_RE.test(`from '@stoktok/dbx'`)).toBe(false);
   });
 
