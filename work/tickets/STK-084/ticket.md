@@ -38,3 +38,4 @@ CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010 (from STK-080). Reference repos: `
 - 2026-11-11 (orchestrator): split from STK-080 per its plan.md; Ming's decisions are in work/tickets/STK-080/ticket.md (Postgres container on a shared Docker network, squashed baseline, pg + Kysely, accept Supabase Free pausing).
 - 2026-11-11 (Ming): re-scoped to the deployment repo's shared-Postgres standard (see above); replaces the earlier interim plan of pointing production at Supabase's Postgres over TLS and the stoktok_owner/stoktok_app role pair.
 - Ming's manual step: merge the deployment-repo PR, run the cutover runbook, re-enter AI keys on Settings. Open: how long to keep the Supabase tables after cutover (proposed 14 days).
+- 2026-11-11 (Ming): the GitHub environment secret `STOKTOK_AI_KEYS_MASTER_KEY` is created in the `stoktok` environment (copy in the password manager).
