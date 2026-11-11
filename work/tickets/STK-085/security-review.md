@@ -129,3 +129,37 @@ Files reviewed:
 - /home/user/stoktok/scripts/check-no-service-key-in-client.sh
 - /home/user/stoktok/.env.example
 - /home/user/stoktok/docs/deploy.md (env table)
+
+## Security review: STK-085, attempt 2
+
+**Verdict: no 🔴 and no 🟡.** All four attempt-1 🟢 recommendations are applied correctly, and the changes add no new risk. I only read the four files; I ran nothing. The Docker probes have still never run, because there is no Docker locally.
+
+### 🟢 `scripts/check-image.sh`
+- **:15** The secret-name regex now includes `DATABASE_URL`. With `-Ei`, a baked-in `ENV STOKTOK_DATABASE_URL=…` (or any `*_DATABASE_URL`) now fails the image. Only names are piped, through `cut -d= -f1`, so no value is printed in the CI log.
+- **:42** The no-hang smoke now writes stdout and stderr to the same file (`> "$err" 2>&1`), so the leak grep at **:45** covers both, including the stdout job summary.
+- **:44** `cat "$err"` puts that output in the CI log. That is fine: the URL is a throwaway sentinel, and :49 fails the job if the password or host shows up.
+- The exit code is still taken right after `timeout docker run` (:43). The 124 → hang check (:47) is unchanged.
+
+### 🟢 `apps/worker/README.md:14`
+- It now names `STOKTOK_DATABASE_URL`, marks it server-only (R3) and says no service-role key is needed. The stale instruction to keep a service-role key on dev machines is gone.
+- No `SUPABASE_SERVICE_ROLE_KEY` reference is left in the README.
+
+### 🟢 `apps/web/test/healthz.test.ts:28-30`
+- The `SUPABASE_URL` stub is removed. The test does not name `STOKTOK_DATABASE_URL` either, which is right: the R3 guard allows that name only in `pg/client.ts` and its test.
+- The import-isolation test at :32-36 is unchanged.
+- Nit, no action needed: "answers with no env set" stubs nothing, so it repeats the :11 test and does not prove the env is empty. Coverage is the same as before.
+
+### 🟢 `.env.example:10`
+- The example comment now uses an app role with a placeholder: `postgres://stoktok:<password>@localhost:5432/stoktok`.
+- Every key still has an empty value, and no `NEXT_PUBLIC_` name was added (:3, :6-19).
+
+### Still open (unchanged, not blocking)
+- Not done, as the impl-log says: a no-hang smoke against a blackholed host. The current smoke only uses a refused port (`127.0.0.1:9`).
+- STK-084: check that the shared Postgres's `log_statement` and parameter-logging settings do not log the `ai_key_set` parameters.
+- The new image probes are unverified until the CI image job runs them.
+
+Files reviewed:
+- /home/user/stoktok/scripts/check-image.sh
+- /home/user/stoktok/apps/worker/README.md
+- /home/user/stoktok/apps/web/test/healthz.test.ts
+- /home/user/stoktok/.env.example
