@@ -78,4 +78,4 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-082 | AI provider keys encrypted app-side, replacing Vault (STK-080 slice c) | BACKLOG | P1 | security, db, architecture | 0 | 2026-11-11 |
 | STK-083 | Plain-Postgres baseline migration, migrate runner and db:check rewrite (STK-080 slice d) | BACKLOG | P1 | db, security | 0 | 2026-11-11 |
 | STK-084 | Register stoktok on the shared Postgres, move data from Supabase, cutover and docs (STK-080 slice e) | BACKLOG | P1 | db, data, architecture, security | 0 | 2026-11-11 |
-| STK-085 | Data layer on pg + Kysely: port the 17 repos, callers, bundling and guards (STK-080 slice b2) | BACKLOG | P1 | architecture, db, data, security | 0 | 2026-11-11 |
+| STK-085 | Data layer on pg + Kysely: port the 17 repos, callers, bundling and guards (STK-080 slice b2) | PLANNING | P1 | architecture, db, data, security | 0 | 2026-11-11 |
