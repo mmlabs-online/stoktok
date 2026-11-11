@@ -76,5 +76,5 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-080 | Postgres driver foundation: pg + Kysely in packages/db (self-hosted Postgres, slice a) | DONE | P1 | architecture, db, data, security | 3 | 2026-11-11 |
 | STK-081 | Data layer on pg + Kysely: port repos and callers (STK-080 slice b) | BACKLOG | P1 | architecture, db, data, security | 0 | 2026-11-11 |
 | STK-082 | AI provider keys encrypted app-side, replacing Vault (STK-080 slice c) | BACKLOG | P1 | security, db, architecture | 0 | 2026-11-11 |
-| STK-083 | Plain-Postgres baseline migration, app roles and db:check rewrite (STK-080 slice d) | BACKLOG | P1 | db, security | 0 | 2026-11-11 |
-| STK-084 | Move data from Supabase to self-hosted Postgres, cutover, backups and docs (STK-080 slice e) | BACKLOG | P1 | db, data, architecture, security | 0 | 2026-11-11 |
+| STK-083 | Plain-Postgres baseline migration, migrate runner and db:check rewrite (STK-080 slice d) | BACKLOG | P1 | db, security | 0 | 2026-11-11 |
+| STK-084 | Register stoktok on the shared Postgres, move data from Supabase, cutover and docs (STK-080 slice e) | BACKLOG | P1 | db, data, architecture, security | 0 | 2026-11-11 |
