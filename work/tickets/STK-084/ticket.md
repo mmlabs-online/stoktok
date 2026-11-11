@@ -26,7 +26,7 @@ Follow how TuDoCuaTui (D23–D25) and org-admin-api use the shared Postgres in `
 **Release rule:** STK-081 to STK-083 merge to main but no stoktok release is cut until STK-084; production stays on the current Supabase-backed release until the cutover. There is no interim hop to Supabase's Postgres.
 
 ## Spec reference
-CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010 (from STK-080). Reference repos: `mmlabs-online/deployment` (`postgres/`, `apps/tudocuatui/`, `.github/workflows/deploy-tudocuatui.yml`), `mmlabs-online/TuDoCuaTui` (`server/db.js`, `server/migrator.js`, `db/migrations/README.md`, `work/decisions.md` D23–D25). Depends on STK-083.
+CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010 (from STK-080). Reference repos: `mmlabs-online/deployment` (`postgres/`, `apps/tudocuatui/`, `.github/workflows/deploy-tudocuatui.yml`), `mmlabs-online/TuDoCuaTui` (`server/db.js`, `server/migrator.js`, `db/migrations/README.md`, `work/decisions.md` D23–D25). Depends on STK-083, STK-086 and STK-087.
 
 ## Acceptance criteria
 - [ ] Every item in the scope above is done, following the shared-Postgres standard.
@@ -38,3 +38,5 @@ CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010 (from STK-080). Reference repos: `
 - 2026-11-11 (orchestrator): split from STK-080 per its plan.md; Ming's decisions are in work/tickets/STK-080/ticket.md (Postgres container on a shared Docker network, squashed baseline, pg + Kysely, accept Supabase Free pausing).
 - 2026-11-11 (Ming): re-scoped to the deployment repo's shared-Postgres standard (see above); replaces the earlier interim plan of pointing production at Supabase's Postgres over TLS and the stoktok_owner/stoktok_app role pair.
 - Ming's manual step: merge the deployment-repo PR, run the cutover runbook, re-enter AI keys on Settings. Open: how long to keep the Supabase tables after cutover (proposed 14 days).
+- 2026-11-11 (Ming): the GitHub environment secret `STOKTOK_AI_KEYS_MASTER_KEY` is created in the `stoktok` environment (copy in the password manager).
+- 2026-11-11 (orchestrator): from STK-083 plan follow-ups: optional live-Supabase `pg_dump --schema-only` comparison in the cutover runbook (F1); `idle_in_transaction_session_timeout` set in `pg/client.ts` session init or the deployment repo DB config, not a migration (F2); update the CLAUDE.md Stack DB row and "Migrations in `supabase/`" (F3).

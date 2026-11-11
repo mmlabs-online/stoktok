@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P1 |
 | Areas | db, security |
-| Attempts | 0 |
+| Attempts | 2 |
 | Created | 2026-11-11 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/63 |
 
 ## Goal
 Split from STK-080 (see work/tickets/STK-080/plan.md "Split proposal"; consults in work/tickets/STK-080/), re-scoped on 2026-11-11 to the deployment repo's shared-Postgres standard. Scope:
@@ -38,3 +38,5 @@ CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010 (from STK-080). Reference repos: `
 - 2026-11-11 (orchestrator): split from STK-080 per its plan.md; Ming's decisions are in work/tickets/STK-080/ticket.md (Postgres container on a shared Docker network, squashed baseline, pg + Kysely, accept Supabase Free pausing).
 - 2026-11-11 (Ming): re-scoped to the deployment repo's shared-Postgres standard (see above); replaces the earlier interim plan of pointing production at Supabase's Postgres over TLS and the stoktok_owner/stoktok_app role pair.
 - Ming's manual step: none (no release is cut for this slice).
+- 2026-11-11 (orchestrator, after planning): narrowed to slice 1 (baseline + faithfulness proof + test:db template + CI on PG17) per plan.md; the db:check rewrite moved to STK-086 and the migrate runner to STK-087.
+- 2026-11-11 (Ming, after review attempt 1 PASS): fix before the PR, from security-review.md attempt 1: (1) harden `migrations-lint.test.ts` — tokenise E-strings, double-quoted identifiers and digit dollar tags, widen the `set role` pattern (`set local/session role`, `reset role`, `set_config('role'`, `session authorization`), ban `create schema` and `owner to`, accept `do language … $$` / `do '…'` for the baseline rule, with a fixture per case; (2) in `baseline.test.ts` add PUBLIC-ACL checks on `pg_class.relacl` and `pg_namespace.nspacl` (using `acldefault` for NULL ACLs) and a "no schemas beyond public, pg_*, information_schema" check. Also quote `-k "$TMP"` in `schema-diff.sh`.

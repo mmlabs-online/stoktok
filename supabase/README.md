@@ -1,5 +1,7 @@
 # supabase
 
+> **Frozen reference since STK-083.** The schema source is `db/migrations` (squashed baseline). Never edit these files. `test:db` no longer applies them; `db:check` still does until STK-086; `scripts/schema-diff.sh` uses them for the faithfulness proof.
+
 Database schema for stoktok (dedicated Supabase project, RLS on, server-only access via `service_role`).
 
 ## Layout
