@@ -43,6 +43,9 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
+      - run: pnpm test:db
+        env:
+          DB_TEST_URL: postgresql://postgres:postgres@localhost:5432/postgres
       - run: pnpm check:service-key
       - run: pnpm check:deploy-env
       - run: pnpm db:check
