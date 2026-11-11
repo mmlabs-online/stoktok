@@ -7,7 +7,7 @@
 | Areas | architecture, db, data, security |
 | Attempts | 3 |
 | Created | 2026-11-11 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/59 |
 
 ## Goal
 Replace supabase-js / PostgREST data access with direct Postgres access from server code (web server and worker) against the Postgres instance Ming runs on the home server, managed with pgAdmin. Login stays on Supabase Auth until the shared mmlabs user service exists. Existing data moves over from Supabase.
