@@ -1,4 +1,4 @@
--- STK-003 schema checks. Run with ON_ERROR_STOP=1; any failure raises 'CHECK FAILED: <name>'.
+-- STK-003 schema checks, run as the (non-superuser) app owner role (STK-086). Run with ON_ERROR_STOP=1; any failure raises 'CHECK FAILED: <name>'.
 -- Everything runs in one transaction that is rolled back at the end.
 begin;
 
@@ -25,6 +25,34 @@ begin
   if not found or r.data_type <> typ or (not_null is not null and (r.is_nullable = 'NO') <> not_null) then
     raise exception 'CHECK FAILED: column %.% expected % (not_null=%), got %', tbl, col, typ, not_null, r;
   end if;
+end $$;
+
+do $$ -- runs_as_owner
+begin
+  if not exists (select 1 from pg_database d join pg_roles r on r.oid = d.datdba
+                 where d.datname = current_database() and r.rolname = current_user and not r.rolsuper) then
+    raise exception 'CHECK FAILED: runs_as_owner (% is not a non-superuser database owner)', current_user;
+  end if;
+end $$;
+
+do $$ -- owner_role_flags
+begin
+  if exists (select 1 from pg_roles where rolname = current_user
+             and (rolsuper or rolcreaterole or rolcreatedb or rolreplication or rolbypassrls)) then
+    raise exception 'CHECK FAILED: owner_role_flags (% has a privileged flag)', current_user;
+  end if;
+end $$;
+
+do $$ -- owner_cannot_create_role
+begin
+  perform pg_temp.expect_fail('owner_cannot_create_role', 'create role dbcheck_zz', array['42501']);
+end $$;
+
+do $$ -- extensions_plpgsql_only
+declare got text[];
+begin
+  select array_agg(extname order by extname) into got from pg_extension;
+  if got is distinct from array['plpgsql'] then raise exception 'CHECK FAILED: extensions_plpgsql_only (got %)', got; end if;
 end $$;
 
 do $$ -- tables_exist
@@ -183,12 +211,12 @@ begin
   perform pg_temp.assert_col('signals', 'computed_at', 'timestamp with time zone', true);
 end $$;
 
-do $$ -- rls_enabled_all_tables
+do $$ -- rls_disabled_all_tables (single-owner model: no RLS, access is the owner role only)
 declare n int;
 begin
   select count(*) into n from pg_class c join pg_namespace s on s.oid = c.relnamespace
-    where s.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity;
-  if n <> 0 then raise exception 'CHECK FAILED: rls_enabled_all_tables (% without RLS)', n; end if;
+    where s.nspname = 'public' and c.relkind in ('r', 'p') and (c.relrowsecurity or c.relforcerowsecurity);
+  if n <> 0 then raise exception 'CHECK FAILED: rls_disabled_all_tables (% with RLS)', n; end if;
 end $$;
 
 do $$ -- no_policies
@@ -198,109 +226,57 @@ begin
   if n <> 0 then raise exception 'CHECK FAILED: no_policies (% found)', n; end if;
 end $$;
 
-do $$ -- no_grants_anon_authenticated_public (tables + sequences)
+do $$ -- owner_can_read_write
 declare n int;
 begin
-  select count(*) into n from information_schema.role_table_grants
-    where table_schema = 'public' and grantee in ('anon', 'authenticated', 'PUBLIC');
-  if n <> 0 then raise exception 'CHECK FAILED: no_grants_anon_authenticated_public (% table grants)', n; end if;
-  select count(*) into n from information_schema.role_usage_grants
-    where object_schema = 'public' and object_type = 'SEQUENCE' and grantee in ('anon', 'authenticated', 'PUBLIC');
-  if n <> 0 then raise exception 'CHECK FAILED: no_grants_anon_authenticated_public (% sequence grants)', n; end if;
-end $$;
-
-do $$ -- anon_denied / authenticated_denied (select and insert on every table)
-declare t text; r text;
-begin
-  foreach r in array array['anon', 'authenticated'] loop
-    for t in select tablename from pg_tables where schemaname = 'public' loop
-      execute format('set local role %I', r);
-      perform pg_temp.expect_fail(r || '_denied_select ' || t, format('select 1 from public.%I', t), array['42501']);
-      perform pg_temp.expect_fail(r || '_denied_insert ' || t, format('insert into public.%I default values', t), array['42501']);
-      reset role;
-    end loop;
-  end loop;
-end $$;
-
-do $$ -- rls_blocks_even_with_grant
-declare n int;
-begin
-  begin
-    insert into public.watchlist (symbol) values ('VNM');
-    grant select on public.watchlist to anon;
-    set local role anon;
-    select count(*) into n from public.watchlist;
-    reset role;
-    if n <> 0 then raise exception 'CHECK FAILED: rls_blocks_even_with_grant (anon saw % rows)', n; end if;
-    raise exception 'ROLLBACK_SENTINEL';
-  exception when others then
-    reset role;
-    if sqlerrm <> 'ROLLBACK_SENTINEL' then raise; end if;
-  end;
-end $$;
-
-do $$ -- service_role_can_read_write
-declare n int;
-begin
-  set local role service_role;
   insert into public.watchlist (symbol) values ('FPT');
   select count(*) into n from public.watchlist where symbol = 'FPT';
   delete from public.watchlist where symbol = 'FPT';
-  reset role;
-  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write'; end if;
+  if n <> 1 then raise exception 'CHECK FAILED: owner_can_read_write'; end if;
 end $$;
 
-do $$ -- service_role_can_read_write_symbols
+do $$ -- owner_can_read_write_symbols
 declare n int;
 begin
-  set local role service_role;
   insert into public.symbols (symbol, exchange) values ('FPT', 'HOSE');
   select count(*) into n from public.symbols where symbol = 'FPT';
   delete from public.symbols where symbol = 'FPT';
-  reset role;
-  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_symbols'; end if;
+  if n <> 1 then raise exception 'CHECK FAILED: owner_can_read_write_symbols'; end if;
 end $$;
 
-do $$ -- service_role_can_read_write_financial_lines
+do $$ -- owner_can_read_write_financial_lines
 declare n int;
 begin
-  set local role service_role;
   insert into public.financial_lines (symbol, period_kind, period, statement, line, value, source, fetched_at)
     values ('FPT', 'quarter', '2026Q1', 'income', 'net_income_parent', -5, 'x', now());
   select count(*) into n from public.financial_lines where symbol = 'FPT';
   delete from public.financial_lines where symbol = 'FPT';
-  reset role;
-  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_financial_lines'; end if;
+  if n <> 1 then raise exception 'CHECK FAILED: owner_can_read_write_financial_lines'; end if;
 end $$;
 
-do $$ -- service_role_can_read_write_news
+do $$ -- owner_can_read_write_news
 declare n int;
 begin
-  set local role service_role;
   insert into public.news (url, title, source, credibility, published_at, fetched_at, symbols)
     values ('https://cafef.vn/a-1.chn', 't', 'CafeF', 'established_outlet', now(), now(), '{HPG,VIC}');
   select count(*) into n from public.news where symbols @> '{HPG}';
   delete from public.news where url = 'https://cafef.vn/a-1.chn';
-  reset role;
-  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_news'; end if;
+  if n <> 1 then raise exception 'CHECK FAILED: owner_can_read_write_news'; end if;
 end $$;
 
-do $$ -- service_role_can_read_write_financials
+do $$ -- owner_can_read_write_financials
 declare n int;
 begin
-  set local role service_role;
   insert into public.financials (symbol, period, eps, bvps, revenue, net_income, source, fetched_at)
     values ('FPT', '2026Q1', 1000, 20000, 1000000000, 100000000, 'x', now());
   select count(*) into n from public.financials where symbol = 'FPT';
   delete from public.financials where symbol = 'FPT';
-  reset role;
-  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_financials'; end if;
+  if n <> 1 then raise exception 'CHECK FAILED: owner_can_read_write_financials'; end if;
 end $$;
 
-do $$ -- service_role_can_read_write_signals
+do $$ -- owner_can_read_write_signals
 declare n int; id1 bigint; id2 bigint;
 begin
-  set local role service_role;
   insert into public.signals (symbol, rule_id, horizon, signal_date, status, label, value, data_fresh, inputs_snapshot, rule_version, computed_at)
     values ('FPT', 'price_vs_ma_50', 'medium', '2026-10-26', 'ok', 'neutral', 0, true, '{}', 1, now())
     returning id into id1;
@@ -310,14 +286,12 @@ begin
     returning id into id2;
   select count(*) into n from public.signals where symbol = 'FPT';
   delete from public.signals where symbol = 'FPT';
-  reset role;
-  if n <> 1 or id1 <> id2 then raise exception 'CHECK FAILED: service_role_can_read_write_signals'; end if;
+  if n <> 1 or id1 <> id2 then raise exception 'CHECK FAILED: owner_can_read_write_signals'; end if;
 end $$;
 
-do $$ -- service_role_can_read_write_prices_intraday
+do $$ -- owner_can_read_write_prices_intraday
 declare n int; p int;
 begin
-  set local role service_role;
   insert into public.prices_intraday (symbol, ts, price, volume, source, fetched_at)
     values ('FPT', '2026-11-05T03:00:00Z', 102000, 10, 'x', now());
   insert into public.prices_intraday (symbol, ts, price, volume, source, fetched_at)
@@ -325,8 +299,7 @@ begin
     on conflict (symbol, ts) do update set price = excluded.price, volume = excluded.volume, fetched_at = excluded.fetched_at;
   select count(*), max(price) into n, p from public.prices_intraday where symbol = 'FPT';
   delete from public.prices_intraday where symbol = 'FPT';
-  reset role;
-  if n <> 1 or p <> 102100 then raise exception 'CHECK FAILED: service_role_can_read_write_prices_intraday'; end if;
+  if n <> 1 or p <> 102100 then raise exception 'CHECK FAILED: owner_can_read_write_prices_intraday'; end if;
 end $$;
 
 do $$ -- lottery_columns
@@ -339,10 +312,9 @@ begin
   perform pg_temp.assert_col('lottery_draws', 'draw_date', 'date', true);
 end $$;
 
-do $$ -- service_role_can_read_write_lottery_draws
+do $$ -- owner_can_read_write_lottery_draws
 declare n int; j bigint;
 begin
-  set local role service_role;
   insert into public.lottery_draws (game, draw_no, draw_date, numbers, jackpot_vnd, jackpot_winners, source, fetched_at)
     values ('mega645', 1, '2026-11-05', '{1,2,3,4,5,6}', 12000000000, 0, 'x', now());
   insert into public.lottery_draws (game, draw_no, draw_date, numbers, jackpot_vnd, jackpot_winners, source, fetched_at)
@@ -350,21 +322,18 @@ begin
     on conflict (game, draw_no) do update set jackpot_vnd = excluded.jackpot_vnd;
   select count(*), max(jackpot_vnd) into n, j from public.lottery_draws where game = 'mega645';
   delete from public.lottery_draws where game = 'mega645';
-  reset role;
-  if n <> 1 or j <> 13000000000 then raise exception 'CHECK FAILED: service_role_can_read_write_lottery_draws'; end if;
+  if n <> 1 or j <> 13000000000 then raise exception 'CHECK FAILED: owner_can_read_write_lottery_draws'; end if;
 end $$;
 
-do $$ -- service_role_can_read_write_lottery_tickets
+do $$ -- owner_can_read_write_lottery_tickets
 declare n int; st text; g bigint;
 begin
-  set local role service_role;
   insert into public.lottery_tickets (game, draw_no, lines, cost_vnd, channel, purchased_at)
     values ('mega645', 1, '[[1,2,3,4,5,6]]', 10000, 'sms', now());
   update public.lottery_tickets set status = 'won', prize_tier = 'third', gross_vnd = 30000, checked_at = now() where game = 'mega645';
   select count(*), max(status), max(gross_vnd) into n, st, g from public.lottery_tickets where game = 'mega645';
   delete from public.lottery_tickets where game = 'mega645';
-  reset role;
-  if n <> 1 or st <> 'won' or g <> 30000 then raise exception 'CHECK FAILED: service_role_can_read_write_lottery_tickets'; end if;
+  if n <> 1 or st <> 'won' or g <> 30000 then raise exception 'CHECK FAILED: owner_can_read_write_lottery_tickets'; end if;
 end $$;
 
 do $$ -- rejects_bad_rows
@@ -514,16 +483,14 @@ begin
   perform pg_temp.assert_col('ai_usage', 'error_code', 'text', false);
 end $$;
 
-do $$ -- service_role_can_read_write_ai_usage
+do $$ -- owner_can_read_write_ai_usage
 declare n int;
 begin
-  set local role service_role;
   insert into public.ai_usage (provider, model, task, status, reserved_micro_usd)
     values ('google', 'gemini-2.5-flash', 'summary', 'reserved', 100);
   select count(*) into n from public.ai_usage where task = 'summary';
   delete from public.ai_usage where task = 'summary';
-  reset role;
-  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_ai_usage'; end if;
+  if n <> 1 then raise exception 'CHECK FAILED: owner_can_read_write_ai_usage'; end if;
 end $$;
 
 do $$ -- ai_usage_negatives
@@ -559,17 +526,15 @@ begin
   perform pg_temp.assert_col('ai_summaries', 'created_at', 'timestamp with time zone', true);
 end $$;
 
-do $$ -- service_role_can_read_write_ai_summaries
+do $$ -- owner_can_read_write_ai_summaries
 declare n int;
 begin
-  set local role service_role;
   insert into public.ai_summaries (scope, symbol, summary_date, generator, body)
     values ('symbol', 'VNM', '2026-11-10', 'template', '{"sections":[]}');
   update public.ai_summaries set input_ids = '{px:VNM:2026-11-10}' where symbol = 'VNM';
   select count(*) into n from public.ai_summaries where symbol = 'VNM' and input_ids = '{px:VNM:2026-11-10}';
   delete from public.ai_summaries where symbol = 'VNM';
-  reset role;
-  if n <> 1 then raise exception 'CHECK FAILED: service_role_can_read_write_ai_summaries'; end if;
+  if n <> 1 then raise exception 'CHECK FAILED: owner_can_read_write_ai_summaries'; end if;
 end $$;
 
 do $$ -- ai_summaries_negatives
@@ -638,7 +603,6 @@ declare
   w_from timestamptz := now() - interval '1 day';
   w_to timestamptz := now() + interval '1 day';
 begin
-  set local role service_role;
   select * into r from public.ai_reserve('google', 'gemini-2.5-flash', 'summary', 600, 1000, w_from, w_to);
   if not r.granted or r.spent_micro_usd <> 0 then raise exception 'CHECK FAILED: ai_reserve_gate (under cap: %)', r; end if;
   first_id := r.usage_id;
@@ -668,7 +632,6 @@ begin
   if (select count(*) from public.ai_usage) <> n then raise exception 'CHECK FAILED: ai_reserve_gate (rejected calls inserted rows)'; end if;
   select * into r from public.ai_reserve('google', 'gemini-2.5-flash', 'summary', 1, 1000000, now(), now() + interval '1 day');
   if not r.granted then raise exception 'CHECK FAILED: ai_reserve_gate (window starting at now: %)', r; end if;
-  reset role;
   delete from public.ai_usage;
 end $$;
 
@@ -676,11 +639,8 @@ do $$ -- ai_functions_locked
 declare f text;
 begin
   foreach f in array array['public.ai_reserve(text,text,text,bigint,bigint,timestamptz,timestamptz)', 'public.ai_month_spend(timestamptz,timestamptz)'] loop
-    if has_function_privilege('anon', f, 'execute') or has_function_privilege('authenticated', f, 'execute') then
-      raise exception 'CHECK FAILED: ai_functions_locked (anon/authenticated can execute %)', f;
-    end if;
-    if not has_function_privilege('service_role', f, 'execute') then
-      raise exception 'CHECK FAILED: ai_functions_locked (service_role cannot execute %)', f;
+    if not has_function_privilege(current_user, f, 'execute') then
+      raise exception 'CHECK FAILED: ai_functions_locked (owner cannot execute %)', f;
     end if;
   end loop;
   if exists (
@@ -706,22 +666,6 @@ begin
   end if;
 end $$;
 
-do $$ -- ai_keys_privileges
-declare v text;
-begin
-  foreach v in array array['select', 'insert', 'update', 'delete'] loop
-    if not has_table_privilege('service_role', 'public.ai_keys', v) then
-      raise exception 'CHECK FAILED: ai_keys_privileges (service_role cannot %)', v;
-    end if;
-    if has_table_privilege('anon', 'public.ai_keys', v) or has_table_privilege('authenticated', 'public.ai_keys', v) then
-      raise exception 'CHECK FAILED: ai_keys_privileges (anon/authenticated can %)', v;
-    end if;
-  end loop;
-  if not (select c.relrowsecurity from pg_class c where c.oid = 'public.ai_keys'::regclass) then
-    raise exception 'CHECK FAILED: ai_keys_privileges (RLS off)';
-  end if;
-end $$;
-
 do $$ -- ai_keys_constraints
 declare
   ct20 text := 'decode(repeat(''00'', 20), ''hex'')';
@@ -729,7 +673,6 @@ declare
   tag16 text := 'decode(repeat(''00'', 16), ''hex'')';
   n int;
 begin
-  set local role service_role;
   -- valid rows at the ciphertext length bounds
   insert into public.ai_keys (provider, ciphertext, iv, auth_tag, key_version, last4) values ('anthropic', decode(repeat('00', 20), 'hex'), decode(repeat('00', 12), 'hex'), decode(repeat('00', 16), 'hex'), 1, 'abcd');
   insert into public.ai_keys (provider, ciphertext, iv, auth_tag, key_version, last4) values ('google', decode(repeat('00', 256), 'hex'), decode(repeat('00', 12), 'hex'), decode(repeat('00', 16), 'hex'), 1, 'abcd');
@@ -764,13 +707,12 @@ begin
     raise exception 'CHECK FAILED: ai_keys_constraints (upsert left % rows)', n;
   end if;
   delete from public.ai_keys;
-  reset role;
 end $$;
 
 do $$ -- ai_key_functions_gone
 begin
   if exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname in ('ai_key_set', 'ai_key_delete', 'ai_key_secrets')) then
-    raise exception 'CHECK FAILED: ai_key_functions_gone (a Vault wrapper still exists)';
+    raise exception 'CHECK FAILED: ai_key_functions_gone (a key wrapper function still exists)';
   end if;
 end $$;
 
