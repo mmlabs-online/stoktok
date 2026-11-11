@@ -3,6 +3,7 @@ import { sql } from 'kysely';
 import { toSafeInt } from '@stoktok/core';
 import { run } from '../src/errors';
 import { chunkForParams, jsonb, upsertInto } from '../src/pg/upsert';
+import { kyselyOf } from '../src/pg/access';
 import { freshDb, type TestDb } from './harness';
 
 let t: TestDb;
@@ -25,20 +26,20 @@ const price = {
   fetched_at: '2026-11-10T10:00:00+00:00',
 };
 const key = ['symbol', 'trade_date'] as const;
-const read = (symbol: string) => t.pgDb.kysely.selectFrom('prices_daily').selectAll().where('symbol', '=', symbol).executeTakeFirstOrThrow();
+const read = (symbol: string) => kyselyOf(t.pgDb).selectFrom('prices_daily').selectAll().where('symbol', '=', symbol).executeTakeFirstOrThrow();
 
 describe('upsertInto against real Postgres', () => {
   test('full-row upsert replaces every provided column', async () => {
-    await upsertInto(t.pgDb.kysely, 'prices_daily', [{ ...price, symbol: 'FULL', foreign_net: 5 }], key).execute();
-    await upsertInto(t.pgDb.kysely, 'prices_daily', [{ ...price, symbol: 'FULL', foreign_net: 7, close: 12, high: 13, source: 's2' }], key).execute();
+    await upsertInto(kyselyOf(t.pgDb), 'prices_daily', [{ ...price, symbol: 'FULL', foreign_net: 5 }], key).execute();
+    await upsertInto(kyselyOf(t.pgDb), 'prices_daily', [{ ...price, symbol: 'FULL', foreign_net: 7, close: 12, high: 13, source: 's2' }], key).execute();
     const r = await read('FULL');
     expect(r).toMatchObject({ close: 12, high: 13, source: 's2', trade_date: '2026-11-10', fetched_at: '2026-11-10T10:00:00+00:00' });
     expect(toSafeInt(r.foreign_net, 'foreign_net')).toBe(7);
   });
 
   test('partial-column upsert leaves other columns unchanged', async () => {
-    await upsertInto(t.pgDb.kysely, 'prices_daily', [{ ...price, symbol: 'PART', foreign_net: 5 }], key).execute();
-    await upsertInto(t.pgDb.kysely, 'prices_daily', [{ ...price, symbol: 'PART', close: 12, high: 12, source: 's2' }], key).execute();
+    await upsertInto(kyselyOf(t.pgDb), 'prices_daily', [{ ...price, symbol: 'PART', foreign_net: 5 }], key).execute();
+    await upsertInto(kyselyOf(t.pgDb), 'prices_daily', [{ ...price, symbol: 'PART', close: 12, high: 12, source: 's2' }], key).execute();
     const r = await read('PART');
     expect(toSafeInt(r.foreign_net, 'foreign_net')).toBe(5);
     expect(r).toMatchObject({ close: 12, source: 's2' });
@@ -46,34 +47,34 @@ describe('upsertInto against real Postgres', () => {
 
   test('ignoreDuplicates returns only inserted ids', async () => {
     const row = (url: string) => ({ url, title: 't', source: 's', credibility: 'established_outlet', published_at: '2026-11-10T00:00:00+00:00', fetched_at: '2026-11-10T00:00:00+00:00' });
-    await upsertInto(t.pgDb.kysely, 'news', [row('https://a.test/1')], ['url'], { ignoreDuplicates: true }).execute();
-    const out = await upsertInto(t.pgDb.kysely, 'news', [row('https://a.test/1'), row('https://a.test/2')], ['url'], { ignoreDuplicates: true })
+    await upsertInto(kyselyOf(t.pgDb), 'news', [row('https://a.test/1')], ['url'], { ignoreDuplicates: true }).execute();
+    const out = await upsertInto(kyselyOf(t.pgDb), 'news', [row('https://a.test/1'), row('https://a.test/2')], ['url'], { ignoreDuplicates: true })
       .returning('id')
       .execute();
     expect(out).toHaveLength(1);
   });
 
   test('duplicate conflict key in one batch fails with 21000 → DB_ERROR', async () => {
-    const q = upsertInto(t.pgDb.kysely, 'prices_daily', [{ ...price, symbol: 'DUP' }, { ...price, symbol: 'DUP', close: 10 }], key);
+    const q = upsertInto(kyselyOf(t.pgDb), 'prices_daily', [{ ...price, symbol: 'DUP' }, { ...price, symbol: 'DUP', close: 10 }], key);
     const err = await run({ table: 'prices_daily', op: 'upsert' }, () => q.execute()).catch((e: unknown) => e);
     expect(err).toMatchObject({ code: 'DB_ERROR', pgCode: '21000' });
   });
 
   test('jsonb helper round-trips an array and an object', async () => {
-    await t.pgDb.kysely
+    await kyselyOf(t.pgDb)
       .insertInto('signals')
       .values({
         symbol: 'AAA', rule_id: 'r', horizon: 'medium', signal_date: '2026-11-10', status: 'suppressed', data_fresh: false,
-        reason_codes: ['stale'], inputs_snapshot: jsonb({ refs: [1, 2], n: { x: 1 } }) as never, rule_version: 1, computed_at: '2026-11-10T00:00:00+00:00',
+        reason_codes: ['stale'], inputs_snapshot: jsonb({ refs: [1, 2], n: { x: 1 } }), rule_version: 1, computed_at: '2026-11-10T00:00:00+00:00',
       })
       .execute();
-    const s = await t.pgDb.kysely.selectFrom('signals').select('inputs_snapshot').executeTakeFirstOrThrow();
+    const s = await kyselyOf(t.pgDb).selectFrom('signals').select('inputs_snapshot').executeTakeFirstOrThrow();
     expect(s.inputs_snapshot).toEqual({ refs: [1, 2], n: { x: 1 } });
-    await t.pgDb.kysely
+    await kyselyOf(t.pgDb)
       .insertInto('ai_summaries')
-      .values({ scope: 'portfolio', summary_date: '2026-11-10', generator: 'template', body: jsonb({ sections: [{ a: 1 }] }) as never })
+      .values({ scope: 'portfolio', summary_date: '2026-11-10', generator: 'template', body: jsonb({ sections: [{ a: 1 }] }) })
       .execute();
-    const a = await t.pgDb.kysely.selectFrom('ai_summaries').select(['body', 'input_ids', 'created_at']).executeTakeFirstOrThrow();
+    const a = await kyselyOf(t.pgDb).selectFrom('ai_summaries').select(['body', 'input_ids', 'created_at']).executeTakeFirstOrThrow();
     expect(a.body).toEqual({ sections: [{ a: 1 }] });
     expect(a.input_ids).toEqual([]);
     expect(a.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+\+00:00$/);
@@ -83,8 +84,8 @@ describe('upsertInto against real Postgres', () => {
     const rows = Array.from({ length: 10 }, (_, i) => ({ ...price, symbol: `CH${i}` }));
     const chunks = chunkForParams(rows, 25);
     expect(chunks.length).toBeGreaterThan(1);
-    for (const c of chunks) await upsertInto(t.pgDb.kysely, 'prices_daily', c, key).execute();
-    const { rows: n } = await sql<{ n: string }>`select count(*) as n from prices_daily where symbol like 'CH%'`.execute(t.pgDb.kysely);
+    for (const c of chunks) await upsertInto(kyselyOf(t.pgDb), 'prices_daily', c, key).execute();
+    const { rows: n } = await sql<{ n: string }>`select count(*) as n from prices_daily where symbol like 'CH%'`.execute(kyselyOf(t.pgDb));
     expect(n[0]!.n).toBe('10');
   });
 });

@@ -18,6 +18,7 @@ Ming decided on 2026-11-11 to move stoktok's data layer from Supabase (supabase-
 10. **Data move (STK-084).** Data-only move and cutover. Migrations run as a one-shot `migrate` service after a pre-migration dump, following TuDoCuaTui's `server/migrator.js`. Backups come from the `pg-backup` sidecar. No stoktok release is cut between STK-081 and the STK-084 cutover.
 11. **Supabase Free pausing is accepted, no keep-alive** (Ming). Supabase remains for Auth only; risk: `/login` is unavailable after inactivity.
 12. **Tests.** Real-Postgres `pnpm test:db` is required in CI and fails (never skips) without `DB_TEST_URL`; it refuses a non-local host. Pure unit tests stay in `pnpm test`, which needs no database. Locally, `test:db` needs a Postgres on localhost, for example `docker run -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:17` with `DB_TEST_URL=postgresql://postgres:postgres@localhost:5432/postgres`. It clones a migrated template database per test file and drops all of them at teardown. CI moves to Postgres 17 in STK-083.
+13. **Handle.** `PgDb` is opaque (`end()`, `stats()`). Kysely is reached only through `q()` in `pg/access.ts`, which wraps `run()`. Guards in `r3-guard.test.ts`. `end()` is idempotent. An `'error'` listener is held during session setup.
 
 ## Consequences
 - Slice order: STK-080 (this), STK-081 (port repos and callers, wire apps), STK-082 (AI keys), STK-083 (baseline, roles, `db:check`), STK-084 (data move, cutover, docs). Each leaves production working.

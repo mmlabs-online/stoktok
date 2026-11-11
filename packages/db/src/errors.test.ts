@@ -87,4 +87,17 @@ describe('errors', () => {
     await expect(run(ctx, async () => 5)).resolves.toBe(5);
     await expect(run(ctx, async () => Promise.reject(Object.assign(new Error('x'), { code: '23505' })))).rejects.toMatchObject({ code: 'CONFLICT' });
   });
+
+  test('run() map overrides the code and keeps pgCode, text from the code, no cause', async () => {
+    const boom = Object.assign(new Error('SECRET'), { code: '22023' });
+    const err = (await run(ctx, () => Promise.reject(boom), { map: (c) => (c === '22023' ? 'VALIDATION' : undefined) }).catch((e: unknown) => e)) as DataError;
+    expect(err).toMatchObject({ code: 'VALIDATION', pgCode: '22023' });
+    expect(err.message).toBe('t.o: validation failed [22023]');
+    expect(err.cause).toBeUndefined();
+  });
+
+  test('map returning undefined falls back to the default mapping', async () => {
+    const boom = Object.assign(new Error('x'), { code: '23505' });
+    await expect(run(ctx, () => Promise.reject(boom), { map: () => undefined })).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
 });

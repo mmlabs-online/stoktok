@@ -8,13 +8,21 @@ import { buildTypeParsers } from './types';
 
 export const DATABASE_URL_ENV = 'STOKTOK_DATABASE_URL';
 
-export interface PgDb {
-  kysely: Kysely<Database>;
-  /** Drains the pool so a one-shot process can exit. */
-  end(): Promise<void>;
-  /** The underlying pool, exposed for tests (totalCount). */
-  pool: pg.Pool;
+export interface PgPoolStats {
+  total: number;
+  idle: number;
+  waiting: number;
 }
+
+/** Opaque: no pool and no URL on the handle. Kysely is reachable only through q() in ./access. */
+export type PgDb = Readonly<{
+  /** Drains the pool so a one-shot process can exit. Idempotent. */
+  end(): Promise<void>;
+  stats(): PgPoolStats;
+}>;
+
+/** Global registry symbol: survives duplicated module instances. For ./access only. */
+export const INTERNALS = Symbol.for('stoktok.pgdb.internals');
 
 export function createPgDb(
   env: Record<string, string | undefined>,
@@ -32,12 +40,22 @@ export function createPgDb(
     override connect(): Promise<pg.Client>;
     override connect(callback: ((err: Error) => void) | ((err: null, c: pg.Client) => void)): void;
     override connect(cb?: ((err: Error) => void) | ((err: null, c: pg.Client) => void)): Promise<pg.Client> | void {
+      // A socket drop or backend termination during setup emits 'error' on the client: without a listener the
+      // process crashes. pg-pool attaches its own listener synchronously inside cb, so removing ours right before cb is safe.
+      const onErr = (e: unknown) => console.error(JSON.stringify({ event: 'db_session_setup_error', code: sqlstateOf(e) ?? null }));
+      this.on('error', onErr);
       const done = this.initSession().then(() => this as pg.Client);
-      if (!cb) return done;
+      if (!cb) return done.finally(() => this.off('error', onErr));
       const call = cb as (err: Error | null, c?: pg.Client) => void;
       void done.then(
-        (c) => call(null, c),
-        (e: Error) => call(e),
+        (c) => {
+          this.off('error', onErr);
+          call(null, c);
+        },
+        (e: Error) => {
+          this.off('error', onErr);
+          call(e);
+        },
       );
     }
 
@@ -68,5 +86,11 @@ export function createPgDb(
   // Never log the message or the config: they can carry host and credentials.
   pool.on('error', (e) => console.error(JSON.stringify({ event: 'db_pool_error', code: sqlstateOf(e) ?? null })));
   const kysely = new Kysely<Database>({ dialect: new PostgresDialect({ pool }) });
-  return { kysely, pool, end: () => kysely.destroy() };
+  let ending: Promise<void> | undefined;
+  const handle = {
+    end: () => (ending ??= kysely.destroy()),
+    stats: (): PgPoolStats => ({ total: pool.totalCount, idle: pool.idleCount, waiting: pool.waitingCount }),
+  };
+  Object.defineProperty(handle, INTERNALS, { value: () => ({ kysely }), enumerable: false });
+  return Object.freeze(handle);
 }

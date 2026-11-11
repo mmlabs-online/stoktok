@@ -81,16 +81,27 @@ export function sqlstateOf(e: unknown): string | undefined {
   return typeof raw === 'string' && /^[0-9A-Z]{5}$/.test(raw) && !/^E[A-Z]+$/.test(raw) ? raw : undefined;
 }
 
+/** Optional per-call override of the SQLSTATE to code mapping; consulted first. */
+export type SqlstateMap = (sqlstate: string) => DataErrorCode | undefined;
+
+const MAPPED_TEXT: Partial<Record<DataErrorCode, string>> = {
+  VALIDATION: 'validation failed',
+  CONFLICT: 'conflict',
+  NOT_FOUND: 'not found',
+};
+
 /**
  * Maps a thrown driver error to a DataError with the same codes as unwrap. No cause is attached: pg's `detail`
  * echoes key values and Node net errors carry host and port.
  */
-export function toDataError(e: unknown, ctx: Ctx): DataError {
+export function toDataError(e: unknown, ctx: Ctx, map?: SqlstateMap): DataError {
   if (e instanceof DataError) return e;
   if (e instanceof RowMappingError) {
     return new DataError('MAPPING', ctx.table, ctx.op, `row mapping failed (${e.field})`);
   }
   const pg = sqlstateOf(e);
+  const mapped = pg ? map?.(pg) : undefined;
+  if (mapped) return new DataError(mapped, ctx.table, ctx.op, MAPPED_TEXT[mapped] ?? 'database error', pg);
   if (pg === '23505') return new DataError('CONFLICT', ctx.table, ctx.op, 'conflict', pg);
   if (pg === '23502' || pg === '23514' || pg === '22P02') {
     return new DataError('VALIDATION', ctx.table, ctx.op, 'validation failed', pg);
@@ -99,10 +110,10 @@ export function toDataError(e: unknown, ctx: Ctx): DataError {
 }
 
 /** Runs a driver call and rethrows any failure as a DataError. */
-export async function run<T>(ctx: Ctx, fn: () => Promise<T>): Promise<T> {
+export async function run<T>(ctx: Ctx, fn: () => Promise<T>, opts?: { map?: SqlstateMap }): Promise<T> {
   try {
     return await fn();
   } catch (e) {
-    throw toDataError(e, ctx);
+    throw toDataError(e, ctx, opts?.map);
   }
 }
