@@ -106,3 +106,49 @@ Items 1–3 are small edits to the shell script. They can go into this ticket if
 - /home/user/deployment/postgres/sql/app-db.sql
 - /home/user/stoktok/work/tickets/STK-086/{ticket,plan,impl-log}.md
 - /home/user/stoktok/work/tickets/STK-083/security-review.md
+
+## Security review: STK-086, attempt 2
+
+**Verdict: recs 1, 2 and 4 are fixed. Rec 3 is fixed except for one 🟡 bypass in the new regex.** I found no 🔴. I couldn't execute anything, so the libpq behaviour below comes from reading its URI parser (`conninfo_uri_parse_options`), not from a run.
+
+### Status of each rec
+- **Rec 1: fixed.** `scripts/db-check.sh:57-65` fails closed: if the anchored regex doesn't match, `refuse_url` prints a fixed message (`:60`) and never echoes `$DB_CHECK_URL`. The refusal at `:148` prints only counts. Uppercase schemes, keyword conninfo and multi-host (`localhost,remote`) are all refused. The impl-log shows the uppercase-scheme and keyword-conninfo cases running with nothing echoed.
+- **Rec 2: fixed.** `:36-40` rejects `postgres`, `template0`, `template1` and `pg_*`. `:145`/`:147` refuses when a database named `$APP` exists, and that runs before `CREATED=1` (`:151`), so cleanup never drops a database the script didn't create.
+- **Rec 3: partly fixed.**
+  - `unset PG*` at `:21`: done. The impl-log's `PGHOSTADDR` test confirms it.
+  - Query-key refusal at `:65` (`%`, plus `host`/`hostaddr`/`port`/`service`, case-insensitive): done.
+  - Anchored authority at `:59`: one bypass, see the 🟡 below.
+- **Rec 4: fixed.**
+  - `checks-acl.sql:35-42` adds `no_role_memberships`, checking `$APP` and `$NOBODY` as role or member, with its own canary at `db-check.sh:196`. It runs after `owned_by_app`, so the canary reaches it by name.
+  - Memberships are now part of the snapshot (`db-check.sh:161`).
+  - The sequence guard `n < 1` is at `checks-acl.sql:61`.
+  - `app-db.sql` grants no membership, so the check is not a false positive on the normal path. The impl-log shows 14 canaries caught.
+
+### Regex bypass probes (`db-check.sh:59`)
+| Input | Result |
+|---|---|
+| `postgresql://[::1]:5432/postgres` | Refused. It fails closed, so IPv6 loopback can't be used, which is acceptable. |
+| `postgresql://localhost.:5432/…` | Refused: `.` isn't one of `: / ?` or end of string. |
+| `postgresql://u:p@x@localhost/…` | Refused: the userinfo class `[^@/?]` allows a single `@`. A percent-encoded `%40` in the password still works. |
+| `postgresql://remote@localhost/…` | Safe: `remote` is the user name. |
+| `postgresql://localhost#@remote/…` | Refused: `#` right after the host doesn't match. |
+| `postgresql://localhost/db#@remote` | Safe: libpq stops its userinfo scan at the first `/`, so the host stays `localhost`. |
+| **`postgresql://localhost?@remote/postgres`** or `postgresql://u@localhost:5432?x@remote:5432/postgres` | **Bypass, see 🟡 below.** |
+
+### New findings
+- 🟡 **`scripts/db-check.sh:59`: an `@` in the query string moves the host.**
+  - **Why it matters:** libpq looks for userinfo by scanning from `://` to the first `@` or `/`. It does not stop at `?`. So in `postgresql://localhost?@remote/postgres`, libpq reads `localhost?` as the user name and `remote` as the host.
+  - **Why the guards miss it:** the regex accepts this input because the host group matches `localhost` and `(\?.*)` swallows `?@remote/postgres`. The key check at `:65` sees no `host=`, and there is no `%`.
+  - **Effect:** `su_psql` connects to `remote`. The version check, the refusal queries and the bootstrap (`:155`, which creates the role and database) all run there. `APP_URL` (`:67`) then turns into `…localhost/stoktok?@remote/postgres`, which libpq rejects, so the script exits and cleanup drops what it created on `remote`.
+  - **Severity:** only a developer typo can trigger this, not an attacker, so it's low.
+  - **Fix (one line):** exclude `@` after the authority: `(/[^?@]*)?(\?[^@]*)?$`. Alternatively, refuse when `${DB_CHECK_URL#*://}` with the matched userinfo removed still contains `@`.
+- 🟢 **`db-check.sh:32-40`: `DB_CHECK_APP=stoktok_nobody` or `dbcheck_canary` isn't rejected.** Either value makes the run fail later (at `create role $NOBODY` `:156`, or at a canary's `create role`), after `CREATED=1`. Cleanup then drops only what this run created. That's an error-message problem, not a security one. Optionally add both names to the `case` at `:36`.
+
+Recs 5 and 6 are deferred as agreed and not re-raised.
+
+### Files reviewed
+- /home/user/stoktok/scripts/db-check.sh
+- /home/user/stoktok/scripts/db-check/checks-acl.sql
+- /home/user/stoktok/scripts/db-check/app-db.sql (grep only)
+- /home/user/stoktok/work/tickets/STK-086/impl-log.md (Attempt 2)
+- /home/user/stoktok/work/tickets/STK-086/security-review.md (attempt 1)
