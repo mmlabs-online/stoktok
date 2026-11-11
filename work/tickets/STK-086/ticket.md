@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P1 |
 | Areas | db, security |
 | Attempts | 0 |
@@ -38,3 +38,4 @@ CLAUDE.md R2, R3, R7, R8; ADR 0010, ADR 0011. Reference: `/home/user/deployment/
 - 2026-11-11 (orchestrator): from STK-083 security review attempt 1 — run the db:check migrations as the non-superuser owner so CI proves every PR applies without superuser; extend db:check ACL checks to pg_class.relacl, pg_namespace.nspacl and extra schemas. (The open question about CONNECT is answered: deployment app-db.sql:25 revokes ALL on the app database from PUBLIC.)
 - 2026-11-11 (orchestrator): from STK-083 security review attempt 2 — add column-level PUBLIC ACL (pg_attribute.attacl) and empty pg_default_acl checks; migration lint: `$` inside identifiers (lookbehind before the dollar-tag alternative), nested/any block comments in migrations (ban), shared do-block regex const.
 - 2026-11-11 (orchestrator): from STK-083 review attempt 2 — non-ASCII dollar tags (`$é$`) also bypass the lint tokeniser; add a catalog check that allows no ACL entry except the owner's (plus PUBLIC USAGE on schema public), which catches grants to any role.
+- 2026-11-11 (orchestrator, after planning): the migration-lint gaps and the legacy-reference guard moved to STK-088 per plan.md; this ticket is the db:check rewrite only.
