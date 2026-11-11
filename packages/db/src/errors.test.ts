@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { DataError, fetchAll, unwrap } from './errors';
+import { RowMappingError } from '@stoktok/core';
+import { DataError, fetchAll, run, toDataError, unwrap } from './errors';
 
 const ctx = { table: 't', op: 'o' };
 
@@ -43,5 +44,38 @@ describe('errors', () => {
       [0, 1],
       [2, 3],
     ]);
+  });
+
+  test('toDataError maps 23505 → CONFLICT; 23502, 23514, 22P02 → VALIDATION; 40001 → DB_ERROR', () => {
+    expect(toDataError({ code: '23505' }, ctx)).toMatchObject({ code: 'CONFLICT', pgCode: '23505' });
+    for (const code of ['23502', '23514', '22P02']) expect(toDataError({ code }, ctx)).toMatchObject({ code: 'VALIDATION', pgCode: code });
+    expect(toDataError({ code: '40001' }, ctx)).toMatchObject({ code: 'DB_ERROR', pgCode: '40001' });
+  });
+
+  test('toDataError: non-SQLSTATE code (ECONNREFUSED) → DB_ERROR without pgCode', () => {
+    const e = toDataError(Object.assign(new Error('x'), { code: 'ECONNREFUSED' }), ctx);
+    expect(e).toMatchObject({ code: 'DB_ERROR' });
+    expect(e.pgCode).toBeUndefined();
+  });
+
+  test('toDataError: message never contains err.message, err.detail, host or password; no cause', () => {
+    const raw = Object.assign(new Error('connect ECONNREFUSED db.host.test:5432 pw-secret'), {
+      code: '23505',
+      detail: 'Key (url)=(https://secret.test) already exists.',
+    });
+    const e = toDataError(raw, ctx);
+    expect(e.message).toBe('t.o: conflict [23505]');
+    expect(e.cause).toBeUndefined();
+  });
+
+  test('toDataError passes DataError through unchanged; RowMappingError → MAPPING', () => {
+    const d = new DataError('NOT_FOUND', 't', 'o', 'not found');
+    expect(toDataError(d, ctx)).toBe(d);
+    expect(toDataError(new RowMappingError('t', 'f', 'bad'), ctx)).toMatchObject({ code: 'MAPPING' });
+  });
+
+  test('run() resolves the value and rethrows mapped', async () => {
+    await expect(run(ctx, async () => 5)).resolves.toBe(5);
+    await expect(run(ctx, async () => Promise.reject(Object.assign(new Error('x'), { code: '23505' })))).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 });

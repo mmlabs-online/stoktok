@@ -10,6 +10,7 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test",
+    "test:db": "pnpm --filter @stoktok/db test:db",
     "db:check": "bash scripts/db-check.sh",
     "build": "pnpm -r --if-present build",
     "check:service-key": "bash scripts/check-no-service-key-in-client.sh",

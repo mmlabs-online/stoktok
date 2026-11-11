@@ -17,6 +17,8 @@ function walk(dir: string, out: string[] = []): string[] {
 
 const SDK_IMPORT = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"](?:@anthropic-ai\/sdk|@google\/genai)/;
 
+const DRIVER_IMPORT = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"](?:pg|pg-[\w-]+|kysely)(?:\/[\w/-]+)?['"]/;
+
 const files = [...walk(join(ROOT, 'apps')), ...walk(join(ROOT, 'packages'))]
   .filter((p) => !p.endsWith('r3-guard.test.ts') && !p.endsWith('next-env.d.ts'))
   .map((p) => ({ path: relative(ROOT, p), text: readFileSync(p, 'utf8') }));
@@ -152,5 +154,25 @@ describe('R3 guard', () => {
     const vault = /vault\.(secrets|decrypted_secrets|create_secret|update_secret)/;
     expect(files.filter((f) => vault.test(f.text)).map((f) => f.path)).toEqual([]);
     expect(vault.test('vault.decrypted_secrets')).toBe(true);
+  });
+
+  test('STOKTOK_DATABASE_URL is referenced only in packages/db/src/pg/client.ts (and its test)', () => {
+    const hits = files
+      .filter((f) => f.text.includes('STOKTOK_DATABASE_URL'))
+      .map((f) => f.path)
+      .filter((p) => p !== 'packages/db/src/pg/client.ts' && p !== 'packages/db/src/pg/client.test.ts');
+    expect(hits).toEqual([]);
+  });
+
+  test('pg and kysely are imported only under packages/db/', () => {
+    const hits = files.filter((f) => DRIVER_IMPORT.test(f.text)).map((f) => f.path).filter((p) => !p.startsWith('packages/db/'));
+    expect(hits).toEqual([]);
+  });
+
+  test('driver regex catches pg, kysely, pg-* in every import form and not @stoktok/db/pg', () => {
+    for (const s of [`from 'pg'`, `from "kysely"`, `import('pg')`, `require('pg-protocol')`, `import 'pg'`, `from 'pg/lib/x'`]) {
+      expect(DRIVER_IMPORT.test(s), s).toBe(true);
+    }
+    expect(DRIVER_IMPORT.test(`from '@stoktok/db/pg'`)).toBe(false);
   });
 });

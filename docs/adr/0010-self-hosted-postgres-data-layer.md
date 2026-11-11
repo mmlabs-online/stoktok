@@ -1,0 +1,25 @@
+# ADR 0010: Self-hosted Postgres data layer (STK-080 slice a)
+
+Status: accepted 2026-11-11; implemented across STK-080 (foundation), STK-081 to STK-084. Slice a changes no runtime behaviour: nothing in `apps/` imports the new code.
+
+## Context
+Ming decided on 2026-11-11 to move stoktok's data layer from Supabase (supabase-js and PostgREST) to a Postgres instance he runs on the home server. Supabase Auth stays (STK-048). Plan and consults: `work/tickets/STK-080/`.
+
+## Decisions
+1. **Driver: `pg` + Kysely**, inside `packages/db` only, exported as `@stoktok/db/pg` (not the package index, so the Next server graph and worker bundle do not change until STK-081). Rejected: raw `pg` helpers (string-built SQL across 17 repos), Drizzle (a second schema source and its own migration tool), postgres.js (different type conventions).
+2. **Network.** Postgres runs as a container on a shared external Docker network and is reached by service name (`postgres:5432`). The DB port is not published and never goes through Cloudflare Tunnel. pgAdmin is LAN-only or behind Access. No TLS on that hop.
+3. **Pool profiles** (`packages/db/src/pg/config.ts`): `web` max 5, `worker` max 2, 10 s idle, 5 s connect timeout, statement timeout 15 s and 120 s, `application_name` `stoktok-web` / `stoktok-worker`. Each new connection runs `set_config` for `TimeZone=UTC`, `DateStyle=ISO, YMD`, the statement timeout and the application name (not startup `options`, so it also works through a session pooler). Construction never connects.
+4. **Type parsing contract** (per pool, never the global `pg.types`): DATE and DATE[] are raw `YYYY-MM-DD` strings (the core `toDate` contract); timestamptz is a PostgREST-shaped ISO string `YYYY-MM-DDTHH:MM:SS[.ffffff]+00:00` (microseconds kept); int8 stays a digit string so `toSafeInt` performs the R2 safe-range check, never `Number` or `BigInt`. A `test:db` test fails when a new column type (`timestamp`, `numeric`, `float`, `money`) appears in `public`.
+5. **Error mapping.** Thrown driver errors map to `DataError` with the same codes as `unwrap`: 23505 CONFLICT, 23502/23514/22P02 VALIDATION, else DB_ERROR; non-SQLSTATE errors (ECONNREFUSED) are DB_ERROR without pgCode. No `cause` is attached: `detail` echoes key values and net errors carry host and port.
+6. **Env names.** `STOKTOK_DATABASE_URL` and (STK-082) `STOKTOK_AI_KEYS_MASTER_KEY`: server-only (R3), read from a passed env object, referenced only in `packages/db/src/pg/client.ts` (r3-guard). `check:service-key` builds with a sentinel URL and scans client bundles for it.
+7. **Roles (implemented in STK-083).** `stoktok_owner` (NOLOGIN, owns objects) and `stoktok_app` (LOGIN, DML and EXECUTE only, NOBYPASSRLS). **RLS is disabled.** Today there are no policies and the only client bypasses RLS, so RLS protects nothing beyond the anon/authenticated lockout, and those roles disappear. With one DB role a `using (true)` policy grants nothing the table grant does not and only makes new tables unreadable until a policy is added. "Closed by default" is kept by grants: default privileges grant only to `stoktok_app`, PUBLIC is revoked, and `db:check` asserts a `stoktok_nobody` role is denied everywhere.
+8. **AI keys (direction).** STK-082 moves them to app-side AES-256-GCM, recorded in ADR 0011, which supersedes ADR 0009. pgcrypto is rejected because the key would appear in SQL text and logs.
+9. **Baseline (STK-083).** The migration history is squashed into one plain-Postgres baseline; the old `supabase/` files are kept for reference.
+10. **Data move (STK-084).** Data-only move, cutover and backups.
+11. **Supabase Free pausing is accepted, no keep-alive** (Ming). Risk: `/login` is unavailable after inactivity.
+12. **Tests.** Real-Postgres `pnpm test:db` is required in CI and fails (never skips) without `DB_TEST_URL`; it refuses a non-local host. Pure unit tests stay in `pnpm test`, which needs no database. Locally, `test:db` needs a Postgres on localhost, for example `docker run -p 5432:5432 -e POSTGRES_PASSWORD=postgres postgres:16` with `DB_TEST_URL=postgresql://postgres:postgres@localhost:5432/postgres`. It clones a migrated template database per test file and drops all of them at teardown.
+
+## Consequences
+- Slice order: STK-080 (this), STK-081 (port repos and callers, wire apps), STK-082 (AI keys), STK-083 (baseline, roles, `db:check`), STK-084 (data move, cutover, docs). Each leaves production working.
+- Run STK-077 after STK-081 so its new queries are not written twice.
+- `packages/db/src/pg/schema.ts` is hand-written and mirrors the migrations until STK-083; update it with any migration.

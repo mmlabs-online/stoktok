@@ -74,3 +74,30 @@ export function mapRow<R, T>(fn: (row: R) => T, row: R, ctx: Ctx): T {
     throw e;
   }
 }
+
+/**
+ * Maps a thrown driver error to a DataError with the same codes as unwrap. No cause is attached: pg's `detail`
+ * echoes key values and Node net errors carry host and port.
+ */
+export function toDataError(e: unknown, ctx: Ctx): DataError {
+  if (e instanceof DataError) return e;
+  if (e instanceof RowMappingError) {
+    return new DataError('MAPPING', ctx.table, ctx.op, `row mapping failed (${e.field})`);
+  }
+  const raw = (e as { code?: unknown } | null)?.code;
+  const pg = typeof raw === 'string' && /^[0-9A-Z]{5}$/.test(raw) ? raw : undefined;
+  if (pg === '23505') return new DataError('CONFLICT', ctx.table, ctx.op, 'conflict', pg);
+  if (pg === '23502' || pg === '23514' || pg === '22P02') {
+    return new DataError('VALIDATION', ctx.table, ctx.op, 'validation failed', pg);
+  }
+  return new DataError('DB_ERROR', ctx.table, ctx.op, 'database error', pg);
+}
+
+/** Runs a driver call and rethrows any failure as a DataError. */
+export async function run<T>(ctx: Ctx, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    throw toDataError(e, ctx);
+  }
+}
