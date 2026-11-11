@@ -1,7 +1,7 @@
 /** Row <-> domain conversions for assets and watchlist. No financial calculation (R1); integers only (R2). */
-import { EXCHANGES, RowMappingError, toSafeInt } from '@stoktok/core';
-import type { DrawResult, Exchange, GameId, IntradayQuote, PoolPrize, TierId, PriceQuote, SectorInfo, SignalLabel, SignalStatus, StoredClose, StoredSignal } from '@stoktok/core';
-import type { AssetRow, FinancialLineRow, FinancialRow, LotteryDrawInsert, LotteryDrawRow, LotteryTicketInsert, LotteryTicketRow, OpenGapRow, PriceCloseRow, PriceDailyRow, PriceIntradayRow, SignalRow, SymbolSectorRow, TradeDateRow, WatchlistRow } from './rows';
+import { EXCHANGES, RowMappingError, parseStoredSummaryBody, toSafeInt } from '@stoktok/core';
+import type { AiSummaryBody, DrawResult, Exchange, GameId, IntradayQuote, PoolPrize, TierId, PriceQuote, SectorInfo, SignalLabel, SignalStatus, StoredClose, StoredSignal } from '@stoktok/core';
+import type { AiSummaryRow, AssetRow, FinancialLineRow, FinancialRow, LotteryDrawInsert, LotteryDrawRow, LotteryTicketInsert, LotteryTicketRow, OpenGapRow, PriceCloseRow, PriceDailyRow, PriceIntradayRow, SignalRow, SymbolSectorRow, TradeDateRow, WatchlistRow } from './rows';
 
 export interface Asset {
   id: string;
@@ -366,5 +366,45 @@ export function lotteryTicketToRow(input: LotteryTicketInput): LotteryTicketInse
     channel: input.channel,
     purchased_at: input.purchasedAt,
     raw_text: input.rawText,
+  };
+}
+
+export interface AiSummaryRecord {
+  id: number;
+  scope: 'symbol' | 'portfolio';
+  /** '' for the portfolio. */
+  symbol: string;
+  /** 'YYYY-MM-DD'. */
+  summaryDate: string;
+  generator: 'model' | 'template';
+  provider: string | null;
+  model: string | null;
+  usageId: number | null;
+  /** Null when the stored body fails core validation, so the job can regenerate it. */
+  body: AiSummaryBody | null;
+  inputIds: string[];
+  createdAt: string;
+}
+
+export function aiSummaryFromRow(row: AiSummaryRow): AiSummaryRecord {
+  const t = 'ai_summaries';
+  if (row.scope !== 'symbol' && row.scope !== 'portfolio') throw new RowMappingError(t, 'scope', `invalid scope: ${String(row.scope)}`);
+  if (row.generator !== 'model' && row.generator !== 'template') throw new RowMappingError(t, 'generator', `invalid generator: ${String(row.generator)}`);
+  if (typeof row.summary_date !== 'string' || !DATE_RE.test(row.summary_date)) {
+    throw new RowMappingError(t, 'summary_date', `invalid date: ${String(row.summary_date)}`);
+  }
+  const inputIds = Array.isArray(row.input_ids) ? row.input_ids.filter((x): x is string => typeof x === 'string') : [];
+  return {
+    id: toSafeInt(row.id, 'id', t),
+    scope: row.scope,
+    symbol: row.symbol,
+    summaryDate: row.summary_date,
+    generator: row.generator,
+    provider: row.provider,
+    model: row.model,
+    usageId: row.usage_id === null ? null : toSafeInt(row.usage_id, 'usage_id', t),
+    body: parseStoredSummaryBody(row.body, undefined, { inputIds, subject: row.scope === 'portfolio' ? 'PORTFOLIO' : row.symbol }),
+    inputIds,
+    createdAt: row.created_at,
   };
 }
