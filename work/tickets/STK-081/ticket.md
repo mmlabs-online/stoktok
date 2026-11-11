@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P1 |
 | Areas | architecture, db, data, security |
 | Attempts | 2 |
@@ -42,3 +42,4 @@ CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010 (from STK-080). Reference repos: `
 - Ming's manual step: none (no release is cut for this slice).
 - 2026-11-11 (orchestrator, after planning): narrowed to slice b1 (handle hardening: opaque PgDb + stats(), q()/kyselyOf + run() map hook, session-init crash fix with proxy tests, idempotent end(), jsonb typing, S5 guards) per plan.md; the 17-repo port, callers, bundling and remaining guards moved to STK-085.
 - 2026-11-11 (Ming, after review attempt 1 PASS): fix before the PR: 🟡 security-review attempt 1 #1 (`q()` return type rejects Kysely builders, `Kysely`/`Transaction` handles, with `@ts-expect-error` compile-time fixtures), 🟡 review attempt 1 (the `new Kysely(` `log:` guard must catch nested config such as `{ dialect: new PostgresDialect({ pool }), log: … }`), and the small 🟢 guard gaps: `Object.getOwnPropertySymbols`/`Reflect.ownKeys` in the accessor rule, `export … from 'kysely'` re-exports in the kysely rule; remove the now-unused `DRIVER_IMPORT`.
+- 2026-11-11 (Ming, after review attempt 2 PASS): open the PR; the two new 🟡 from review attempt 2 (more Kysely executors escaping q(); log-guard shorthand/quoted keys) become the required first commit of STK-085.

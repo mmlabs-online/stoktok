@@ -63,6 +63,8 @@ Follow how TuDoCuaTui (D23–D25) and org-admin-api use the shared Postgres in `
 CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010. Depends on STK-081.
 
 ## Acceptance criteria
+- [ ] **First commit, before any repo is ported** (from STK-081 review attempt 2, Ming 2026-11-11): widen `Escaping` in `packages/db/src/pg/access.ts` to `Compilable<unknown> | QueryCreator<Database> | TransactionBuilder<Database> | ConnectionBuilder<Database> | DatabaseIntrospector` with `@ts-expect-error` fixtures for `k.transaction()`, `k.connection()`, `k.with(...)` and `k.introspection` (optionally also reject `any` via `0 extends 1 & T`); extend the r3-guard `log` rule to the shorthand `{ log }`, `{ log, dialect }` and quoted `'log':` forms with self-tests.
+- [ ] Reviewer rule for every repo port: a `q()` callback returns rows or scalars only — no `as any`/`unknown`, no assigning `k`/`trx` to an outer variable, no wrapper objects or functions around `k`/`trx`.
 - [ ] All 17 repos run on Kysely through `q()`. No `@supabase/` import remains outside `apps/web/server/auth/**`. `fetchAll`, `unwrap`, `unwrapFound` and `fake-client.ts` are deleted.
 - [ ] The test:db behaviour cases from DB-optimizer §D pass, including the transactions out-of-range-page total, guarded gap updates, the news insert count, every upsert conflict key, the four jsonb round-trips, and the `ai_reserve` concurrency test (mutation proof in the impl-log).
 - [ ] Exercise the worker lifecycle: no pool is opened on a usage error; `end()` runs on success and on error; the image smoke with an unreachable DB exits 1 within 20 s and leaks no host or password.
