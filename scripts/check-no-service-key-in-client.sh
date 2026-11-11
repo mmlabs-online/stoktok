@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATIC="$ROOT/apps/web/.next/static"
-NEEDLES=(SUPABASE_SERVICE_ROLE_KEY service_role ANTHROPIC_API_KEY GOOGLE_AI_API_KEY @anthropic-ai/sdk @google/genai api.anthropic.com generativelanguage.googleapis.com STOKTOK_DATABASE_URL postgres:// postgresql:// pg-protocol)
+NEEDLES=(SUPABASE_SERVICE_ROLE_KEY service_role ANTHROPIC_API_KEY GOOGLE_AI_API_KEY @anthropic-ai/sdk @google/genai api.anthropic.com generativelanguage.googleapis.com STOKTOK_DATABASE_URL postgres:// postgresql:// pg-protocol kysely pg-pool pg-connection-string db.invalid)
 
 if [ "${1:-}" = "--scan-only" ]; then
   [ -n "${2:-}" ] || { echo "usage: check-no-service-key-in-client.sh --scan-only <dir>" >&2; exit 2; }

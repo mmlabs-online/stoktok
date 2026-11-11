@@ -75,6 +75,12 @@ export function mapRow<R, T>(fn: (row: R) => T, row: R, ctx: Ctx): T {
   }
 }
 
+/** A real SQLSTATE (five chars) or undefined. Node errno codes (EPIPE, ECONNRESET...) start with E and are not SQLSTATEs. */
+export function sqlstateOf(e: unknown): string | undefined {
+  const raw = (e as { code?: unknown } | null)?.code;
+  return typeof raw === 'string' && /^[0-9A-Z]{5}$/.test(raw) && !/^E[A-Z]+$/.test(raw) ? raw : undefined;
+}
+
 /**
  * Maps a thrown driver error to a DataError with the same codes as unwrap. No cause is attached: pg's `detail`
  * echoes key values and Node net errors carry host and port.
@@ -84,8 +90,7 @@ export function toDataError(e: unknown, ctx: Ctx): DataError {
   if (e instanceof RowMappingError) {
     return new DataError('MAPPING', ctx.table, ctx.op, `row mapping failed (${e.field})`);
   }
-  const raw = (e as { code?: unknown } | null)?.code;
-  const pg = typeof raw === 'string' && /^[0-9A-Z]{5}$/.test(raw) ? raw : undefined;
+  const pg = sqlstateOf(e);
   if (pg === '23505') return new DataError('CONFLICT', ctx.table, ctx.op, 'conflict', pg);
   if (pg === '23502' || pg === '23514' || pg === '22P02') {
     return new DataError('VALIDATION', ctx.table, ctx.op, 'validation failed', pg);

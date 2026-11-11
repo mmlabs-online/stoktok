@@ -1,6 +1,7 @@
 /** Server-only (R3). Pool factory for the self-hosted Postgres; nothing here connects until the first query. */
 import { Kysely, PostgresDialect } from 'kysely';
 import pg from 'pg';
+import { sqlstateOf } from '../errors';
 import { PG_POOL_PROFILES, type PgProfile, type PoolProfile } from './config';
 import type { Database } from './schema';
 import { buildTypeParsers } from './types';
@@ -11,11 +12,6 @@ export interface PgDb {
   kysely: Kysely<Database>;
   /** Drains the pool so a one-shot process can exit. */
   end(): Promise<void>;
-}
-
-function sqlstateOrNull(e: unknown): string | null {
-  const code = (e as { code?: unknown } | null)?.code;
-  return typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code) ? code : null;
 }
 
 export function createPgDb(
@@ -41,10 +37,14 @@ export function createPgDb(
         "select set_config('TimeZone','UTC',false), set_config('DateStyle','ISO, YMD',false), set_config('statement_timeout',$1,false), set_config('application_name',$2,false)",
         [String(p.statementTimeoutMs), p.applicationName],
       )
-      .catch(() => undefined);
+      .catch((e: unknown) => {
+        // Fail closed: a connection without the session settings must not serve queries. Log the code only.
+        console.error(JSON.stringify({ event: 'db_session_init_failed', code: sqlstateOf(e) ?? null }));
+        void Promise.resolve(client.end()).catch(() => undefined);
+      });
   });
   // Never log the message or the config: they can carry host and credentials.
-  pool.on('error', (e) => console.error(JSON.stringify({ event: 'db_pool_error', code: sqlstateOrNull(e) })));
+  pool.on('error', (e) => console.error(JSON.stringify({ event: 'db_pool_error', code: sqlstateOf(e) ?? null })));
   const kysely = new Kysely<Database>({ dialect: new PostgresDialect({ pool }) });
   return { kysely, end: () => kysely.destroy() };
 }

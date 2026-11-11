@@ -74,6 +74,15 @@ describe('errors', () => {
     expect(toDataError(new RowMappingError('t', 'f', 'bad'), ctx)).toMatchObject({ code: 'MAPPING' });
   });
 
+  test('only real SQLSTATEs are mapped; Node errno codes are not', () => {
+    for (const code of ['EPIPE', 'EPERM', 'ECONNRESET', 'ABC']) {
+      expect(toDataError(Object.assign(new Error('x'), { code }), ctx).pgCode).toBeUndefined();
+    }
+    for (const code of ['XX000', 'HV000', '08006']) {
+      expect(toDataError(Object.assign(new Error('x'), { code }), ctx).pgCode).toBe(code);
+    }
+  });
+
   test('run() resolves the value and rethrows mapped', async () => {
     await expect(run(ctx, async () => 5)).resolves.toBe(5);
     await expect(run(ctx, async () => Promise.reject(Object.assign(new Error('x'), { code: '23505' })))).rejects.toMatchObject({ code: 'CONFLICT' });

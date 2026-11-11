@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { createPgDb, DATABASE_URL_ENV } from './client';
 import { PG_POOL_PROFILES, type PgProfile, type PoolProfile } from './config';
 
@@ -62,5 +62,21 @@ describe('createPgDb', () => {
     const worker = await build(url, 'worker', { max: 1 });
     expect(worker.pool.cfg).toMatchObject({ max: 1, connectionTimeoutMillis: 5_000 });
     await worker.db.end();
+  });
+
+  test('a failed session init logs the code only and drops the client', async () => {
+    const { pool, db } = await build('postgres://u:pw@127.0.0.1:1/x', 'worker');
+    const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const end = vi.fn(() => Promise.resolve());
+    const client = { query: () => Promise.reject(Object.assign(new Error('boom host=secret.example pw'), { code: '57014' })), end };
+    pool.instance.emit('connect', client);
+    await new Promise((r) => setImmediate(r));
+    expect(end).toHaveBeenCalledTimes(1);
+    expect(err).toHaveBeenCalledTimes(1);
+    const line = String(err.mock.calls[0]?.[0]);
+    expect(JSON.parse(line)).toEqual({ event: 'db_session_init_failed', code: '57014' });
+    expect(line).not.toContain('secret.example');
+    err.mockRestore();
+    await db.end();
   });
 });

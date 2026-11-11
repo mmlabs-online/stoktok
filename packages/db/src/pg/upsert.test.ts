@@ -1,7 +1,7 @@
 import { DummyDriver, Kysely, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import type { Database } from './schema';
-import { chunkForParams, upsertInto } from './upsert';
+import { chunkForParams, jsonb, upsertInto } from './upsert';
 
 const db = new Kysely<Database>({
   dialect: {
@@ -43,6 +43,20 @@ describe('upsertInto', () => {
 
   test('conflict column not in the row keys throws', () => {
     expect(() => upsertInto(db, 'prices_daily', [{ ...price, trade_date: undefined } as never], ['symbol', 'trade_date'])).toThrow(/conflict column trade_date/);
+  });
+});
+
+describe('upsert guards', () => {
+  test('non identifier-shaped column names throw before any SQL is built', () => {
+    for (const k of ['excluded.x', 'a"b', 'Open', 'a b', '1a']) {
+      expect(() => upsertInto(db, 'prices_daily', [{ ...price, [k]: 1 } as never], ['symbol', 'trade_date']), k).toThrow(/invalid column name/);
+    }
+  });
+
+  test('jsonb(undefined) throws; arrays and objects compile', () => {
+    expect(() => jsonb(undefined)).toThrow(/undefined/);
+    expect(() => jsonb([1])).not.toThrow();
+    expect(() => jsonb({ a: 1 })).not.toThrow();
   });
 });
 

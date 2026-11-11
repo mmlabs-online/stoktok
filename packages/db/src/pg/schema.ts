@@ -6,7 +6,6 @@
 import type { ColumnType, Generated } from 'kysely';
 
 type Int8 = ColumnType<string, number | string, number | string>;
-type Int8Gen = ColumnType<string, number | string | undefined, number | string>;
 type TsDef = ColumnType<string, string | undefined, string>;
 type Json = ColumnType<unknown, string, string>;
 type JsonDef = ColumnType<unknown, string | undefined, string>;
@@ -229,7 +228,7 @@ export interface AiSummariesTable {
   generator: string;
   provider: string | null;
   model: string | null;
-  usage_id: Int8Gen | null;
+  usage_id: Int8 | null;
   body_version: Def<number>;
   body: Json;
   input_ids: ColumnType<string[], string[] | undefined, string[]>;

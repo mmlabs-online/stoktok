@@ -7,11 +7,15 @@ export interface UpsertOptions {
   ignoreDuplicates?: boolean;
 }
 
+const IDENT = /^[a-z_][a-z0-9_]*$/;
+
 function keysOf(row: object): string[] {
-  return Object.entries(row)
+  const keys = Object.entries(row)
     .filter(([, v]) => v !== undefined)
     .map(([k]) => k)
     .sort();
+  for (const k of keys) if (!IDENT.test(k)) throw new Error(`upsert: invalid column name ${JSON.stringify(k)}`);
+  return keys;
 }
 
 /**
@@ -54,5 +58,6 @@ export function chunkForParams<T extends object>(rows: readonly T[], maxParams =
 
 /** Stores a JS array or object as jsonb (a raw JS array would be sent as a PG array literal). */
 export function jsonb(value: unknown): RawBuilder<unknown> {
+  if (value === undefined) throw new Error('jsonb: value is undefined');
   return sql`${JSON.stringify(value)}::jsonb`;
 }

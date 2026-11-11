@@ -55,3 +55,46 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No; the file list is the plan's.
 - Diff size: about +1,000 lines including tests, schema types, ADR and lockfile (the lockfile is the largest part).
+
+## Attempt 2 — 2026-11-11 (REWORK: fixes from security-review.md S1-S9 and the review.md nits; not committed)
+
+### Files touched
+| File | Required because |
+|---|---|
+| `packages/db/test-db/global-setup.ts` | S1: exported `checkAdminUrl` rejects `host`/`hostaddr`/`port` query params; S9: LIKE escaped (`stoktok\_test\_%\_<pid>`), template dropped and run exits 1 if bootstrap/migration fails |
+| `packages/db/src/test-db-guard.test.ts` (new) | S1 unit test (`?host=`, `?hostaddr=`, `?port=`, non-local, missing) |
+| `packages/db/src/pg/client.ts` | S2: failed session init logs `{event:'db_session_init_failed', code}` and ends the client (pg-pool removes an ended client on release); S5: uses shared `sqlstateOf` |
+| `packages/db/src/pg/client.test.ts` | S2 test: code-only log, no host or message leak, client ended |
+| `packages/db/src/errors.ts` | S5: new `sqlstateOf` maps only real SQLSTATEs (Node errno such as EPIPE/EPERM are not mapped); `toDataError` uses it |
+| `packages/db/src/errors.test.ts` | S5 test |
+| `docs/adr/0010-self-hosted-postgres-data-layer.md` | S3: TLS sentence (`sslmode=verify-full` off the Docker network, STK-081 must enforce) |
+| `packages/db/src/r3-guard.test.ts` | S7a: `NEXT_PUBLIC_` rule widened (DATABASE, DB_, PASSWORD, SECRET); S7c: apps/web importer rule also covers `@stoktok/db/pg`; self-test of both regexes |
+| `scripts/check-no-service-key-in-client.sh` | S8: needles `kysely`, `pg-pool`, `pg-connection-string`, `db.invalid` |
+| `packages/db/src/pg/upsert.ts`, `upsert.test.ts` | S4: column names must match `/^[a-z_][a-z0-9_]*$/` else plain Error; nit: `jsonb(undefined)` throws |
+| `packages/db/src/pg/schema.ts` | nit: `ai_summaries.usage_id` is `Int8 | null`; `Int8Gen` removed |
+
+### Tests added / changed
+- `test-db-guard.test.ts` (3), `client.test.ts` (+1, session init failure), `errors.test.ts` (+1), `upsert.test.ts` (+2), `r3-guard.test.ts` (+1).
+
+### Checks (actual output summary)
+Local PG 16 via `initdb`/`pg_ctl` on port 54329, `DB_TEST_URL=postgresql://postgres@127.0.0.1:54329/postgres`.
+- typecheck: all packages Done, no errors
+- lint: all packages Done, no errors
+- test: green (worker 295, web 349, db/core/sources/ai suites pass)
+- test:db: 4 files, 14 tests passed; with `?host=x` it exits 1 with "refuses DB_TEST_URL with a 'host' query parameter"; no `stoktok_test_*` databases left
+- db:check: `db:check OK`
+- check:service-key: OK, all 13 needles (including the 4 new) show 0 hits
+
+### Out-of-plan files
+None. (`test-db-guard.test.ts` is a new test file inside `packages/db`, needed for S1; it lives under `src/` so the default `pnpm test` runs it without a database.)
+
+### Deviations and notes
+- S2 fail-closed relies on `client.end()` running in the rejection handler before the next queued query is sent. pg sends the next query only after the failed one's ReadyForQuery, so the handler normally runs first; pg-pool then discards the ended client on release. Not proven by a real-PG test (a forced failure needs a server-side fault); covered by the unit test with a fake client.
+- S5: `sqlstateOf` rejects `^E[A-Z]+$`; no PostgreSQL SQLSTATE class starts with `E`. `instanceof pg.DatabaseError` was avoided because `errors.ts` is shared with the supabase-js path and must not import `pg`.
+- S7b (`.cjs/.mts/.cts` in `walk`) not requested; not done.
+
+### Follow-ups (noticed, not done)
+- STK-081: enforce the `sslmode` rule from ADR 0010 (`createPgDb` or `check-deploy-env.sh`); enforce that repo `kysely` calls go through `run()` (S5 caveat); optional `lock_timeout` / `idle_in_transaction_session_timeout` in session init (S10); optional `new URL()` check in `createPgDb` (S6).
+
+### Scope self-check
+- Only the requested items were changed; no commit made.
