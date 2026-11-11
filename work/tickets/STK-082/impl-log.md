@@ -58,3 +58,28 @@ Postgres 16 started on TCP 127.0.0.1:54329 via initdb/pg_ctl (as `postgres`, `--
 ### Scope self-check
 - Could the diff be smaller? No; the two out-of-plan edits are one table row and one set member.
 - Diff size: about +475 / -227 tracked lines, plus new files (keyring.ts ~100, keyring.test.ts ~130, ADR ~60, migration ~45). Not committed.
+
+## Attempt 2 (REWORK, documentation only)
+
+Applied the ticket.md note "2026-11-11 (Ming, after review attempt 1 PASS)" (security-review.md findings 🟡 2 and 🟡 3).
+
+### Files touched
+- docs/adr/0011-ai-provider-keys-app-side-encryption.md: required because both findings are about its text.
+  - Rotation runbook: step 1 now says rows are not discarded and old-key rows cause `MAPPING` until deleted; added step 5 (compromise: rotate provider keys too) and step 6 (backups hold old-key ciphertext: rotate provider keys or destroy the old master-key copy after the backups age out).
+  - Consequences: the Vault bullet is now the cutover runbook: new provider keys, revoke the old ones, then delete `stoktok_ai_key_%` Vault rows only after the rollback window (proposed 14 days); notes backups/PITR keep deleted rows.
+
+### Tests added
+None (documentation only).
+
+### Check results
+- `pnpm lint`: all packages Done, no errors.
+- `pnpm test`: all packages Done (web: 45 files, 352 tests passed).
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+None new.
+
+### Scope self-check
+Only the ADR changed; no code, no ticket.md files, not committed.

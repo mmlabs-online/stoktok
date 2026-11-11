@@ -37,10 +37,13 @@ ADR 0009 stored the AI provider keys in Supabase Vault behind three `security de
 The master key is a GitHub environment secret `STOKTOK_AI_KEYS_MASTER_KEY` in the `stoktok` environment, written to the host env file by the deploy workflow (STK-084), with a copy in Ming's password manager. It is never committed to the deployment repo. Generate it with `head -c 32 /dev/urandom | base64`.
 
 ## Rotation runbook (v1, manual)
-1. Delete the stored keys on Settings (or accept that they are discarded).
+1. Delete the stored keys on Settings. Rows are not discarded automatically: rows sealed under the old master key make reads fail with `MAPPING`, and both providers stay disabled until those rows are deleted.
 2. Replace the `stoktok` environment secret (and the password manager copy).
 3. Redeploy.
 4. Re-enter the keys on Settings.
+5. If the rotation is caused by a suspected compromise of the master key, also rotate the provider keys at the providers (issue new keys, enter those in step 4, revoke the old ones).
+6. Backups from the last 7 days, 4 weeks and 6 months hold ciphertext sealed under the old master key. While any copy of the old master key exists, those backups can be decrypted. Either rotate the provider keys at the providers, or destroy the old master-key copy once those backups have aged out.
+
 A multi-version keyring (previous key plus re-seal; `key_version` is reserved for it) is a follow-up.
 
 ## Loss procedure
@@ -49,7 +52,7 @@ If the master key is lost: delete the stored keys on Settings (delete needs no k
 ## Consequences
 - After the cutover the keys are re-entered on Settings, in this order: set the secret, deploy, re-enter.
 - Migration `20261111000100_ai_keys_app_encryption.sql` must **never** be applied to the live Supabase project: the running release still calls the Vault wrappers it drops. It refuses a database with a real Vault (guard on the db:check stub's schema comment). It exists for db:check, test:db and the STK-083 baseline.
-- The Vault rows on Supabase (`stoktok_ai_key_%`) are cleaned in the STK-084 runbook (or the keys are rotated at the providers). The migration does not touch `vault.*`.
+- Cutover runbook (STK-084), in this order: (1) issue **new** keys at Anthropic and Google and enter those on Settings, not the old values; (2) revoke the old keys at the providers; (3) delete the `stoktok_ai_key_%` Vault rows on Supabase only **after** the rollback window closes (proposed 14 days), because an earlier delete would make a rollback to the Supabase release silently fall back to env keys or no keys. Deleting Vault rows does not remove the keys from Supabase backups or PITR, which is why the provider keys are replaced and not only the rows. The migration does not touch `vault.*`.
 - The Vault stub in `scripts/db-check/bootstrap-roles.sql` stays until STK-083.
 - Rolling back (`supabase/rollback/20261111000100_...down.sql`) drops `ai_keys` and does not restore the Vault shape.
 - With the master key unset, keys saved on Settings are disabled: save fails with `NOT_CONFIGURED`, and env keys keep working.
