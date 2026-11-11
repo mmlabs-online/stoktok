@@ -73,7 +73,7 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
 | STK-077 | AI summaries worker job and inputs (STK-064 slice b) | BACKLOG | P2 | data, security | 0 | 2026-11-10 |
 | STK-078 | Portfolio AI summary (STK-064 slice c) | BACKLOG | P2 | data, finance | 0 | 2026-11-10 |
 | STK-079 | AI summary cards on Tài sản and the symbol screen (STK-064 slice d) | BACKLOG | P2 | ui, security | 0 | 2026-11-10 |
-| STK-080 | Postgres driver foundation: pg + Kysely in packages/db (self-hosted Postgres, slice a) | REVIEW | P1 | architecture, db, data, security | 2 | 2026-11-11 |
+| STK-080 | Postgres driver foundation: pg + Kysely in packages/db (self-hosted Postgres, slice a) | REWORK | P1 | architecture, db, data, security | 3 | 2026-11-11 |
 | STK-081 | Data layer on pg + Kysely: port repos and callers (STK-080 slice b) | BACKLOG | P1 | architecture, db, data, security | 0 | 2026-11-11 |
 | STK-082 | AI provider keys encrypted app-side, replacing Vault (STK-080 slice c) | BACKLOG | P1 | security, db, architecture | 0 | 2026-11-11 |
 | STK-083 | Plain-Postgres baseline migration, app roles and db:check rewrite (STK-080 slice d) | BACKLOG | P1 | db, security | 0 | 2026-11-11 |

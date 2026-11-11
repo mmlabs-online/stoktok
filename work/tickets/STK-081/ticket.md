@@ -25,4 +25,4 @@ STK-080 ticket ACs: AC1 (port), AC2 (wired), AC5 (no auth change; guard), AC7. C
 ## Notes / answers from Ming
 - 2026-11-11 (orchestrator): split from STK-080 per its plan.md; Ming's decisions are in work/tickets/STK-080/ticket.md (Postgres container on a shared Docker network, squashed baseline, pg + Kysely, accept Supabase Free pausing).
 - Ming's manual step: Set `STOKTOK_DATABASE_URL` (Supabase session pooler) in the deploy repo secrets.
-- STK-081 must require TLS (sslmode=verify-full) for any STOKTOK_DATABASE_URL host off the Docker network, enforce run() wrapping of kysely calls in repos, and cover the @stoktok/db/pg importer rule (STK-080 security review S3, S5, S7c).
+- STK-081 must require TLS (sslmode=verify-full) for any STOKTOK_DATABASE_URL host off the Docker network and enforce run() wrapping of kysely calls in repos (STK-080 security review S3, S5); the @stoktok/db/pg importer rule was done in STK-080 attempt 2.
