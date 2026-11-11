@@ -81,3 +81,73 @@ No violations found.
 ### Follow-ups (out of scope)
 - Add a `format:check` script, or state in CLAUDE.md and the agent docs that the repo has none (impl-log follow-up).
 - STK-086: as plan A2 notes, no schema-changing ticket should merge before STK-086, because db:check still validates the legacy chain.
+
+## Attempt 2 — 2026-11-11
+Verdict: PASS
+
+Reviewed commit `10c92cf`. The diff since review attempt 1 (`1486088..10c92cf`) touches three code files: `packages/db/src/migrations-lint.test.ts`, `packages/db/test-db/baseline.test.ts` and `scripts/schema-diff.sh`. The only other changes are bookkeeping: the attempt counter in `work/backlog.md` and `ticket.md`, plus `impl-log.md`. These are exactly the fixes Ming asked for in ticket.md ("2026-11-11 (Ming, after review attempt 1 PASS)").
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exit 0.
+- lint: `pnpm lint` exit 0.
+- test: `pnpm test` exit 0. core 834, sources 35, ai 184, db 115 (21 files; +3 lint fixture tests), worker 299, web 352. This matches impl-log.
+- build: `pnpm build` exit 0.
+- test:db: `DB_TEST_URL=postgresql://postgres@127.0.0.1:54421/postgres pnpm test:db` on a throwaway PG 16.15 cluster (TCP, trust auth). 23 files and 127 tests passed. This matches impl-log.
+- db:check: `pnpm db:check` printed `db:check OK`. URL mode (`DB_CHECK_URL` on the same TCP server) also printed `db:check OK`.
+- schema-diff: `bash scripts/schema-diff.sh` exit 0. Owner flags `f|f|f|f|f`, rollback `0|0|0`, `A' vs B: identical`.
+- format: the repo has no `format:check` script.
+
+### Ming's fixes, verified
+1. **Tokeniser** (`migrations-lint.test.ts:15-16`). The token regex now covers:
+   - E-strings with `\\`-escapes. A lookbehind stops `typeE'…'` from being read as an E-string.
+   - Double-quoted identifiers with `""`.
+   - Dollar tags `[A-Za-z_][A-Za-z0-9_]*`, plus the empty tag.
+
+   Fixtures at :102-109 cover each case, both through `grant` (FORBIDDEN) and through `commit` (the TX check). The `"x;commit"` fixture checks that the quoted-identifier alternative does not cause false positives. All pass.
+2. **Role switching** (:40-42). The pattern now catches:
+   - `SET [LOCAL|SESSION] ROLE` and `RESET ROLE`;
+   - `set_config('role'`;
+   - `SET [LOCAL|SESSION] SESSION AUTHORIZATION`.
+
+   Fixtures at :111-114 pass.
+3. **`create schema` and `owner to`** (:34-35) are banned, with fixtures at :115-116. A fixture at :117 checks that the column names `role` and `owner_id` don't false-positive.
+4. **Baseline `do` rule** (:85) is now `/\bdo\s+(language\s+\w+\s+)?(\$|')/i`. Fixtures at :120-123 cover `do $$`, `do language plpgsql $$` and `do '…'`. The real baseline still passes.
+5. **Relation ACL check** (`baseline.test.ts:49-53`). It explodes `relacl` for relkinds r/p/v/m/f/S, using `acldefault('s'|'r')` when the ACL is NULL. A non-vacuous guard (row count ≥ number of tables) makes sure the check really sees rows. It then asserts grantee 0 is absent.
+6. **Schema ACL and extra schemas** (`baseline.test.ts:55-60`). On `nspacl` (with `acldefault('n')` for NULL), PUBLIC may have only USAGE. It also asserts no schema exists besides `public`, `information_schema` and `pg_*`. The LIKE escape `pg\_%` is correct.
+7. **`schema-diff.sh:45`** is now `-k '$TMP'`. I re-ran the script with `TMPDIR` containing a space (`…/sp ace`). It exited 0, printed `A' vs B: identical` and `0|0|0`, and cleaned up its temp dir.
+
+### ACL fail-proof (re-run by reviewer, on a scratch copy of the repo; the working tree was never edited)
+| Appended to the baseline | Result |
+|---|---|
+| `grant select on public.settings to public;` | full `test:db`: **1 failed / 126 passed**, `FAIL baseline > relations have no PUBLIC privileges`, `expected [ 'settings' ] to deeply equal []` |
+| `grant create on schema public to public;` | `baseline.test.ts`: `FAIL … schema public gives PUBLIC at most USAGE; no extra schemas`, `expected [ 'CREATE' ]` |
+| `create schema other;` | same test fails, `expected [ 'other' ]` |
+| `grant usage on all sequences in schema public to public;` | `relations have no PUBLIC privileges` fails, `[ 'transactions_seq_seq', …(5) ]`. This proves the `'S'` → `acldefault('s')` branch. |
+| (baseline restored) | `baseline.test.ts` 6/6 passed |
+
+I deleted the scratch copy and the cluster afterwards. `git status` is clean.
+
+### Acceptance criteria
+Attempt 1's 12 criteria still hold. The baseline, the rollback, `global-setup.ts`, `ci.yml` and `supabase/` are unchanged since attempt 1, and the re-run checks are green. Ming's added items are verified above (fixes 1-7) and each has its own fixture or test.
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found.
+- R7: only the three listed files changed, plus bookkeeping.
+- R8: all checks are green, and the changed lint logic has fixtures.
+- R3: `schema-diff.sh` still reads no URL or secret.
+
+### Nits (do not block)
+The lint still has two gaps of the same kind as the ones fixed. I confirmed both against real Postgres 16. They are outside Ming's fix list, and the lint remains a guardrail, not a boundary.
+- **Non-ASCII dollar tags.** `select $é$ -- $é$; grant select on t to public;` lints as `[]`, yet Postgres runs the `grant`. Postgres allows non-ASCII letters in tags, while `TOKEN_RE` allows only `[A-Za-z_]`. The new catalog check catches this when the grant is to PUBLIC, but not when it is to another existing role. Possible fix: tag class `[^\W\d]\w*` with the `u` flag, or `[A-Za-z_\x80-￿][A-Za-z0-9_\x80-￿]*`.
+- **Nested block comments.** `/* /* */ ' */ commit; -- '` lints as `[]`. Postgres nests `/* */`, so it runs the `commit`. The linter ends the comment at the first `*/`, and the following `'` then swallows the `commit`. FORBIDDEN words are not affected, because `stripComments` keeps strings. Only the TX check is.
+- `reset session authorization` and `set_config(E'role', …)` are not flagged. Both are harmless for a role that is a member of no other role.
+
+### Follow-ups (out of scope)
+- A stronger catalog gate: assert that every ACL entry on public-schema relations, functions and the schema has a grantee that is either the owner or PUBLIC with USAGE on the schema only. That would catch grants to *any* role, not just PUBLIC, so lint gaps like the ones above stop mattering. Could fit in STK-086.
+- Still open from security-review attempt 1:
+  - run the `test:db`/`db:check` migrations as a non-superuser owner (STK-086);
+  - `revoke connect on database stoktok from public` in the deployment repo's `add-app-db.sh` (raise with Ming).
+- Move `lintMigration` out of the test file (STK-087), as noted in attempt 1.
