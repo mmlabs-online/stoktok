@@ -25,4 +25,4 @@ docs/spec-v1.md §3 F5, §6.2, §7. CLAUDE.md R1, R4, R5, R9. Depends on STK-064
 ## Notes / answers from Ming
 - 2026-11-10 (orchestrator): split from STK-064 per its plan.md; defaults for Ming are listed there under Assumptions.
 - Ming's manual step after merge: add `ai-summaries` to `run-schedule.sh` in the deployment repo after eod-prices → signals → financial-statements → news, plus a later retry slot.
-- 2026-11-11 (orchestrator): Ming should run STK-077 after STK-081 (plan.md STK-077 ordering).
+- 2026-11-11 (orchestrator): Ming should run STK-077 after STK-085 (the repo port; STK-081 plan).

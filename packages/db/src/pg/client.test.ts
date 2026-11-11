@@ -1,3 +1,4 @@
+import { inspect } from 'node:util';
 import { describe, expect, test } from 'vitest';
 import { createPgDb, DATABASE_URL_ENV } from './client';
 import { PG_POOL_PROFILES, type PgProfile, type PoolProfile } from './config';
@@ -62,5 +63,32 @@ describe('createPgDb', () => {
     const worker = await build(url, 'worker', { max: 1 });
     expect(worker.pool.cfg).toMatchObject({ max: 1, connectionTimeoutMillis: 5_000 });
     await worker.db.end();
+  });
+});
+
+describe('opaque handle', () => {
+  test('handle is opaque: only end and stats; inspect(showHidden) and JSON contain no sentinel password', async () => {
+    const { db } = await build('postgres://u:pw-SENTINEL-123@127.0.0.1:1/x', 'worker');
+    expect(Object.keys(db)).toEqual(['end', 'stats']);
+    expect(JSON.stringify(db)).toBe('{}');
+    const shown = inspect(db, { showHidden: true, depth: Infinity, getters: false });
+    expect(shown).not.toContain('pw-SENTINEL');
+    expect(shown).not.toContain('127.0.0.1');
+    expect(Object.isFrozen(db)).toBe(true);
+    expect('pool' in db).toBe(false);
+    await db.end();
+  });
+
+  test('stats() is zero before any query', async () => {
+    const { pool, db } = await build('postgres://u:pw@127.0.0.1:1/x', 'worker');
+    expect(db.stats()).toEqual({ total: 0, idle: 0, waiting: 0 });
+    expect(pool.instance.totalCount).toBe(0);
+    await db.end();
+  });
+
+  test('end() twice resolves (never connected)', async () => {
+    const { db } = await build('postgres://u:pw@127.0.0.1:1/x', 'worker');
+    await db.end();
+    await expect(db.end()).resolves.toBeUndefined();
   });
 });

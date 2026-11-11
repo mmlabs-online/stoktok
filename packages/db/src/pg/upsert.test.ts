@@ -60,6 +60,15 @@ describe('upsert guards', () => {
   });
 });
 
+describe('jsonb typing', () => {
+  test('jsonb columns reject raw objects at compile time', () => {
+    const base = { symbol: 'A', rule_id: 'r', horizon: 'h', signal_date: 'd', status: 's', data_fresh: false, rule_version: 1, computed_at: 't' };
+    // @ts-expect-error a raw object is not accepted on a jsonb column
+    db.insertInto('signals').values({ ...base, inputs_snapshot: { a: 1 } });
+    expect(() => db.insertInto('signals').values({ ...base, inputs_snapshot: jsonb({ a: 1 }) })).not.toThrow();
+  });
+});
+
 describe('chunkForParams', () => {
   test('splits at floor(maxParams / ncols) rows', () => {
     const rows = Array.from({ length: 7 }, (_, i) => ({ a: i, b: i, c: i }));

@@ -17,7 +17,7 @@ function walk(dir: string, out: string[] = []): string[] {
 
 const SDK_IMPORT = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"](?:@anthropic-ai\/sdk|@google\/genai)/;
 
-const DRIVER_IMPORT = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"](?:pg|pg-[\w-]+|kysely)(?:\/[\w/-]+)?['"]/;
+const DRIVER_IMPORT_PG = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"](?:pg|pg-[\w-]+)(?:\/[\w/-]+)?['"]/;
 
 const NEXT_PUBLIC_RE = /NEXT_PUBLIC_\w*(SERVICE|KEY|DATABASE|DB_|PASSWORD|SECRET)/;
 const DB_IMPORT_RE = /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)['"]@stoktok\/db(?:\/pg)?['"]/;
@@ -179,16 +179,88 @@ describe('R3 guard', () => {
       .filter((p) => p !== 'packages/db/src/pg/client.ts' && p !== 'packages/db/src/pg/client.test.ts');
     expect(hits).toEqual([]);
   });
+});
 
-  test('pg and kysely are imported only under packages/db/', () => {
-    const hits = files.filter((f) => DRIVER_IMPORT.test(f.text)).map((f) => f.path).filter((p) => !p.startsWith('packages/db/'));
+// STK-081 b1: Kysely is reachable only through q() in packages/db/src/pg/access.ts, which wraps run().
+const PG_DIRS = ['packages/db/src/pg/', 'packages/db/test-db/'];
+const inPgDirs = (p: string) => PG_DIRS.some((d) => p.startsWith(d));
+
+const KYSELY_REEXPORT = /export\s+(?:type\s+)?(?:\*|\{[^}]*\})(?:\s+as\s+\w+)?\s+from\s+['"]kysely['"]/g;
+const KYSELY_DYNAMIC = /(?:import\s*\(\s*|require\s*\(\s*|import\s+)['"]kysely['"]/;
+const KYSELY_FROM = /import\s+(type\s+)?([^;]*?)\s+from\s+['"]kysely['"]/g;
+const KYSELY_CTOR_LOG = /new\s+Kysely\b[^(]*\([\s\S]*?(?<![.\w])log\s*[:(]/;
+const CREATE_PG_DB = /\bcreatePgDb\s*\(/;
+const ACCESSOR = /kyselyOf|stoktok\.pgdb\.internals|getOwnPropertySymbols|Reflect\s*\.\s*ownKeys/;
+
+/** True when the text imports kysely in a form other than `sql` or types only. */
+function kyselyViolation(text: string): boolean {
+  if (KYSELY_DYNAMIC.test(text)) return true;
+  for (const m of text.matchAll(KYSELY_REEXPORT)) {
+    if (/^export\s+type\b/.test(m[0])) continue;
+    if (/^export\s*\{/.test(m[0])) {
+      const names = m[0].replace(/^export\s*\{|\}[\s\S]*$/g, '').split(',').map((x) => x.trim()).filter(Boolean);
+      if (names.every((n) => n === 'sql' || n.startsWith('type '))) continue;
+    }
+    return true;
+  }
+  for (const m of text.matchAll(KYSELY_FROM)) {
+    if (m[1]) continue;
+    const spec = m[2]!.trim();
+    if (!spec.startsWith('{')) return true;
+    const names = spec.replace(/^\{|\}$/g, '').split(',').map((x) => x.trim()).filter(Boolean);
+    if (names.some((n) => n !== 'sql' && !n.startsWith('type '))) return true;
+  }
+  return false;
+}
+
+describe('S5 data access', () => {
+  test('S5: pg/pg-* imported only under packages/db/src/pg/ and test-db/; kysely outside them only as sql or type', () => {
+    const drivers = files.filter((f) => DRIVER_IMPORT_PG.test(f.text)).map((f) => f.path).filter((p) => !inPgDirs(p));
+    expect(drivers).toEqual([]);
+    const kysely = files.filter((f) => kyselyViolation(f.text)).map((f) => f.path).filter((p) => !inPgDirs(p));
+    expect(kysely).toEqual([]);
+  });
+
+  test('S5: kyselyOf and the internals symbol appear only under packages/db/src/pg/ and packages/db/test-db/', () => {
+    const hits = files.filter((f) => ACCESSOR.test(f.text)).map((f) => f.path).filter((p) => !inPgDirs(p));
     expect(hits).toEqual([]);
   });
 
-  test('driver regex catches pg, kysely, pg-* in every import form and not @stoktok/db/pg', () => {
-    for (const s of [`from 'pg'`, `from "kysely"`, `import('pg')`, `require('pg-protocol')`, `import 'pg'`, `from 'pg/lib/x'`]) {
-      expect(DRIVER_IMPORT.test(s), s).toBe(true);
+  test('S5: new Kysely( appears only in packages/db/src/pg/client.ts and packages/db/src/pg/*.test.ts, never with a log option', () => {
+    const ctor = files.filter((f) => /new\s+Kysely\b/.test(f.text)).map((f) => f.path);
+    expect(ctor.filter((p) => p !== 'packages/db/src/pg/client.ts' && !/^packages\/db\/src\/pg\/[\w-]+\.test\.ts$/.test(p))).toEqual([]);
+    expect(files.filter((f) => KYSELY_CTOR_LOG.test(f.text)).map((f) => f.path)).toEqual([]);
+  });
+
+  test('S5: createPgDb( is called only under packages/db/src/pg/ and packages/db/test-db/', () => {
+    const hits = files.filter((f) => CREATE_PG_DB.test(f.text)).map((f) => f.path).filter((p) => !inPgDirs(p));
+    expect(hits).toEqual([]);
+  });
+
+  test('S5 regexes catch their fixtures', () => {
+    for (const s of [`import { Kysely } from 'kysely'`, `import * as k from 'kysely'`, `const k = await import('kysely')`, `import { sql, Kysely } from 'kysely'`]) {
+      expect(kyselyViolation(s), s).toBe(true);
     }
-    expect(DRIVER_IMPORT.test(`from '@stoktok/db/pg'`)).toBe(false);
+    for (const s of [`import { sql } from 'kysely'`, `import type { Kysely } from 'kysely'`, `import { sql, type RawBuilder } from 'kysely'`]) {
+      expect(kyselyViolation(s), s).toBe(false);
+    }
+    expect(KYSELY_CTOR_LOG.test('new Kysely<Database>({ log: (e) => e, dialect })')).toBe(true);
+    expect(KYSELY_CTOR_LOG.test('new Kysely<Database>({ dialect: new PostgresDialect({ pool }), log: (e) => e })')).toBe(true);
+    expect(KYSELY_CTOR_LOG.test('new Kysely<Database>({\n  dialect: new PostgresDialect({ pool }),\n  log(e) {},\n})')).toBe(true);
+    expect(KYSELY_CTOR_LOG.test('new Kysely<Database>({ dialect: new PostgresDialect({ pool }) })')).toBe(false);
+    for (const s of [`export { Kysely } from 'kysely'`, `export * from 'kysely'`, `export * as k from 'kysely'`, `export { sql, Kysely } from 'kysely'`]) {
+      expect(kyselyViolation(s), s).toBe(true);
+    }
+    for (const s of [`export { sql } from 'kysely'`, `export type { Kysely } from 'kysely'`, `export { type Kysely, sql } from 'kysely'`]) {
+      expect(kyselyViolation(s), s).toBe(false);
+    }
+    expect(ACCESSOR.test('Object.getOwnPropertySymbols(db)')).toBe(true);
+    expect(ACCESSOR.test('Reflect.ownKeys(db)')).toBe(true);
+    expect(CREATE_PG_DB.test('createPgDb(process.env, "web")')).toBe(true);
+    expect(ACCESSOR.test('kyselyOf(db)')).toBe(true);
+    expect(ACCESSOR.test(`Symbol.for('stoktok.pgdb.internals')`)).toBe(true);
+    expect(DRIVER_IMPORT_PG.test(`from 'pg'`)).toBe(true);
+    expect(DRIVER_IMPORT_PG.test(`import('pg-protocol')`)).toBe(true);
+    expect(DRIVER_IMPORT_PG.test(`from '@stoktok/db/pg'`)).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { toSafeInt } from '@stoktok/core';
 import { sql } from 'kysely';
+import { kyselyOf } from '../src/pg/access';
 import { freshDb, type TestDb } from './harness';
 
 let t: TestDb;
@@ -31,7 +32,7 @@ describe('type parsing against real Postgres', () => {
         array[1,2,3]::smallint[] as si,
         gen_random_uuid() as u,
         true as b,
-        7::int4 as i`.execute(t.pgDb.kysely);
+        7::int4 as i`.execute(kyselyOf(t.pgDb));
     const r = rows[0]!;
     expect(r.d).toBe('2026-11-10');
     expect(r.da).toEqual(['2026-11-10', '2026-12-31']);
@@ -51,7 +52,7 @@ describe('type parsing against real Postgres', () => {
 
   test('every public column type is in the handled set', async () => {
     const { rows } = await sql<{ udt_name: string }>`
-      select distinct udt_name from information_schema.columns where table_schema = 'public'`.execute(t.pgDb.kysely);
+      select distinct udt_name from information_schema.columns where table_schema = 'public'`.execute(kyselyOf(t.pgDb));
     const unknown = rows.map((r) => r.udt_name).filter((u) => !HANDLED.has(u));
     expect(unknown).toEqual([]);
   });

@@ -3,12 +3,12 @@
  * Type conventions: bigint -> string on read (R2: core's toSafeInt checks the range), date -> 'YYYY-MM-DD',
  * timestamptz -> ISO string, jsonb is written through jsonb() from ./upsert.
  */
-import type { ColumnType, Generated } from 'kysely';
+import type { ColumnType, Generated, RawBuilder } from 'kysely';
 
 type Int8 = ColumnType<string, number | string, number | string>;
 type TsDef = ColumnType<string, string | undefined, string>;
-type Json = ColumnType<unknown, string, string>;
-type JsonDef = ColumnType<unknown, string | undefined, string>;
+type Json = ColumnType<unknown, RawBuilder<unknown>, RawBuilder<unknown>>;
+type JsonDef = ColumnType<unknown, RawBuilder<unknown> | undefined, RawBuilder<unknown>>;
 type Def<T> = ColumnType<T, T | undefined, T>;
 
 export interface TransactionsTable {
