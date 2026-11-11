@@ -69,3 +69,61 @@ The rules do what the plan says, and their self-tests cover the main import form
 - Should the `q()` type constraint land here (rework) or as the first commit of STK-085?
 
 Files reviewed: `/home/user/stoktok/packages/db/src/pg/client.ts`, `/home/user/stoktok/packages/db/src/pg/access.ts`, `/home/user/stoktok/packages/db/src/pg/index.ts`, `/home/user/stoktok/packages/db/src/errors.ts`, `/home/user/stoktok/packages/db/src/r3-guard.test.ts`, `/home/user/stoktok/packages/db/src/pg/client.test.ts`, `/home/user/stoktok/packages/db/test-db/pg-proxy.ts`, `/home/user/stoktok/packages/db/test-db/session.test.ts`, `/home/user/stoktok/packages/db/test-db/access.test.ts`, `/home/user/stoktok/docs/adr/0010-self-hosted-postgres-data-layer.md` (decision 13).
+
+## Security review: STK-081 slice b1, attempt 2
+
+**Verdict: all five items are fixed. No 🔴 and no 🟡.** I only read the code: `access.ts`, `access.test.ts`, `r3-guard.test.ts:184-266`, `client.ts:80-96` and the impl-log for attempt 2. I ran nothing, so the check results (typecheck, lint, test, test:db, db:check, check:service-key all green) come from the impl-log. As agreed, I did not re-raise the `leak = k` case.
+
+### Status of the attempt-1 items
+| Item | Status | Evidence |
+|---|---|---|
+| 🟡 1: a builder or `k` could escape `q()` | ✅ Fixed | `packages/db/src/pg/access.ts:17-25`. TS infers into both branches of the conditional, so `T` is inferred and then rejected. Because the check is distributive, `Kysely \| null` becomes `null` and is still rejected. `Transaction` is covered because it extends `Kysely`. The cast back to `Promise<T>` at `:25` is sound at runtime. Fixtures in `access.test.ts:26-33` cover a builder, `Kysely`, `Transaction` and a union. `src` is in the tsconfig `include` (`packages/db/tsconfig.json:4`), so an unused `@ts-expect-error` would fail typecheck. The builder fixture at `:27` uses the same `'instruments' as never` as the passing positive fixture at `:20`, so its expected error cannot come from that cast. |
+| Nested `log:` in the r3-guard rule | ✅ Fixed | `r3-guard.test.ts:191`. The rule matches a single-line `log:`, a multi-line `log:` and the `log(e) {}` shorthand. `(?<![.\w])` excludes `console.log(`. Self-tests are at `:247-250`. |
+| Accessor rule: `getOwnPropertySymbols` and `Reflect.ownKeys` | ✅ Fixed | `r3-guard.test.ts:193`. It also matches `Reflect . ownKeys` with spaces. Self-tests are at `:257-258`. |
+| Kysely re-exports | ✅ Fixed | `r3-guard.test.ts:188, 198-205`. Caught: `export *`, `export * as x`, `export {…}`, and `export { Kysely as sql }` (the name text is `Kysely as sql`, not `sql`). Allowed: `sql` and type-only re-exports. Self-tests are at `:251-256`. |
+| `DRIVER_IMPORT` removed | ✅ Fixed | Only `DRIVER_IMPORT_PG` is left (`:20`, `:218`, `:262-264`). |
+
+### New or remaining issues (all 🟢)
+
+🟢 1. **`q()` still lets through some escapes that are not builders**: `packages/db/src/pg/access.ts:17`
+- `Escaping` blocks only `Compilable | Kysely`. These still compile:
+  - returning `any` or `unknown` (`async k => k as any`, or `q<any>(…)`). With `any`, the conditional resolves to both branches, `never | any`, which is `any`.
+  - a wrapped handle (`[k]`, `{ b: k.selectFrom(…) }`, `() => k`).
+  - other Kysely objects that can run queries: `k.transaction()` (TransactionBuilder, which has `.execute`), `k.connection()`, `k.schema`, `k.introspection`.
+- Any of these would run SQL outside `run()`, so raw pg errors could reach callers (the STK-080 S5 caveat).
+- All of them need a deliberate cast or wrapper, which is the same class as the accepted `leak = k` case. The likely mistakes, forgetting `.execute()` or returning `k`, are caught.
+- `.stream()` is not a risk here: no `cursor` is configured (`client.ts:88`), so it throws a fixed Kysely message.
+- Optional hardening, one commit:
+  - Reject `any` with `0 extends 1 & T ? never : …`.
+  - Add `TransactionBuilder<Database> | ConnectionBuilder<Database>` to `Escaping`.
+  - Extend the STK-085 reviewer rule to: "a `q()` callback returns rows or scalars only. No `as any`/`unknown`, no Kysely objects, no functions." Ties to AC5 and R3.
+
+🟢 2. **Gaps in the `log` rule**: `r3-guard.test.ts:191`
+- The rule misses:
+  - the shorthand `{ dialect, log }`;
+  - a quoted key `"log":`;
+  - an options object built before `new Kysely(opts)`, because the scan starts at the constructor.
+- `new Kysely(` is allowed only in `client.ts` and `pg/*.test.ts` (`:231`), so a reviewer would see any of these. The false positive the impl-log mentions (an unrelated `log:` later in the same file) is real but harmless.
+
+🟢 3. **Attempt-1 import gaps not in this fix list are still open**: `r3-guard.test.ts:188-190`
+- In a file without semicolons, `import type {A} from './a'\nimport { Kysely } from 'kysely'` still slips through `KYSELY_FROM`. The lazy `[^;]*?` makes one match span both imports and `m[1]='type '` skips it. Not yet in the self-tests. The code base uses semicolons, so the risk is low.
+- `export{Kysely}from'kysely'` with no whitespace is not matched, because the regex needs `\s+` after `export`.
+- `ACCESSOR` is a text match, so `Symbol.for('stoktok.pgdb' + '.internals')` gets around it. These guards stop accidents, not a determined bypass. That is acceptable.
+
+### Recommendations
+1. No rework needed for security. Optionally apply the 🟢 1 type hardening, either here or as the first commit of STK-085. Ties to AC5 and R3.
+2. STK-085 reviewer rule, extended from the `leak = k` rule: callbacks return rows or scalars only, with no `as any`/`unknown`, no wrappers around `k`/`trx`, and no `k.transaction()`, `k.connection()`, `k.schema` or `k.introspection` as a return value.
+
+### Risks
+- AC5 is now enforced by the compiler for the common mistakes. Deliberate escapes (🟢 1 and `leak = k`) still depend on review across the 17 repo ports.
+
+### Open questions
+- Should the `any` rejection and the wider `Escaping` union land here or in STK-085?
+
+Files reviewed:
+- /home/user/stoktok/packages/db/src/pg/access.ts
+- /home/user/stoktok/packages/db/src/pg/access.test.ts
+- /home/user/stoktok/packages/db/src/r3-guard.test.ts
+- /home/user/stoktok/packages/db/src/pg/client.ts
+- /home/user/stoktok/packages/db/tsconfig.json
+- /home/user/stoktok/work/tickets/STK-081/impl-log.md
