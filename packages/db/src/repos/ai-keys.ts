@@ -1,7 +1,10 @@
 import { AI_PROVIDERS, validateAiKeyFormat } from '@stoktok/core';
 import type { AiProvider } from '@stoktok/core';
-import type { Db } from '../client';
+import { sql } from 'kysely';
 import { DataError } from '../errors';
+import type { SqlstateMap } from '../errors';
+import { q } from '../pg/access';
+import type { PgDb } from '../pg/client';
 
 export interface AiKeyMeta {
   provider: AiProvider;
@@ -14,27 +17,26 @@ export type StoredAiKeySecrets = Partial<Record<AiProvider, string>>;
 const TABLE = 'ai_keys';
 
 /**
- * Never uses unwrap(): that attaches the PostgREST error as `cause`, and its message/details could echo the rpc parameters (the key).
- * Errors here carry a fixed text and the pg code only. Nothing in this module logs.
+ * Errors carry a fixed text and the pg code only (q() attaches no cause). The key is only ever a bound parameter,
+ * never part of the SQL text. Nothing in this module logs.
  */
-function fail(op: string, error: { code?: string }): never {
-  const pg = error.code;
-  if (pg === '22023') throw new DataError('VALIDATION', TABLE, op, 'invalid arguments', pg);
-  throw new DataError('DB_ERROR', TABLE, op, 'database error', pg);
-}
+const AI_KEY_MAP: SqlstateMap = (s) => (s === '22023' ? 'VALIDATION' : undefined);
 
 function assertProvider(provider: string, op: string): asserts provider is AiProvider {
   if (!AI_PROVIDERS.includes(provider as AiProvider)) throw new DataError('VALIDATION', TABLE, op, 'unknown provider');
 }
 
 /** Stores or replaces the provider key in Vault through ai_key_set. Returns metadata only. */
-export async function saveAiKey(db: Db, provider: string, key: string): Promise<AiKeyMeta> {
+export async function saveAiKey(db: PgDb, provider: string, key: string): Promise<AiKeyMeta> {
   assertProvider(provider, 'set');
   if (!validateAiKeyFormat(key).ok) throw new DataError('VALIDATION', TABLE, 'set', 'invalid key format');
-  const res = await db.rpc('ai_key_set', { p_provider: provider, p_key: key });
-  if (res.error) fail('set', res.error);
-  const data = res.data as { key_last4?: unknown; saved_at?: unknown }[] | { key_last4?: unknown; saved_at?: unknown } | null;
-  const row = Array.isArray(data) ? data[0] : data;
+  const rows = await q(
+    db,
+    { table: TABLE, op: 'set' },
+    async (k) => (await sql<{ key_last4: unknown; saved_at: unknown }>`select key_last4, saved_at from public.ai_key_set(${provider}::text, ${key}::text)`.execute(k)).rows,
+    { map: AI_KEY_MAP },
+  );
+  const row = rows[0];
   if (!row || typeof row.key_last4 !== 'string' || typeof row.saved_at !== 'string') {
     throw new DataError('MAPPING', TABLE, 'set', 'row mapping failed (result)');
   }
@@ -42,29 +44,36 @@ export async function saveAiKey(db: Db, provider: string, key: string): Promise<
 }
 
 /** Returns whether a key was stored. */
-export async function deleteAiKey(db: Db, provider: string): Promise<boolean> {
+export async function deleteAiKey(db: PgDb, provider: string): Promise<boolean> {
   assertProvider(provider, 'delete');
-  const res = await db.rpc('ai_key_delete', { p_provider: provider });
-  if (res.error) fail('delete', res.error);
-  return res.data === true;
+  const rows = await q(
+    db,
+    { table: TABLE, op: 'delete' },
+    async (k) => (await sql<{ deleted: unknown }>`select public.ai_key_delete(${provider}::text) as deleted`.execute(k)).rows,
+    { map: AI_KEY_MAP },
+  );
+  return rows[0]?.deleted === true;
 }
 
 /** Metadata only (provider, last 4, date): never decrypts. */
-export async function listAiKeyMeta(db: Db): Promise<AiKeyMeta[]> {
-  const res = await db.from(TABLE).select('provider, last4, updated_at');
-  if (res.error) fail('list', res.error);
-  return ((res.data ?? []) as { provider: string; last4: string; updated_at: string }[]).map((r) => {
+export async function listAiKeyMeta(db: PgDb): Promise<AiKeyMeta[]> {
+  const rows = await q(db, { table: TABLE, op: 'list' }, (k) => k.selectFrom('ai_keys').select(['provider', 'last4', 'updated_at']).execute(), { map: AI_KEY_MAP });
+  return rows.map((r) => {
     if (!AI_PROVIDERS.includes(r.provider as AiProvider)) throw new DataError('MAPPING', TABLE, 'list', 'row mapping failed (provider)');
     return { provider: r.provider as AiProvider, last4: r.last4, updatedAt: r.updated_at };
   });
 }
 
 /** The only decrypting call (r3-guard lists its allowed callers). Server code only. */
-export async function readAiKeySecrets(db: Db): Promise<StoredAiKeySecrets> {
-  const res = await db.rpc('ai_key_secrets');
-  if (res.error) fail('read', res.error);
+export async function readAiKeySecrets(db: PgDb): Promise<StoredAiKeySecrets> {
+  const rows = await q(
+    db,
+    { table: TABLE, op: 'read' },
+    async (k) => (await sql<{ provider: string; secret: unknown }>`select provider, secret from public.ai_key_secrets()`.execute(k)).rows,
+    { map: AI_KEY_MAP },
+  );
   const out: StoredAiKeySecrets = {};
-  for (const r of (res.data ?? []) as { provider: string; secret: string }[]) {
+  for (const r of rows) {
     if (!AI_PROVIDERS.includes(r.provider as AiProvider)) throw new DataError('MAPPING', TABLE, 'read', 'row mapping failed (provider)');
     if (typeof r.secret !== 'string' || r.secret === '') throw new DataError('MAPPING', TABLE, 'read', 'row mapping failed (secret)');
     out[r.provider as AiProvider] = r.secret;

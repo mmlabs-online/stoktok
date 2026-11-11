@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { sql } from 'kysely';
 import { toSafeInt } from '@stoktok/core';
-import { run } from '../src/errors';
-import { chunkForParams, jsonb, upsertInto } from '../src/pg/upsert';
+import { DataError, run } from '../src/errors';
+import { chunkForParams, jsonb, upsertChunked, upsertInto } from '../src/pg/upsert';
 import { kyselyOf } from '../src/pg/access';
 import { freshDb, type TestDb } from './harness';
 
@@ -87,5 +87,29 @@ describe('upsertInto against real Postgres', () => {
     for (const c of chunks) await upsertInto(kyselyOf(t.pgDb), 'prices_daily', c, key).execute();
     const { rows: n } = await sql<{ n: string }>`select count(*) as n from prices_daily where symbol like 'CH%'`.execute(kyselyOf(t.pgDb));
     expect(n[0]!.n).toBe('10');
+  });
+});
+
+describe('upsertChunked against real Postgres', () => {
+  const ctx = { table: 'prices_daily', op: 'upsert' };
+  const count = async (like: string) =>
+    Number(
+      (await kyselyOf(t.pgDb).selectFrom('prices_daily').select((eb) => eb.fn.countAll().as('n')).where('symbol', 'like', like).executeTakeFirstOrThrow()).n,
+    );
+
+  test('upsertChunked: one chunk writes all rows', async () => {
+    const rows = [1, 2, 3].map((i) => ({ ...price, symbol: `ONE${i}`, foreign_net: null }));
+    await upsertChunked(t.pgDb, ctx, 'prices_daily', rows, key, 100);
+    expect(await count('ONE%')).toBe(3);
+    await upsertChunked(t.pgDb, ctx, 'prices_daily', [], key, 100);
+  });
+
+  test('upsertChunked: a failing later chunk rolls back earlier chunks (VALIDATION, 0 rows)', async () => {
+    const rows = [1, 2, 3, 4, 5].map((i) => ({ ...price, symbol: `TX${i}`, foreign_net: null }));
+    rows[4] = { ...rows[4]!, low: 99 }; // breaks low <= open/close <= high
+    const err = await upsertChunked(t.pgDb, ctx, 'prices_daily', rows, key, 2).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DataError);
+    expect(err).toMatchObject({ code: 'VALIDATION' });
+    expect(await count('TX%')).toBe(0);
   });
 });

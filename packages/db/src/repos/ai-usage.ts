@@ -1,7 +1,9 @@
 import { toSafeInt } from '@stoktok/core';
 import type { AiProvider, AiTask, BudgetWindow } from '@stoktok/core';
-import type { Db } from '../client';
-import { DataError, mapRow, unwrap } from '../errors';
+import { sql } from 'kysely';
+import { DataError, mapRow } from '../errors';
+import { q } from '../pg/access';
+import type { PgDb } from '../pg/client';
 import type { AiReserveRow, AiUsageSettle } from '../rows';
 
 export interface AiReserveRequest {
@@ -19,20 +21,18 @@ export interface AiReserveResult {
   spentMicroUsd: number;
 }
 
-/** Atomic budget gate: a granted call has a `reserved` row; a refused one is logged as `refused` with cost 0. */
-export async function reserveAiUsage(db: Db, req: AiReserveRequest): Promise<AiReserveResult> {
+/**
+ * Atomic budget gate: a granted call has a `reserved` row; a refused one is logged as `refused` with cost 0.
+ * Never run inside a transaction: ai_reserve takes its own advisory lock and must not wait on a caller's transaction.
+ */
+export async function reserveAiUsage(db: PgDb, req: AiReserveRequest): Promise<AiReserveResult> {
   const ctx = { table: 'ai_usage', op: 'reserve' };
-  const res = await db.rpc('ai_reserve', {
-    p_provider: req.provider,
-    p_model: req.model,
-    p_task: req.task,
-    p_reserve_micro_usd: req.reserveMicroUsd,
-    p_cap_micro_usd: req.capMicroUsd,
-    p_from: req.window.fromTs,
-    p_to: req.window.toTs,
-  });
-  const data = unwrap<AiReserveRow[] | AiReserveRow>(res, ctx);
-  const row = Array.isArray(data) ? data[0] : data;
+  const rows = await q(db, ctx, async (k) =>
+    (
+      await sql<AiReserveRow>`select usage_id, granted, spent_micro_usd from public.ai_reserve(${req.provider}::text, ${req.model}::text, ${req.task}::text, ${req.reserveMicroUsd}::bigint, ${req.capMicroUsd}::bigint, ${req.window.fromTs}::timestamptz, ${req.window.toTs}::timestamptz)`.execute(k)
+    ).rows,
+  );
+  const row = rows[0];
   if (!row) throw new DataError('DB_ERROR', ctx.table, ctx.op, 'no data returned');
   return mapRow(
     (r: AiReserveRow) => ({
@@ -49,31 +49,39 @@ export async function reserveAiUsage(db: Db, req: AiReserveRequest): Promise<AiR
  * Settles a reservation once: only a row still `reserved` is updated. Returns false when no row matched.
  * costMicroUsd null (unknown outcome) leaves the reservation counted at the worst case.
  */
-export async function settleAiUsage(db: Db, id: number, settle: AiUsageSettle, now: Date): Promise<boolean> {
-  const res = await db
-    .from('ai_usage')
-    .update({
-      status: settle.status,
-      input_tokens: settle.inputTokens,
-      output_tokens: settle.outputTokens,
-      cost_micro_usd: settle.costMicroUsd,
-      error_code: settle.errorCode ?? null,
-      settled_at: now.toISOString(),
-    })
-    .eq('id', id)
-    .eq('status', 'reserved')
-    .select('id');
-  return unwrap<unknown[]>(res, { table: 'ai_usage', op: 'settle' }).length > 0;
+export async function settleAiUsage(db: PgDb, id: number, settle: AiUsageSettle, now: Date): Promise<boolean> {
+  const settledAt = now.toISOString();
+  const rows = await q(db, { table: 'ai_usage', op: 'settle' }, (k) =>
+    k
+      .updateTable('ai_usage')
+      .set({
+        status: settle.status,
+        input_tokens: settle.inputTokens,
+        output_tokens: settle.outputTokens,
+        cost_micro_usd: settle.costMicroUsd,
+        error_code: settle.errorCode ?? null,
+        settled_at: settledAt,
+      })
+      .where('id', '=', String(id))
+      .where('status', '=', 'reserved')
+      .returning('id')
+      .execute(),
+  );
+  return rows.length > 0;
 }
 
-export async function getAiMonthSpend(db: Db, window: BudgetWindow): Promise<number> {
+export async function getAiMonthSpend(db: PgDb, window: BudgetWindow): Promise<number> {
   const ctx = { table: 'ai_usage', op: 'month_spend' };
-  const res = await db.rpc('ai_month_spend', { p_from: window.fromTs, p_to: window.toTs });
-  return mapRow((v: unknown) => toSafeInt(v, 'spent', 'ai_usage'), unwrap<unknown>(res, ctx), ctx);
+  const rows = await q(db, ctx, async (k) =>
+    (await sql<{ spent: unknown }>`select public.ai_month_spend(${window.fromTs}::timestamptz, ${window.toTs}::timestamptz) as spent`.execute(k)).rows,
+  );
+  const row = rows[0];
+  if (!row) throw new DataError('DB_ERROR', ctx.table, ctx.op, 'no data returned');
+  return mapRow((v: unknown) => toSafeInt(v, 'spent', 'ai_usage'), row.spent, ctx);
 }
 
 /** Binds the ledger functions to `db`. Structurally the `UsageLedger` port of @stoktok/ai; errors pass through unchanged (pgCode survives). */
-export function aiUsageLedger(db: Db) {
+export function aiUsageLedger(db: PgDb) {
   return {
     reserve: (r: AiReserveRequest) => reserveAiUsage(db, r),
     settle: (id: number, s: AiUsageSettle, now: Date) => settleAiUsage(db, id, s, now),

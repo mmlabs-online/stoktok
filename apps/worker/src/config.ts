@@ -116,8 +116,6 @@ export const SIGNALS_JOB_CONFIG = {
 
 /** One-off cleanup of price gaps that only cover exchange holidays (STK-046). */
 export const HOLIDAY_GAPS_CONFIG = {
-  /** Rows per read page (PostgREST caps a response at 1000). */
-  pageSize: 1000,
   /** Gap ids per update, to keep the request URL short. */
   resolveChunkSize: 200,
 };
@@ -199,9 +197,8 @@ export const NEWS_SYNC_CONFIG = {
   maxFutureMs: 86_400_000,
   /** A new gap covers this long before the failed run (the hourly interval). */
   gapLookbackMs: 3_600_000,
-  /** Rows per insert request; PostgREST caps a response at 1000. */
+  /** Rows per insert statement. */
   insertChunkSize: 200,
-  gapsPageSize: 1000,
   userAgent: 'stoktok/0.1 (personal portfolio tracker; hourly RSS check)',
   accept: 'application/rss+xml, application/xml',
 };

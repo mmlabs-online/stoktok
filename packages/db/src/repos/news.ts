@@ -1,18 +1,21 @@
-import type { Db } from '../client';
-import { unwrap } from '../errors';
+import { q } from '../pg/access';
+import type { PgDb } from '../pg/client';
+import { chunkRows, pickRows, upsertInto } from '../pg/upsert';
 import type { NewsInsert } from '../rows';
+
+const COLS = ['url', 'title', 'excerpt', 'source', 'credibility', 'published_at', 'fetched_at', 'symbols'] as const;
 
 /**
  * Inserts new articles; a url already stored is skipped (first seen wins, ids stay stable). Existing rows are never read.
- * Chunks are sequential and each returns at most `chunkSize` ids, so a response stays under the PostgREST 1000-row cap.
+ * One statement per chunk, no transaction: an earlier chunk stays when a later one fails (the url key makes a retry safe).
  * Returns the number of rows actually inserted.
  */
-export async function insertNews(db: Db, rows: readonly NewsInsert[], { chunkSize = 200 }: { chunkSize?: number } = {}): Promise<number> {
+export async function insertNews(db: PgDb, rows: readonly NewsInsert[], { chunkSize = 200 }: { chunkSize?: number } = {}): Promise<number> {
   const ctx = { table: 'news', op: 'insert' };
   let inserted = 0;
-  for (let i = 0; i < rows.length; i += chunkSize) {
-    const res = await db.from('news').upsert(rows.slice(i, i + chunkSize), { onConflict: 'url', ignoreDuplicates: true }).select('id');
-    inserted += unwrap<unknown[]>(res, ctx).length;
+  for (const chunk of chunkRows(pickRows(rows, COLS), chunkSize)) {
+    const ids = await q(db, ctx, (k) => upsertInto(k, 'news', chunk, ['url'], { ignoreDuplicates: true }).returning('id').execute());
+    inserted += ids.length;
   }
   return inserted;
 }

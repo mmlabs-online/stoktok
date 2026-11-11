@@ -1,6 +1,10 @@
-import { describe, expect, test } from 'vitest';
+import type { Db } from '@stoktok/db';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { EOD_SYNC_CONFIG } from './config';
-import { parseArgs } from './cli';
+import { main, parseArgs } from './cli';
+import { runMediumSignals } from './jobs/medium-signals';
+
+vi.mock('./jobs/medium-signals', () => ({ runMediumSignals: vi.fn() }));
 
 describe('parseArgs', () => {
   test('eod-prices -> dryRun false', () => {
@@ -108,5 +112,54 @@ describe('parseArgs news', () => {
     expect(parseArgs(['news', '--source', 'vci-public'])).toMatchObject({ ok: false });
     expect(parseArgs(['news', '--source'])).toMatchObject({ ok: false });
     expect(parseArgs(['signals', '--source', 'cafef'])).toMatchObject({ ok: false });
+  });
+});
+
+describe('main lifecycle', () => {
+  const realExitCode = process.exitCode;
+  let spies: ReturnType<typeof vi.spyOn>[] = [];
+  const handle = (end: () => Promise<void> = async () => undefined) => ({ end: vi.fn(end), stats: vi.fn() });
+  beforeEach(() => {
+    vi.mocked(runMediumSignals).mockReset();
+    spies = (['log', 'error'] as const).map((m) => vi.spyOn(console, m).mockImplementation(() => {}));
+    process.exitCode = undefined;
+  });
+  afterEach(() => {
+    spies.forEach((s) => s.mockRestore());
+    process.exitCode = realExitCode;
+  });
+
+  test('main: usage error opens no db (exitCode 2)', async () => {
+    const openDb = vi.fn();
+    await main(['nonsense'], openDb);
+    expect(openDb).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(2);
+  });
+
+  test('main: end() runs once after a successful job', async () => {
+    vi.mocked(runMediumSignals).mockResolvedValue({ ok: true } as never);
+    const db = handle();
+    await main(['signals'], () => db as unknown as Db);
+    expect(db.end).toHaveBeenCalledTimes(1);
+    expect(process.exitCode).toBe(0);
+  });
+
+  test('main: end() runs once when the job throws, and the error still propagates', async () => {
+    vi.mocked(runMediumSignals).mockRejectedValue(new Error('job exploded'));
+    const db = handle();
+    await expect(main(['signals'], () => db as unknown as Db)).rejects.toThrow('job exploded');
+    expect(db.end).toHaveBeenCalledTimes(1);
+  });
+
+  test('main: an end() rejection does not replace the job result', async () => {
+    vi.mocked(runMediumSignals).mockResolvedValue({ ok: false } as never);
+    const db = handle(() => Promise.reject(new Error('end failed')));
+    await expect(main(['signals'], () => db as unknown as Db)).resolves.toBeUndefined();
+    expect(db.end).toHaveBeenCalledTimes(1);
+    expect(process.exitCode).toBe(1);
+  });
+
+  test('main: an openDb throw has nothing to end and propagates', async () => {
+    await expect(main(['signals'], () => { throw new Error('Missing env X'); })).rejects.toThrow('Missing env X');
   });
 });

@@ -131,10 +131,10 @@ describe('createDbHolidayGapsStore', () => {
   test('reads effective holidays, all open prices_daily gaps, and passes the reason', async () => {
     const db = {} as Db;
     vi.mocked(dbMock.getEntrySettings).mockResolvedValueOnce({ settings: { holidays: ['2026-09-02'] }, feeRateConfigured: true } as never);
-    const store = createDbHolidayGapsStore(db, { pageSize: 50, resolveChunkSize: 10 });
+    const store = createDbHolidayGapsStore(db);
     expect(await store.getHolidays()).toEqual(['2026-09-02']);
     await store.listAllOpenGaps();
-    expect(dbMock.listAllOpenGaps).toHaveBeenCalledWith(db, 'prices_daily', { pageSize: 50 });
+    expect(dbMock.listAllOpenGaps).toHaveBeenCalledWith(db, 'prices_daily');
     await store.resolveGaps([1], 'T', 'non_trading_day');
     expect(dbMock.resolveGaps).toHaveBeenCalledWith(db, [1], 'T', 'non_trading_day');
   });
@@ -143,11 +143,11 @@ describe('createDbHolidayGapsStore', () => {
 describe('createDbNewsStore', () => {
   test('wires insertNews / listAllOpenGaps(news, source) / extendGaps / resolveGaps', async () => {
     const db = {} as Db;
-    const store = createDbNewsStore(db, { insertChunkSize: 200, gapsPageSize: 1000 });
+    const store = createDbNewsStore(db, { insertChunkSize: 200 });
     expect(await store.insertNews([])).toBe(4);
     expect(dbMock.insertNews).toHaveBeenCalledWith(db, [], { chunkSize: 200 });
     await store.listOpenGaps('cafef');
-    expect(dbMock.listAllOpenGaps).toHaveBeenCalledWith(db, 'news', { pageSize: 1000, source: 'cafef' });
+    expect(dbMock.listAllOpenGaps).toHaveBeenCalledWith(db, 'news', { source: 'cafef' });
     await store.extendGaps([3], 'T');
     expect(dbMock.extendGaps).toHaveBeenCalledWith(db, [3], 'T');
     await store.resolveGaps([3], 'T');

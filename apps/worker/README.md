@@ -11,7 +11,7 @@ pnpm worker:eod              # fetch and write
 pnpm worker:eod --dry-run    # fetch and validate, write nothing
 ```
 
-Env, in `apps/worker/.env.local` (git-ignored, loaded with `node --env-file-if-exists`): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`. The service role key is server-only (R3).
+Env, in `apps/worker/.env.local` (git-ignored, loaded with `node --env-file-if-exists`): `STOKTOK_DATABASE_URL` (a `postgres://` URL for the stoktok database role). It is server-only (R3). No Supabase service-role key is needed.
 
 **First live run: use `--dry-run` and check that the closes look like VND** (VNM is tens of thousands, not tens). The unit, raw-vs-adjusted prices and the date encoding are unverified; wrong units are rejected by the plausibility guards (see `rejectedBySymbol` in the summary) instead of stored.
 

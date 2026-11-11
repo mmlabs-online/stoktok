@@ -1,7 +1,7 @@
 import { DummyDriver, Kysely, PostgresAdapter, PostgresIntrospector, PostgresQueryCompiler } from 'kysely';
 import { describe, expect, test } from 'vitest';
 import type { Database } from './schema';
-import { chunkForParams, jsonb, upsertInto } from './upsert';
+import { chunkForParams, chunkRows, jsonb, pickRows, upsertInto } from './upsert';
 
 const db = new Kysely<Database>({
   dialect: {
@@ -75,5 +75,26 @@ describe('chunkForParams', () => {
     expect(chunkForParams(rows, 7).map((c) => c.length)).toEqual([2, 2, 2, 1]);
     expect(chunkForParams([], 7)).toEqual([]);
     expect(chunkForParams(rows).length).toBe(1);
+  });
+});
+
+describe('pickRows', () => {
+  test('undefined becomes null, extra props are dropped, key order follows cols', () => {
+    const rows = [{ b: 2, a: 1, extra: 9 }, { a: 3, b: undefined as number | undefined }];
+    const out = pickRows(rows as { a: number; b?: number | undefined }[], ['a', 'b']);
+    expect(out).toEqual([{ a: 1, b: 2 }, { a: 3, b: null }]);
+    expect(Object.keys(out[0]!)).toEqual(['a', 'b']);
+    expect('extra' in out[0]!).toBe(false);
+  });
+});
+
+describe('chunkRows', () => {
+  test('chunkSize 2 over 5 rows gives [2,2,1]; the bind bound wins when smaller; empty gives []', () => {
+    const rows = [1, 2, 3, 4, 5].map((n) => ({ a: n, b: n }));
+    expect(chunkRows(rows, 2).map((c) => c.length)).toEqual([2, 2, 1]);
+    expect(chunkRows(rows, 100).map((c) => c.length)).toEqual([5]);
+    const many = Array.from({ length: 70_000 }, (_, i) => ({ a: i }));
+    expect(chunkRows(many, 100_000).map((c) => c.length)).toEqual([65_535, 4_465]);
+    expect(chunkRows([], 2)).toEqual([]);
   });
 });

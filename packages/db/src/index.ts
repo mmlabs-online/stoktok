@@ -1,5 +1,7 @@
-export { createServiceClient } from './client';
-export type { Db } from './client';
+import type { PgDb } from './pg/client';
+
+/** The app database handle (opaque; create it with createPgDb from @stoktok/db/pg in the two app entry points). */
+export type Db = PgDb;
 export { DataError } from './errors';
 export type { DataErrorCode } from './errors';
 export type {

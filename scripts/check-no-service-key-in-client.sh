@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# STK-006 (R3): build web with sentinel service, AI and database credentials and prove they, the AI SDKs and their hosts are absent from client bundles.
+# STK-006 (R3): build web with sentinel AI and database credentials and prove they, the AI SDKs and their hosts are absent from client bundles.
 # usage: check-no-service-key-in-client.sh [--scan-only <dir>]   (--scan-only skips the build and scans <dir> with the fixed needles)
 set -euo pipefail
 
@@ -11,13 +11,12 @@ if [ "${1:-}" = "--scan-only" ]; then
   [ -n "${2:-}" ] || { echo "usage: check-no-service-key-in-client.sh --scan-only <dir>" >&2; exit 2; }
   STATIC="$2"
 else
-  SENTINEL="sb-service-SENTINEL-$RANDOM$RANDOM"
   AI_A="sk-ant-SENTINEL-$RANDOM$RANDOM"
   AI_G="goog-SENTINEL-$RANDOM$RANDOM"
   DB_PW="pw-SENTINEL-$RANDOM$RANDOM"
   DB_URL="postgres://stoktok_app:$DB_PW@db.invalid:5432/stoktok"
-  SUPABASE_URL=http://localhost SUPABASE_SERVICE_ROLE_KEY="$SENTINEL" ANTHROPIC_API_KEY="$AI_A" GOOGLE_AI_API_KEY="$AI_G" STOKTOK_DATABASE_URL="$DB_URL" pnpm --filter @stoktok/web build
-  NEEDLES=("$SENTINEL" "$AI_A" "$AI_G" "$DB_PW" "${NEEDLES[@]}")
+  ANTHROPIC_API_KEY="$AI_A" GOOGLE_AI_API_KEY="$AI_G" STOKTOK_DATABASE_URL="$DB_URL" pnpm --filter @stoktok/web build
+  NEEDLES=("$AI_A" "$AI_G" "$DB_PW" "${NEEDLES[@]}")
 fi
 
 if [ ! -d "$STATIC" ]; then

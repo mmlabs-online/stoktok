@@ -59,6 +59,9 @@ importers:
       next:
         specifier: ^16.4.2
         version: 16.4.2(@babel/core@7.29.7)(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
       react:
         specifier: ^19.3.1
         version: 19.3.1
@@ -108,9 +111,12 @@ importers:
       '@stoktok/sources':
         specifier: workspace:*
         version: link:../../packages/sources
-      '@supabase/supabase-js':
-        specifier: ^2.118.0
-        version: 2.118.0(@opentelemetry/api@1.10.0)
+      kysely:
+        specifier: ^0.29.8
+        version: 0.29.8
+      pg:
+        specifier: ^8.23.1
+        version: 8.23.1
     devDependencies:
       '@types/node':
         specifier: ^26.6.5
@@ -158,9 +164,6 @@ importers:
       '@stoktok/core':
         specifier: workspace:*
         version: link:../core
-      '@supabase/supabase-js':
-        specifier: ^2.118.0
-        version: 2.118.0(@opentelemetry/api@1.10.0)
       kysely:
         specifier: ^0.29.8
         version: 0.29.8

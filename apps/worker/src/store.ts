@@ -27,7 +27,6 @@ import {
   upsertSignals,
 } from '@stoktok/db';
 import type { Db } from '@stoktok/db';
-import type { HolidayGapsConfig } from './config';
 import { PRICES_GAP_TYPE } from './jobs/eod-sync';
 import type { EodStore } from './jobs/eod-sync';
 import type { FinancialStatementsStore } from './jobs/financial-statements-sync';
@@ -58,10 +57,10 @@ export function createDbEodStore(db: Db, opts: { upsertChunkSize: number }): Eod
 }
 
 /** Wiring only. Holidays are the effective list (seed plus stored). */
-export function createDbHolidayGapsStore(db: Db, cfg: HolidayGapsConfig): HolidayGapsStore {
+export function createDbHolidayGapsStore(db: Db): HolidayGapsStore {
   return {
     getHolidays: async () => (await getEntrySettings(db)).settings.holidays,
-    listAllOpenGaps: () => listAllOpenGaps(db, PRICES_GAP_TYPE, { pageSize: cfg.pageSize }),
+    listAllOpenGaps: () => listAllOpenGaps(db, PRICES_GAP_TYPE),
     resolveGaps: (ids, resolvedAt, reason) => resolveGaps(db, ids, resolvedAt, reason),
   };
 }
@@ -134,14 +133,14 @@ export function createDbSignalsStore(db: Db, opts: { upsertChunkSize: number; fi
   };
 }
 
-/** Wiring only: all reads and writes go through @stoktok/db. Open gaps are read per source id, paged. */
-export function createDbNewsStore(db: Db, opts: { insertChunkSize: number; gapsPageSize: number }): NewsStore {
+/** Wiring only: all reads and writes go through @stoktok/db. Open gaps are read per source id. */
+export function createDbNewsStore(db: Db, opts: { insertChunkSize: number }): NewsStore {
   return {
     getHolidays: async () => (await getEntrySettings(db)).settings.holidays,
     listWatchlistSymbols: async () => (await listWatchlist(db)).map((w) => w.symbol),
     listHeldSymbols: (asOf) => listHeldSymbols(db, asOf),
     insertNews: (rows) => insertNews(db, rows, { chunkSize: opts.insertChunkSize }),
-    listOpenGaps: (source) => listAllOpenGaps(db, NEWS_GAP_TYPE, { pageSize: opts.gapsPageSize, source }),
+    listOpenGaps: (source) => listAllOpenGaps(db, NEWS_GAP_TYPE, { source }),
     insertGaps: (rows) => insertGaps(db, rows),
     extendGaps: (ids, toTs) => extendGaps(db, ids, toTs),
     resolveGaps: (ids, resolvedAt) => resolveGaps(db, ids, resolvedAt),
