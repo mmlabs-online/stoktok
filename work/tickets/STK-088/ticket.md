@@ -7,7 +7,7 @@
 | Areas | db, security |
 | Attempts | 1 |
 | Created | 2026-11-11 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/66 |
 
 ## Goal
 Split from STK-086 (see work/tickets/STK-086/plan.md "Split proposal"; findings from the STK-083 security review attempt 2 and review attempt 2). Scope:
