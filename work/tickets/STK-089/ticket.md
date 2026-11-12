@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | IN_PROGRESS |
 | Priority | P1 |
 | Areas | db, security, architecture |
 | Attempts | 0 |
