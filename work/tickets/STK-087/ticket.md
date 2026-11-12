@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P1 |
 | Areas | db, security, architecture |
 | Attempts | 0 |
@@ -35,3 +35,4 @@ CLAUDE.md R2, R3, R7, R8; ADR 0010, ADR 0011. Reference: `/home/user/deployment/
 
 ## Notes / answers from Ming
 - 2026-11-11 (orchestrator): split from STK-083 per its plan.md; no manual step for Ming.
+- 2026-11-12 (orchestrator, after planning): narrowed to the runner in packages/db per plan.md; the worker command, image, owner-role test:db and drift test moved to STK-089.
