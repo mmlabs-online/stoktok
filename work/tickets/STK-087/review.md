@@ -79,3 +79,60 @@ No violations found.
 
 ### Follow-ups (out of scope)
 - Errors raised outside the per-file `try` (the lock query, `create table if not exists public.schema_migrations`, the `select` of applied rows) propagate raw from `runMigrations`, as in TuDo. They are not a `MigrationError`, so there is no `exitCode`. A plausible case is `permission denied for schema public` (`42501`) for a role that does not own `public`. STK-089's CLI maps non-`MigrationError` errors to `migrate failed: unexpected error`, so an operator would lose that server text. Consider wrapping that stage the same way as the per-file step (`safeDetail` plus `sqlstateOf`, exit 1), either in STK-089 or in a small follow-up. The impl-log already noted this.
+
+## Attempt 2 — 2026-11-12
+Verdict: PASS
+
+Scope of this attempt: commit a3375b5, which applies Ming's note "2026-11-12 (Ming, after review attempt 1 PASS)". The code changes are `packages/db/src/pg/migrate.ts`, `packages/db/src/pg/migrate.test.ts` and `packages/db/test-db/migrate.test.ts`. The other files in the commit are workflow bookkeeping: `work/backlog.md`, STK-087 `ticket.md` and `impl-log.md`, and a follow-up note in the STK-089 `ticket.md`.
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exit 0.
+- lint: `pnpm lint` exit 0, with no warnings printed.
+- test: `pnpm test` passed: core 834, sources 35, ai 184, db 152, worker 299, web 352. This matches impl-log.
+- build: `pnpm build` exit 0. The web route table was printed.
+- test:db: run on a scratch PG 16.15 cluster with trust auth on TCP 127.0.0.1:5439, using `DB_TEST_URL=postgresql://postgres@127.0.0.1:5439/postgres`. Result: 24 files and 139 tests passed. This matches impl-log.
+- db:check: `PG_BIN=/usr/lib/postgresql/16/bin pnpm db:check` printed `db:check OK`.
+- `bash scripts/schema-diff.sh` (PG_BIN=16) printed `A' vs B: identical`. The A vs B diff covers only `ai_key_delete(text)`, `ai_key_secrets()`, `ai_key_set(text, text)` and `ai_keys_secret_id_key`, which is the expected ai_keys-only difference.
+- The scratch cluster, the repo copy and the probe files were deleted afterwards. `git status` is clean.
+
+### Fail-without-fix proofs (reviewer re-run on a scratch copy of the repo)
+- 🟡1 duplicate version: I replaced `if (seen.has(parsed.version)) throw …` (`migrate.ts:113`) with a comment. Unit `readMigrationFiles > a duplicate version is exit 2 before anything runs` then failed (1 failed, 32 passed). Restoring the line made it pass.
+- 🟡2 error wrapping: I replaced the outer catch's `throw new MigrationError(\`migration bookkeeping failed: …\`)` (`migrate.ts:210`) with `throw err`. test:db `a bookkeeping query that hangs is cut off and reported as a MigrationError` then failed with "expected error: canceling statement due to statement timeout … to be an instance of MigrationError" (1 failed, 11 passed).
+- Extra check, 🟢 guard: I fixed `guardValue = 'on'`. Both `session settings inside a migration` and `a file cannot forge the guard by re-arming it after committing` then failed.
+- After restoring, `diff -r` between the copy's `packages/db/src` and the repo was empty.
+
+### Acceptance criteria (Ming's attempt-2 list)
+- [x] 🟡1 Duplicate versions are rejected with exit 2 before any connection. Evidence: `migrate.ts:106,113-114`. The test at `migrate.test.ts:115-119` asserts exit 2 and the exact message. The mutation above is caught. `readMigrationFiles` runs before `pg.Client` is created (`:135`).
+- [x] 🟡2 Every non-`MigrationError` from `runMigrations` becomes a `MigrationError` with safe text and SQLSTATE and no cause. Evidence: the outer `catch` at `migrate.ts:208-210` covers the lock query, `create table`, the history select and the session `set`. `safeDetail` keeps only `DatabaseError`/`GuardError` text. A `readFile` failure is `cannot read migration file: <name>` with exit 2 (`:115-119`). The test:db bookkeeping test asserts `exitCode 1`, `code 57014`, the message prefix and `cause === undefined`. The mutation above is caught.
+- [x] 🟢 `readdir` uses `withFileTypes` and requires `isFile()`. Evidence: `migrate.ts:101,112`. `migrate.test.ts:120-130` covers both a symlink and a directory, each exit 2. The sort comparator keeps the code-unit order that the old `.sort()` used.
+- [x] 🟢 Bounded timeout for bookkeeping queries. Evidence: `migrate.ts:21,150` sets a session `statement_timeout` (default 60 s, `queryTimeoutMs`). Each file still overrides it with `set local '5min'` (`:192`); the probe test confirms `st: '5min'`. The test:db hang test uses an ACCESS EXCLUSIVE blocker with `queryTimeoutMs: 300`.
+- [x] 🟢 Random per-file guard value. Evidence: `migrate.ts:188,193,196` uses `randomUUID()` and parameterised `set_config(..., true)`. test:db `a file cannot forge the guard…` passes, and the probe now expects a UUID. The mutation is caught.
+- [x] 🟢 Malformed-URL leak test. Evidence: `migrate.test.ts:158-163` checks the message, `String`, `inspect(showHidden)` and `cause`.
+- [x] 🟢 Both `safeDetail` branches tested. Evidence: `migrate.test.ts:165-171`. Attempt-1 nit 1 is also closed by the exact `division by zero` assertion at test-db `:115`.
+- [x] 🟢 Lock key > 2^31 tested. Evidence: `migrate.test.ts:173-175`. This closes attempt-1 nit 2.
+- [x] Attempt-1 acceptance criteria 1–11 still hold: all suites pass, including the full test:db runner suite, and db:check and schema-diff are unchanged.
+- [x] The checks are green (see above).
+
+Ming verification after merge: none (plan.md).
+
+### Scope
+The code diff is limited to the three files Ming's note covers. The bookkeeping files are workflow state. The STK-089 note records the 🟢3 r3-guard rule and the `check-image.sh` regular-files assertion as follow-ups, as the security review suggested. There is no unjustified out-of-plan change.
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found.
+- R3: no URL reaches any message. The new wrap path goes through `safeDetail` and attaches no `cause`.
+- R5: the new timeout is an operational constant, not a market rule.
+- R7: the changes are within Ming's note.
+- R8: the checks are green, and each fix has a test that fails without it.
+
+### Nits (do not block)
+1. `migrate.ts:187` says "a file cannot forge it". That holds for re-arming after a commit, but not for a file that copies the value to session level before committing. I confirmed this on the scratch cluster. A file containing `select set_config('stoktok.migrating', current_setting('stoktok.migrating'), false); commit; begin;` was recorded in `schema_migrations`, and its table persisted. Security review attempt 2 🟢1 and the impl-log follow-up already accept this limitation, since the guard targets accidents. Suggested wording: "a file cannot re-arm it by accident".
+2. The `cannot read migration file` branch (`migrate.ts:117-119`) has no test. It is hard to trigger as root and is low risk.
+3. The test-db bookkeeping test does not run the `inspect(showHidden)` leak check (security review attempt 2 🟢2). This is optional.
+
+### Follow-ups (out of scope)
+- STK-088 (migration lint) could flag `set_config('stoktok.migrating', …)` and `set stoktok.migrating` in migration files. That would close the deliberate-forgery path in nit 1 at lint time.
+- STK-089 already carries the r3-guard import rule and the image-level regular-files check.

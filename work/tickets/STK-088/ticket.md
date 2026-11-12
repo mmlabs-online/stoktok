@@ -49,3 +49,4 @@ CLAUDE.md R3, R7, R8; ADR 0010. Depends on STK-086; run after STK-087 (both edit
 
 ## Notes / answers from Ming
 - 2026-11-11 (orchestrator): split from STK-086 per its plan.md; no manual step for Ming. Optional nits for its planner: `reset session authorization`, `set_config(E'role'`.
+- 2026-11-12 (orchestrator): from STK-087 review attempt 2 — the migration lint also flags `set_config`/`set` of `stoktok.migrating` in migration files; correct the "cannot forge" comment at packages/db/src/pg/migrate.ts:187 to "catches accidents, not a hostile file".
