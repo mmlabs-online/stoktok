@@ -88,3 +88,42 @@
 - Should STK-089's `check-image.sh` also assert that `/app/migrations` contains only regular files (no symlinks)? That would cover 🟢9 at image level if the `isFile()` check is not added here.
 
 Files reviewed: `/home/user/stoktok/packages/db/src/pg/migrate.ts`, `/home/user/stoktok/packages/db/src/pg/client.ts`, `/home/user/stoktok/packages/db/src/pg/index.ts`, `/home/user/stoktok/packages/db/src/pg/migrate.test.ts`, `/home/user/stoktok/packages/db/src/pg/client.test.ts`, `/home/user/stoktok/packages/db/src/r3-guard.test.ts`, `/home/user/stoktok/packages/db/test-db/migrate.test.ts`, `/home/user/stoktok/packages/db/test-db/global-setup.ts`, `/home/user/stoktok/packages/db/test-db/harness.ts`, `/home/user/stoktok/packages/db/test-db/baseline.test.ts`, `/home/user/stoktok/db/migrations/README.md`, `/home/user/stoktok/docs/adr/0010-self-hosted-postgres-data-layer.md`. Reference: `/home/user/tudocuatui/server/migrator.js`.
+
+## Security review: STK-087, attempt 2
+
+**Verdict: no blocking findings.** No 🔴 and no 🟡. All eight items are fixed. I only read the code (`migrate.ts`, `migrate.test.ts`, `test-db/migrate.test.ts`) and ran nothing. The green checks are as the impl-log reports them.
+
+### Attempt-1 items
+| Item | Status | Evidence |
+|---|---|---|
+| 🟡1 duplicate versions | **Fixed** | `migrate.ts:106,113-114`: entries are sorted by name and `seen` throws exit 2 before any connection. Unit test at `migrate.test.ts:115-119`, and the impl-log shows it fails without the fix. |
+| 🟡2 wrap every non-`MigrationError` | **Fixed** | `migrate.ts:208-210` covers everything from the `statement_timeout` set (`:150`) through the lock loop, the DDL, the history select, `planMigrations` and the per-file loop. `readMigrationFiles` (`:135`) sits outside the wrapper, but it now throws only `MigrationError`, because `readdir` and `readFile` are both caught (`:102-104`, `:118-120`). Test at test-db `:140-159` checks code `57014`, the message prefix and that there is no `cause`. |
+| 🟢 `isFile()` | **Fixed** | `migrate.ts:101,112`. Symlinks and directories exit 2. Test at `migrate.test.ts:120-130`. |
+| 🟢 bookkeeping timeout | **Fixed** | `migrate.ts:21,150`: a 60 s session `statement_timeout`, which each file overrides with `set local` (`:192`). `Math.trunc` on a typed number means no injection: NaN or a negative value just fails on the server and gets wrapped. |
+| 🟢 random guard value | **Fixed** | `migrate.ts:188,193,196`. Test at test-db `:132-138`. |
+| 🟢 malformed-URL leak test | **Fixed** | `migrate.test.ts:158-163` checks the message, `String()`, `inspect(showHidden)` and `cause`. Not mutation-tested, which is fine because it pins existing behaviour. |
+| 🟢 `safeDetail` tests | **Fixed** | `migrate.test.ts:165-171` covers both branches. |
+| 🟢 lock-key test | **Fixed** | `migrate.test.ts:173-175`. |
+
+### Can the bookkeeping wrapper leak `detail`, `where` or the URL?
+**No.**
+- **Message:** the new message (`:210`) is built only from `safeDetail(err)`. That returns `DatabaseError.message` (the server's primary message, never `detail`, `where`, `hint` or `internalQuery`), a `GuardError` message, or the fixed text `unexpected error`.
+- **Socket and client errors:** plain `Error`s such as "Connection terminated unexpectedly", ECONNRESET or "Client was closed" all become `unexpected error`.
+- **Other fields:** no `cause` is attached. `code` holds only the validated 5-character SQLSTATE from `sqlstateOf`. `MigrationError` has no other fields, so `inspect()` cannot show the original error.
+- **Inner errors:** `MigrationError`s thrown inside the block (`:158`, `planMigrations`, the per-file catch at `:202`) are re-thrown unchanged, and they are already safe.
+- **Leftover exposure (accepted in attempt 1):** a server message can still echo a value from the migration text.
+
+### New
+**🟢 1. The guard stops accidents, not a deliberately hostile file.** `migrate.ts:193-197`.
+- A file could copy the random value into a session-level setting before committing, e.g. `select set_config('stoktok.migrating', current_setting('stoktok.migrating'), false); commit;`.
+- The guard query would then pass in autocommit. The insert at `:198` autocommits, and `commit` only raises a warning.
+- Building this takes intent, and migrations are reviewed, committed code. The lint is still the main defence, as the impl-log says. Leftover settings from earlier files never match, so the attempt-1 concern is closed.
+- No action needed. At most, add one sentence to `db/migrations/README.md` saying the guard is a safety net, not a security boundary.
+
+**🟢 2. The bookkeeping test checks only the message.** test-db `:149-153` does not run the `inspect(showHidden)` check that the connect-path test has (`migrate.test.ts:161`). The leak protection holds by construction (see above), so this is optional: one line would pin it.
+
+### Risks
+- Same as attempt 1: the runtime role owns `schema_migrations` (accepted under D24, least-privilege follow-up).
+- Deferred to STK-089, not re-raised: the r3-guard runner-import rule and the image regular-files check.
+
+Files reviewed: `/home/user/stoktok/packages/db/src/pg/migrate.ts`, `/home/user/stoktok/packages/db/src/pg/migrate.test.ts`, `/home/user/stoktok/packages/db/test-db/migrate.test.ts`, `/home/user/stoktok/work/tickets/STK-087/impl-log.md`.
