@@ -11,7 +11,8 @@
 #   re-check: cmp scripts/db-check/app-db.sql <deployment>/postgres/sql/app-db.sql
 #
 # Default: a throwaway cluster on a unix socket with trust auth (PG_BIN picks the binaries; default 17, then 16).
-# DB_CHECK_URL=postgresql://<superuser>:<pw>@localhost:<port>/postgres uses an existing server instead (localhost only).
+# DB_CHECK_URL=postgresql://<superuser>:<pw>@localhost:<port>/postgres uses an existing server instead (localhost only; no @ after the host,
+#   no % in the query). DB_CHECK_APP must not be postgres, template0/1, pg_*, stoktok_nobody or dbcheck_canary.
 #   THROWAWAY SERVERS ONLY. It refuses when any database besides postgres/template0/template1 exists or when the
 #   roles $DB_CHECK_APP (default stoktok), stoktok_nobody or dbcheck_canary exist, and on exit drops what it created.
 #   app-db.sql also revokes CONNECT/TEMPORARY from PUBLIC on the postgres and template1 databases; that is not undone.
@@ -34,6 +35,9 @@ if ! [[ "$APP" =~ ^[a-z][a-z0-9_]*$ ]]; then
   exit 1
 fi
 case "$APP" in
+  stoktok_nobody|dbcheck_canary)
+    echo "db:check: DB_CHECK_APP must not be a db:check role name (stoktok_nobody, dbcheck_canary)" >&2
+    exit 1 ;;
   postgres|template0|template1|pg_*)
     echo "db:check: DB_CHECK_APP must not be a system database name" >&2
     exit 1 ;;
@@ -56,8 +60,8 @@ trap cleanup EXIT
 
 if [ -n "${DB_CHECK_URL:-}" ]; then
   # Fail closed: the whole URL must match, so anything unexpected (scheme case, keyword conninfo, multi-host) is refused.
-  url_re='^postgres(ql)?://([^@/?]*@)?(localhost|127\.0\.0\.1)(:[0-9]+)?(/[^?]*)?(\?.*)?$'
-  refuse_url() { echo "db:check refuses DB_CHECK_URL: host must be localhost or 127.0.0.1, with no host, hostaddr, port or service parameters" >&2; exit 1; }
+  url_re='^postgres(ql)?://([^@/?]*@)?(localhost|127\.0\.0\.1)(:[0-9]+)?(/[^?@]*)?(\?[^@]*)?$'
+  refuse_url() { echo "db:check refuses DB_CHECK_URL: host must be localhost or 127.0.0.1; no @ after the host; no % in the query; no host, hostaddr, port or service parameters" >&2; exit 1; }
   [[ "$DB_CHECK_URL" =~ $url_re ]] || refuse_url
   host="${BASH_REMATCH[3]}"
   port="${BASH_REMATCH[4]#:}"
@@ -97,7 +101,11 @@ fi
 step() { echo "==> $1"; }
 
 # Postgres major (production runs 17).
-echo "server: $(su_psql -At -c 'select version()')"
+if ! ver="$(su_psql -At -c 'select version()')"; then
+  echo "db:check: cannot connect (libpq rejected DB_CHECK_URL or the server is unreachable; the URL is not printed)" >&2
+  exit 1
+fi
+echo "server: $ver"
 major=$(( $(su_psql -At -c 'show server_version_num') / 10000 ))
 if [ "$major" != 17 ]; then
   if [ -n "${CI:-}" ]; then

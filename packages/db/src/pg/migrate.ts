@@ -184,7 +184,7 @@ export async function runMigrations({ connectionString, dir, log = () => {}, loc
       const file = files.find((f) => f.version === m.version);
       if (!file) continue;
       const started = Date.now();
-      // Random per file: a file cannot forge it and a leftover from an earlier file never matches.
+      // Random per file, so a leftover from an earlier file never matches. This catches accidents, not a hostile file (a file can read and re-set it).
       const guardValue = randomUUID();
       try {
         await client.query('begin');
