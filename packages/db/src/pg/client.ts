@@ -26,14 +26,24 @@ export type PgDb = Readonly<{
 /** Global registry symbol: survives duplicated module instances. For ./access only. */
 export const INTERNALS = Symbol.for('stoktok.pgdb.internals');
 
+export type DatabaseUrlResult = { ok: true; url: string } | { ok: false; reason: 'missing' | 'invalid' };
+
+/** The only reader of the database URL (R3). Used by createPgDb and pg/migrate.ts. A failure result never carries the value. */
+export function databaseUrlFromEnv(env: Record<string, string | undefined>): DatabaseUrlResult {
+  const url = env[DATABASE_URL_ENV];
+  if (!url) return { ok: false, reason: 'missing' };
+  if (!url.startsWith('postgres://') && !url.startsWith('postgresql://')) return { ok: false, reason: 'invalid' };
+  return { ok: true, url };
+}
+
 export function createPgDb(
   env: Record<string, string | undefined>,
   profile: PgProfile,
   overrides: Partial<PoolProfile> = {},
 ): PgDb {
-  const url = env[DATABASE_URL_ENV];
-  if (!url) throw new Error(`Missing env ${DATABASE_URL_ENV}`);
-  if (!url.startsWith('postgres://') && !url.startsWith('postgresql://')) throw new Error(`Invalid env ${DATABASE_URL_ENV}`);
+  const found = databaseUrlFromEnv(env);
+  if (!found.ok) throw new Error(found.reason === 'missing' ? `Missing env ${DATABASE_URL_ENV}` : `Invalid env ${DATABASE_URL_ENV}`);
+  const url = found.url;
   const p = { ...PG_POOL_PROFILES[profile], ...overrides };
   // Session settings via SET (not startup options) so they also work through a session pooler.
   // Run inside connect() so the pool never hands out (or queues a caller query on) a client whose setup failed.

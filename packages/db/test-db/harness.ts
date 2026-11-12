@@ -49,3 +49,18 @@ export async function freshDb(profile: PgProfile = 'worker'): Promise<TestDb> {
     },
   };
 }
+
+/** An empty database (no template, no schema_migrations). Named so the global-setup cleanup sweep matches it. */
+export async function emptyDb(): Promise<{ url: string; drop(): Promise<void> }> {
+  const name = `stoktok_test_${++n}_${SUFFIX}`;
+  await admin((c) => c.query(`create database ${name}`));
+  return {
+    url: withDb(name),
+    drop: async () => {
+      await admin(async (c) => {
+        await c.query('select pg_terminate_backend(pid) from pg_stat_activity where datname = $1', [name]);
+        await c.query(`drop database if exists ${name}`);
+      });
+    },
+  };
+}

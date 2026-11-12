@@ -2,7 +2,7 @@
 
 Plain-Postgres migrations for stoktok (ADR 0010). `20261111000200_baseline.sql` is the squash of the old `supabase/migrations` history.
 
-- Applied by the worker `migrate` command (STK-087) and by `pnpm test:db`. `pnpm db:check` applies them via psql.
+- Applied by the worker `migrate` command (STK-089) through the runner `packages/db/src/pg/migrate.ts` (`public.schema_migrations`, sha256 checksums with CRLF normalised, advisory lock, one transaction per file), and by `pnpm test:db`, which builds its template with the same runner. `pnpm db:check` applies them via psql.
 - Name: `YYYYMMDDHHMMSS_snake_case.sql`. Forward-only: never edit an applied file, add a new one.
 - One transaction per file. No `begin`/`commit`, `concurrently`, `create extension`, `grant`, `create role`/`alter role`, RLS, `security definer` or Vault. `packages/db/src/migrations-lint.test.ts` enforces this.
 - Every new function needs `revoke execute on function ... from public`.

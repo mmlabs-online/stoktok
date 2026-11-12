@@ -30,7 +30,7 @@ const col = async <T>(q: string, params: unknown[] = []): Promise<T[]> => (await
 
 describe('baseline', () => {
   test('single-owner shape', async () => {
-    expect(await col<string>("select relname from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r' order by 1")).toEqual(TABLES);
+    expect(await col<string>("select relname from pg_class where relnamespace = 'public'::regnamespace and relkind = 'r' and relname <> 'schema_migrations' order by 1")).toEqual(TABLES);
     expect(await col<string>("select relname from pg_class where relnamespace = 'public'::regnamespace and (relrowsecurity or relforcerowsecurity)")).toEqual([]);
     expect(await col<string>("select policyname from pg_policies where schemaname = 'public'")).toEqual([]);
     expect(await col<string>('select extname from pg_extension order by 1')).toEqual(['plpgsql']);

@@ -1,6 +1,6 @@
-import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import pg from 'pg';
+import { runMigrations } from '../src/pg/migrate';
 
 const ROOT = join(__dirname, '..', '..', '..');
 const SUFFIX = String(process.pid);
@@ -75,14 +75,5 @@ export default async function setup() {
 }
 
 async function migrate(tplUrl: string) {
-  await withClient(tplUrl, async (c) => {
-    const dir = join(ROOT, 'db/migrations');
-    const files = readdirSync(dir).filter((n) => n.endsWith('.sql'));
-    for (const f of files) {
-      if (!/^\d{14}_[a-z0-9_]+\.sql$/.test(f)) throw new Error(`unexpected file in db/migrations: ${f}`);
-    }
-    for (const f of files.sort()) {
-      await c.query(`begin;\n${readFileSync(join(dir, f), 'utf8')}\ncommit;`);
-    }
-  });
+  await runMigrations({ connectionString: tplUrl, dir: join(ROOT, 'db/migrations') });
 }

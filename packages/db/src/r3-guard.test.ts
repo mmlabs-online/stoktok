@@ -179,6 +179,13 @@ describe('R3 guard', () => {
     expect(hits).toEqual([]);
   });
 
+  test('databaseUrlFromEnv is used only in pg/client.ts, pg/migrate.ts and their tests; not in the barrel', () => {
+    const allowed = new Set(['client', 'migrate'].flatMap((n) => [`packages/db/src/pg/${n}.ts`, `packages/db/src/pg/${n}.test.ts`]));
+    const hits = files.filter((f) => f.text.includes('databaseUrlFromEnv')).map((f) => f.path).filter((p) => !allowed.has(p));
+    expect(hits).toEqual([]);
+    expect(files.find((f) => f.path === 'packages/db/src/pg/index.ts')!.text).not.toContain('databaseUrlFromEnv');
+  });
+
   test('STOKTOK_AI_KEYS_MASTER_KEY is referenced only in packages/db/src/pg/client.ts and client.test.ts', () => {
     const hits = files
       .filter((f) => f.text.includes('STOKTOK_AI_KEYS_MASTER_KEY'))
