@@ -163,3 +163,36 @@ describe('main lifecycle', () => {
     await expect(main(['signals'], () => { throw new Error('Missing env X'); })).rejects.toThrow('Missing env X');
   });
 });
+
+describe('main migrate', () => {
+  const realExitCode = process.exitCode;
+  let spies: ReturnType<typeof vi.spyOn>[] = [];
+  beforeEach(() => {
+    spies = (['log', 'error'] as const).map((m) => vi.spyOn(console, m).mockImplementation(() => {}));
+    process.exitCode = undefined;
+  });
+  afterEach(() => {
+    spies.forEach((s) => s.mockRestore());
+    process.exitCode = realExitCode;
+  });
+
+  test('delegates without opening a DB', async () => {
+    const openDb = vi.fn();
+    await main(['migrate'], openDb, { env: {}, dir: '/nonexistent' });
+    expect(process.exitCode).toBe(2);
+    expect(openDb).not.toHaveBeenCalled();
+  });
+  test('extra argument -> exit 2, no DB', async () => {
+    const openDb = vi.fn();
+    const run = vi.fn();
+    await main(['migrate', '--dry-run'], openDb, { run });
+    expect(process.exitCode).toBe(2);
+    expect(openDb).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
+  test('usage lists migrate', () => {
+    const r = parseArgs([]);
+    expect(r.ok).toBe(false);
+    expect(r.ok ? '' : r.usage).toContain('migrate');
+  });
+});

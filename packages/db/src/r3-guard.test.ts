@@ -356,3 +356,25 @@ describe('S5 data access', () => {
     expect(DRIVER_IMPORT_PG.test(`from '@stoktok/db/pg'`)).toBe(false);
   });
 });
+
+const MIGRATE_ENTRY = /\b(?:runMigrations|migrateFromEnv)\b/;
+const MIGRATE_ENTRY_ALLOWED = (p: string) =>
+  ['packages/db/src/pg/migrate.ts', 'packages/db/src/pg/migrate.test.ts', 'packages/db/src/pg/index.ts', 'apps/worker/src/migrate.ts', 'apps/worker/src/migrate.test.ts'].includes(p) ||
+  p.startsWith('packages/db/test-db/');
+
+describe('R3 guard: migration entry points (STK-089)', () => {
+  test('runMigrations / migrateFromEnv appear only in the migrate runner, its barrel, test-db and apps/worker/src/migrate(.test).ts', () => {
+    const hits = files.filter((f) => MIGRATE_ENTRY.test(f.text)).map((f) => f.path.replace(/\\/g, '/'));
+    expect(hits.filter((p) => !MIGRATE_ENTRY_ALLOWED(p))).toEqual([]);
+    expect(hits.filter((p) => p.startsWith('apps/web/'))).toEqual([]);
+    expect(hits).toContain('packages/db/src/pg/migrate.ts');
+    expect(hits).toContain('apps/worker/src/migrate.ts');
+  });
+
+  test('migrate-entry regex catches its fixtures', () => {
+    for (const s of ['runMigrations(', 'await migrateFromEnv(', `import { runMigrations as rm } from '@stoktok/db/pg'`]) {
+      expect(MIGRATE_ENTRY.test(s), s).toBe(true);
+    }
+    for (const s of ['runMigrationsX', 'xmigrateFromEnv']) expect(MIGRATE_ENTRY.test(s), s).toBe(false);
+  });
+});

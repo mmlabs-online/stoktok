@@ -26,5 +26,7 @@ ENV NODE_ENV=production
 COPY --from=build --chown=node:node /out/node_modules ./node_modules
 COPY --from=build --chown=node:node /repo/apps/worker/dist ./dist
 COPY --from=build --chown=node:node /repo/apps/worker/package.json ./
+# root-owned, read-only for node; db/rollback is never copied (ADR 0010 section 9)
+COPY --from=build /repo/db/migrations ./migrations
 USER node
 ENTRYPOINT ["node", "dist/cli.js"]

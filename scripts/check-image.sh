@@ -35,7 +35,7 @@ if [ "$APP" = worker ]; then
   fi
   echo "== smoke: worker with an unreachable database exits 1 without hanging or leaking"
   NAME="stoktok-smoke-$$"
-  trap 'docker rm -f "$NAME" >/dev/null 2>&1' EXIT
+  trap 'docker rm -f "$NAME" "$NAME-mig" >/dev/null 2>&1' EXIT
   err="$(mktemp)"
   timeout 20 docker run --rm --name "$NAME" \
     -e STOKTOK_DATABASE_URL=postgres://smoke:smoke-pw@127.0.0.1:9/smoke \
@@ -47,6 +47,40 @@ if [ "$APP" = worker ]; then
   if [ "$code" -eq 124 ]; then echo "::error::worker hung with an unreachable database"; exit 1; fi
   if [ "$code" -ne 1 ]; then echo "::error::expected exit 1 with an unreachable database, got $code"; exit 1; fi
   if [ "$leaked" -ne 0 ]; then echo "::error::worker output leaked the database host or password"; exit 1; fi
+
+  echo "== smoke: worker migrate without a URL exits 2"
+  err="$(mktemp)"
+  docker run --rm "$IMAGE" migrate 2> "$err"
+  code=$?
+  cat "$err"
+  size="$(wc -c < "$err")"
+  rm -f "$err"
+  if [ "$code" -ne 2 ] || [ "$size" -eq 0 ]; then
+    echo "::error::expected migrate exit 2 with a message, got $code"; exit 1
+  fi
+
+  echo "== smoke: worker migrate with an unreachable database exits 1 without hanging or leaking"
+  # exit 1 (not 2) also proves /app/migrations resolved: the runner reads the directory before connecting.
+  err="$(mktemp)"
+  timeout 20 docker run --rm --name "$NAME-mig" \
+    -e STOKTOK_DATABASE_URL=postgres://smoke:smoke-pw@127.0.0.1:9/smoke \
+    "$IMAGE" migrate > "$err" 2>&1
+  code=$?
+  cat "$err"
+  leaked="$(grep -cE 'smoke-pw|127\.0\.0\.1' "$err" || true)"
+  rm -f "$err"
+  if [ "$code" -eq 124 ]; then echo "::error::worker migrate hung with an unreachable database"; exit 1; fi
+  if [ "$code" -ne 1 ]; then echo "::error::expected migrate exit 1 with an unreachable database, got $code"; exit 1; fi
+  if [ "$leaked" -ne 0 ]; then echo "::error::worker migrate output leaked the database host or password"; exit 1; fi
+
+  echo "== image: /app/migrations ships only regular forward migrations"
+  if ! docker run --rm --user 0 --entrypoint sh "$IMAGE" -c 'test -f /app/migrations/20261111000200_baseline.sql && [ -z "$(find /app/migrations -mindepth 1 ! -type f)" ] && [ -z "$(find /app/migrations -name "*.down.sql")" ]'; then
+    echo "::error::/app/migrations is missing the baseline, holds a non-regular file, or ships a .down.sql"; exit 1
+  fi
+  echo "== image: /app/migrations is read-only for node"
+  if ! docker run --rm --entrypoint sh "$IMAGE" -c '! test -w /app/migrations && ! test -w /app/migrations/20261111000200_baseline.sql'; then
+    echo "::error::/app/migrations is writable by the runtime user"; exit 1
+  fi
   exit 0
 fi
 

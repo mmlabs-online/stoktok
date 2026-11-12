@@ -155,3 +155,24 @@ TZ=Asia/Ho_Chi_Minh
 **P/E stays suppressed (`eps_basis_unverified`)** until the EPS basis of the financials source is verified. After the financials dry-run confirms whether TCBS EPS is quarterly or trailing 12 months, set `TCBS_FINANCIALS_EPS_BASIS` in `src/sources/tcbs-financials.ts` and update `docs/adr/0002-financials-source.md`. MA rules report `insufficient_history` until 200 closes are stored (backfill is STK-032).
 
 Output: one JSON summary line on stdout. Exit code: 0 ok (suppressed signals are not a failure); 1 the ledger could not be read or a fatal error; 2 usage error.
+
+## Migrations (`migrate`)
+
+Applies the forward migrations in `db/migrations` with the runner in `@stoktok/db/pg`. Only `STOKTOK_DATABASE_URL` is needed.
+
+```
+pnpm --filter @stoktok/worker run job migrate        # local: db/migrations, apps/worker/.env.local
+docker run --rm --env-file apps/worker/.env.local stoktok-worker migrate   # image: /app/migrations
+```
+
+Logs go to stdout; failures print `migrate failed: <message>` to stderr (the URL and unknown error messages are never printed). Other jobs log to stderr.
+
+| Exit | Meaning |
+|---|---|
+| 0 | applied, up to date, or database ahead of the image (warning) |
+| 1 | runtime failure: connect, lock, checksum, a failed file, or an unexpected error |
+| 2 | configuration error: URL missing or invalid, directory missing, bad file name, extra argument |
+
+Because "database ahead" exits 0, migrations must be expand/contract (older code keeps working on a newer schema).
+
+STK-084 compose contract: the same worker image with `command: ["migrate"]`, `restart: "no"`, `networks: [db]`, `profiles: [migrate]`, run as `docker compose run --rm migrate` after the pre-migration dump and before the app swap.

@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { createPgDb, DATABASE_URL_ENV, type PgDb } from '../src/pg/client';
 import type { PgProfile } from '../src/pg/config';
+import { OWNER_ROLE, ownerUrl } from './owner';
 
 const SUFFIX = process.env.DB_TEST_SUFFIX as string;
 let n = 0;
@@ -34,8 +35,8 @@ export interface TestDb {
 /** Clones the migrated template into a fresh database. */
 export async function freshDb(profile: PgProfile = 'worker'): Promise<TestDb> {
   const name = `stoktok_test_${++n}_${SUFFIX}`;
-  await admin((c) => c.query(`create database ${name} template stoktok_test_tpl_${SUFFIX}`));
-  const url = withDb(name);
+  await admin((c) => c.query(`create database ${name} template stoktok_test_tpl_${SUFFIX} owner ${OWNER_ROLE}`));
+  const url = ownerUrl(adminUrl(), name);
   const pgDb = createPgDb({ [DATABASE_URL_ENV]: url }, profile);
   return {
     pgDb,
@@ -53,9 +54,16 @@ export async function freshDb(profile: PgProfile = 'worker'): Promise<TestDb> {
 /** An empty database (no template, no schema_migrations). Named so the global-setup cleanup sweep matches it. */
 export async function emptyDb(): Promise<{ url: string; drop(): Promise<void> }> {
   const name = `stoktok_test_${++n}_${SUFFIX}`;
-  await admin((c) => c.query(`create database ${name}`));
+  await admin((c) => c.query(`create database ${name} owner ${OWNER_ROLE}`));
+  const c = new pg.Client({ connectionString: withDb(name) });
+  await c.connect();
+  try {
+    await c.query(`alter schema public owner to ${OWNER_ROLE}; revoke all on schema public from public;`);
+  } finally {
+    await c.end();
+  }
   return {
-    url: withDb(name),
+    url: ownerUrl(adminUrl(), name),
     drop: async () => {
       await admin(async (c) => {
         await c.query('select pg_terminate_backend(pid) from pg_stat_activity where datname = $1', [name]);
