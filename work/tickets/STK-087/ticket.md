@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P1 |
 | Areas | db, security, architecture |
-| Attempts | 1 |
+| Attempts | 2 |
 | Created | 2026-11-11 |
 | PR | — |
 
@@ -36,3 +36,4 @@ CLAUDE.md R2, R3, R7, R8; ADR 0010, ADR 0011. Reference: `/home/user/deployment/
 ## Notes / answers from Ming
 - 2026-11-11 (orchestrator): split from STK-083 per its plan.md; no manual step for Ming.
 - 2026-11-12 (orchestrator, after planning): narrowed to the runner in packages/db per plan.md; the worker command, image, owner-role test:db and drift test moved to STK-089.
+- 2026-11-12 (Ming, after review attempt 1 PASS): fix before the PR, from security-review.md attempt 1: 🟡1 reject duplicate migration versions in `readMigrationFiles` (exit 2, unit test); 🟡2 (also review follow-up) convert every non-`MigrationError` from `runMigrations` (lock query, `create table`, history select, `readFile`) into a `MigrationError` with safe text and SQLSTATE, no cause; plus the small 🟢: `readdir` with `withFileTypes` requiring `isFile()` (links/dirs → exit 2), a bounded timeout for the bookkeeping queries, a per-file random value for the `stoktok.migrating` guard, a malformed-URL leak test, tests for both `safeDetail` branches and that the lock key is > 2^31.
