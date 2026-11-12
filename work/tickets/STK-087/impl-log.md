@@ -54,3 +54,45 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No.
 - Diff size: about +64 / -20 in modified files, plus 3 new files (migrate.ts ~190, two test files).
+
+## Attempt 2 — 2026-11-12 (Ming's post-PASS fixes)
+
+Scope: security-review.md 🟡1, 🟡2 and the named 🟢 items; review.md nits 1 and 2 and the follow-up. Only `migrate.ts` and its tests.
+
+### Files touched
+| File | Required because |
+|---|---|
+| `packages/db/src/pg/migrate.ts` | 🟡1: `readMigrationFiles` rejects a repeated version (exit 2). 🟡2: the body after connect is wrapped so any non-`MigrationError` becomes `migration bookkeeping failed: <safeDetail>` (exit 1, SQLSTATE, no cause); `readFile` failure is exit 2. 🟢9: `readdir` with `withFileTypes`, `isFile()` required (links and dirs exit 2). 🟢8: session `statement_timeout` (new option `queryTimeoutMs`, default 60 s) for bookkeeping queries. 🟢7: per-file `randomUUID()` guard value via `set_config(..., true)`. `safeDetail` exported for its test. |
+| `packages/db/src/pg/migrate.test.ts` | Duplicate version, symlink/dir, malformed-URL leak (🟢4), `safeDetail` both branches, lock key > 2^31. |
+| `packages/db/test-db/migrate.test.ts` | Guard cannot be re-armed by the file, bookkeeping query timeout/wrapping, exact `division by zero` message, probe now expects a UUID for `stoktok.migrating`. |
+
+### Tests added
+- unit: `a duplicate version is exit 2 before anything runs`, `a symlink or directory named like a migration is exit 2`, `malformed URL: connect failure leaks neither password nor host`, `safeDetail`, lock key test.
+- test:db: `a file cannot forge the guard by re-arming it after committing`, `a bookkeeping query that hangs is cut off and reported as a MigrationError` (another session holds ACCESS EXCLUSIVE on `schema_migrations`), message assertion in `a failing file rolls back`.
+- I dropped a planned "session-level leftover from an earlier file" test: that file is itself rejected (its own `SET` overrides the random value inside its transaction), so the scenario is unreachable.
+
+### Fails-without-fix (run on a scratch copy of the repo, deleted afterwards)
+- 🟡1 remove the duplicate check: unit `a duplicate version is exit 2...` fails.
+- 🟡2 remove the wrapping (`throw err`): test:db `a bookkeeping query that hangs...` fails (raw DatabaseError, not a MigrationError).
+- 🟢 guard fixed to `'on'`: `a file cannot forge the guard...` and the session-settings probe fail.
+- 🟢 `isFile()` disabled: the symlink/dir test fails.
+- 🟢 session statement_timeout removed: the bookkeeping test fails (hangs to the 30 s test timeout).
+- Not mutation-tested: malformed-URL test, `safeDetail` test, lock key test (they pin existing behaviour; the plain-text sentinel test follows M5 of attempt 1).
+
+### Checks (actual)
+- typecheck: 0 errors. lint: no errors or warnings.
+- test: core 834, sources 35, ai 184, db 152, worker 299, web 352 passed.
+- test:db (PG 16 local, TCP 127.0.0.1:5439, trust auth): 24 files, 139 tests passed.
+- db:check (PG_BIN=16): `db:check OK`. `bash scripts/schema-diff.sh`: `A' vs B: identical`; A vs B shows only the expected ai_keys difference.
+- `pnpm format` run on the changed files (no `format:check` script exists in this repo).
+- Not run: build (nothing outside packages/db changed).
+
+### Out-of-plan files
+None.
+
+### Follow-ups (not done)
+- 🟢3 r3-guard rule limiting who imports the runner, and the `check-image.sh` regular-files assertion: STK-089.
+- The per-file guard only blocks files that end the transaction; a file that `commit`s has still committed (known limitation, lint is the primary defence).
+
+### Scope self-check
+- Only the three listed files changed. PG data dir `/var/tmp/stk087pg2` and the scratch copy were deleted. Not committed.

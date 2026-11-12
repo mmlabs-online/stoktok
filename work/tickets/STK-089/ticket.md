@@ -62,3 +62,4 @@ CLAUDE.md R3, R7, R8; ADR 0010. Depends on STK-087.
 
 ## Notes / answers from Ming
 - 2026-11-12 (orchestrator): split from STK-087 per its plan.md; no manual step for Ming.
+- 2026-11-12 (orchestrator): from STK-087 security review attempt 1 — add an r3-guard rule that only apps/worker (and test-db) import `runMigrations`/`migrateFromEnv`; `check-image.sh` asserts `/app/migrations` holds only regular files.

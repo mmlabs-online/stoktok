@@ -2,7 +2,8 @@
  * Server-only (R3). Forward-only migration runner, ported from TuDoCuaTui server/migrator.js (STK-087).
  * Never logs the URL, the config or whole error objects.
  */
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import type { Dirent } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
@@ -17,6 +18,7 @@ const CONNECT_TIMEOUT_MS = 5_000;
 const DEFAULT_LOCK_WAIT_MS = 30_000;
 const FILE_LOCK_TIMEOUT = '10s';
 const FILE_STATEMENT_TIMEOUT = '5min';
+const DEFAULT_QUERY_TIMEOUT_MS = 60_000;
 
 export interface MigrationRef {
   version: string;
@@ -35,6 +37,8 @@ export interface RunOptions {
   dir: string;
   log?: (line: string) => void;
   lockWaitMs?: number;
+  /** statement_timeout for the runner's own bookkeeping queries (not the per-file one). */
+  queryTimeoutMs?: number;
 }
 
 export class MigrationError extends Error {
@@ -92,17 +96,28 @@ export function planMigrations(local: readonly MigrationRef[], applied: readonly
 }
 
 export async function readMigrationFiles(dir: string): Promise<MigrationFile[]> {
-  let entries: string[];
+  let entries: Dirent[];
   try {
-    entries = await readdir(dir);
+    entries = await readdir(dir, { withFileTypes: true });
   } catch {
     throw new MigrationError('migrations directory not found', 2);
   }
   const files: MigrationFile[] = [];
-  for (const f of entries.filter((e) => e.endsWith('.sql')).sort()) {
+  const seen = new Set<string>();
+  for (const e of entries.filter((d) => d.name.endsWith('.sql')).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+    const f = e.name;
     const parsed = parseMigrationFilename(f);
     if (!parsed) throw new MigrationError(`invalid migration file name: ${f}`, 2);
-    const sql = await readFile(join(dir, f), 'utf8');
+    // Dirents do not follow links, so symlinks and directories are rejected here.
+    if (!e.isFile()) throw new MigrationError(`migration is not a regular file: ${f}`, 2);
+    if (seen.has(parsed.version)) throw new MigrationError(`duplicate migration version ${parsed.version}`, 2);
+    seen.add(parsed.version);
+    let sql: string;
+    try {
+      sql = await readFile(join(dir, f), 'utf8');
+    } catch {
+      throw new MigrationError(`cannot read migration file: ${f}`, 2);
+    }
     files.push({ ...parsed, sql, checksum: checksum(sql) });
   }
   return files;
@@ -111,12 +126,12 @@ export async function readMigrationFiles(dir: string): Promise<MigrationFile[]> 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** Server and guard messages never contain the URL; anything else (socket, TLS, parse) can carry host or credentials. */
-function safeDetail(err: unknown): string {
+export function safeDetail(err: unknown): string {
   if (err instanceof pg.DatabaseError || err instanceof GuardError) return err.message;
   return 'unexpected error';
 }
 
-export async function runMigrations({ connectionString, dir, log = () => {}, lockWaitMs = DEFAULT_LOCK_WAIT_MS }: RunOptions): Promise<RunResult> {
+export async function runMigrations({ connectionString, dir, log = () => {}, lockWaitMs = DEFAULT_LOCK_WAIT_MS, queryTimeoutMs = DEFAULT_QUERY_TIMEOUT_MS }: RunOptions): Promise<RunResult> {
   const files = await readMigrationFiles(dir);
 
   let client: pg.Client;
@@ -131,6 +146,8 @@ export async function runMigrations({ connectionString, dir, log = () => {}, loc
 
   let locked = false;
   try {
+    // Bounds the bookkeeping queries; each file sets its own statement_timeout locally.
+    await client.query(`set statement_timeout = ${Math.trunc(queryTimeoutMs)}`);
     const deadline = Date.now() + lockWaitMs;
     for (;;) {
       const r = await client.query<{ ok: boolean }>('select pg_try_advisory_lock($1::bigint) as ok', [MIGRATION_LOCK_KEY]);
@@ -167,14 +184,16 @@ export async function runMigrations({ connectionString, dir, log = () => {}, loc
       const file = files.find((f) => f.version === m.version);
       if (!file) continue;
       const started = Date.now();
+      // Random per file: a file cannot forge it and a leftover from an earlier file never matches.
+      const guardValue = randomUUID();
       try {
         await client.query('begin');
         await client.query(`set local lock_timeout = '${FILE_LOCK_TIMEOUT}'`);
         await client.query(`set local statement_timeout = '${FILE_STATEMENT_TIMEOUT}'`);
-        await client.query("set local stoktok.migrating = 'on'");
+        await client.query("select set_config('stoktok.migrating', $1, true)", [guardValue]);
         await client.query(file.sql);
         // A transaction-control statement in the file (end, abort, commit ... and chain) would have dropped the transaction-local setting.
-        const guard = await client.query<{ ok: boolean }>("select current_setting('stoktok.migrating', true) = 'on' as ok");
+        const guard = await client.query<{ ok: boolean }>("select current_setting('stoktok.migrating', true) = $1 as ok", [guardValue]);
         if (!guard.rows[0]!.ok) throw new GuardError('migration ended the transaction itself');
         await client.query('insert into public.schema_migrations (version, name, checksum) values ($1, $2, $3)', [file.version, file.name, file.checksum]);
         await client.query('commit');
@@ -186,6 +205,9 @@ export async function runMigrations({ connectionString, dir, log = () => {}, loc
       log(`applied ${file.version}_${file.name} (${Date.now() - started} ms)`);
     }
     return { applied, ahead: [] };
+  } catch (err) {
+    if (err instanceof MigrationError) throw err;
+    throw new MigrationError(`migration bookkeeping failed: ${safeDetail(err)}`, 1, sqlstateOf(err));
   } finally {
     if (locked) await client.query('select pg_advisory_unlock($1::bigint)', [MIGRATION_LOCK_KEY]).catch(() => {});
     await client.end().catch(() => {});

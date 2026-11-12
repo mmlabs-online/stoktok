@@ -85,7 +85,7 @@ describe('runner against Postgres', () => {
           "create table probe as select current_setting('lock_timeout') lt, current_setting('statement_timeout') st, current_setting('application_name') app, current_setting('stoktok.migrating') m;",
       });
       await runMigrations({ connectionString: url, dir });
-      expect(await q('select lt, st, app, m from probe')).toEqual([{ lt: '10s', st: '5min', app: 'stoktok-migrate', m: 'on' }]);
+      expect(await q('select lt, st, app, m from probe')).toEqual([{ lt: '10s', st: '5min', app: 'stoktok-migrate', m: expect.stringMatching(/^[0-9a-f-]{36}$/) }]);
       const after = await q<{ s: string | null }>("select current_setting('stoktok.migrating', true) as s");
       expect(after[0]!.s ?? '').toBe('');
     }));
@@ -112,6 +112,7 @@ describe('runner against Postgres', () => {
       const e = await rejects(runMigrations({ connectionString: url, dir }));
       expect(e.exitCode).toBe(1);
       expect(e.code).toBe('22012');
+      expect(e.message).toBe(`migration ${V2} failed: division by zero`);
       expect(e.message.startsWith(`migration ${V2} failed:`)).toBe(true);
       expect((await q<{ r: string | null }>("select to_regclass('public.half') as r"))[0]!.r).toBeNull();
       expect(await versions(q)).toEqual([V1]);
@@ -126,6 +127,35 @@ describe('runner against Postgres', () => {
       expect(await versions(q)).toEqual([]);
       // Known limitation (as in TuDo): the table survives because the file committed. migrations-lint.test.ts is the primary defence.
       expect((await q<{ r: string | null }>("select to_regclass('public.selfc') as r"))[0]!.r).toBe('selfc');
+    }));
+
+  test('a file cannot forge the guard by re-arming it after committing', () =>
+    withDb(async (url, q) => {
+      const dir = tmpDir({ [f(V1)]: "create table forge (x int); commit; begin; set local stoktok.migrating = 'on';" });
+      const e = await rejects(runMigrations({ connectionString: url, dir }));
+      expect(e.message).toContain('ended the transaction itself');
+      expect(await versions(q)).toEqual([]);
+    }));
+
+  test('a bookkeeping query that hangs is cut off and reported as a MigrationError', () =>
+    withDb(async (url, q) => {
+      const dir = tmpDir({ [f(V1)]: 'create table bk (x int);' });
+      await runMigrations({ connectionString: url, dir });
+      const blocker = new pg.Client({ connectionString: url });
+      await blocker.connect();
+      await blocker.query('begin');
+      await blocker.query('lock table public.schema_migrations in access exclusive mode');
+      try {
+        const e = await rejects(runMigrations({ connectionString: url, dir, queryTimeoutMs: 300 }));
+        expect(e.exitCode).toBe(1);
+        expect(e.code).toBe('57014');
+        expect(e.message).toMatch(/^migration bookkeeping failed: .*statement timeout/);
+        expect(e.cause).toBeUndefined();
+      } finally {
+        await blocker.query('rollback');
+        await blocker.end();
+      }
+      expect(await versions(q)).toEqual([V1]);
     }));
 
   test('database ahead applies nothing', () =>

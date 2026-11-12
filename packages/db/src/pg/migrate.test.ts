@@ -1,10 +1,11 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inspect } from 'node:util';
+import pg from 'pg';
 import { afterAll, describe, expect, test, vi } from 'vitest';
 import { DATABASE_URL_ENV } from './client';
-import { checksum, migrateFromEnv, MigrationError, parseMigrationFilename, planMigrations, readMigrationFiles, runMigrations, type MigrationRef } from './migrate';
+import { checksum, MIGRATION_LOCK_KEY, migrateFromEnv, MigrationError, parseMigrationFilename, planMigrations, readMigrationFiles, runMigrations, safeDetail, type MigrationRef } from './migrate';
 
 const tmps: string[] = [];
 function tmpDir(files: Record<string, string> = {}): string {
@@ -111,6 +112,22 @@ describe('readMigrationFiles', () => {
     expect(e3.exitCode).toBe(2);
     expect(e3.message).toContain('migrations directory not found');
   });
+  test('a duplicate version is exit 2 before anything runs', async () => {
+    const e = await fail(readMigrationFiles(tmpDir({ '20261111000300_a.sql': 'select 1;', '20261111000300_b.sql': 'select 2;' })));
+    expect(e.exitCode).toBe(2);
+    expect(e.message).toBe('duplicate migration version 20261111000300');
+  });
+  test('a symlink or directory named like a migration is exit 2', async () => {
+    const target = tmpDir({ 'real.txt': 'select 1;' });
+    const withLink = tmpDir();
+    symlinkSync(join(target, 'real.txt'), join(withLink, '20261111000200_a.sql'));
+    const e1 = await fail(readMigrationFiles(withLink));
+    expect(e1.exitCode).toBe(2);
+    expect(e1.message).toContain('not a regular file');
+    const withDir = tmpDir();
+    mkdirSync(join(withDir, '20261111000200_a.sql'));
+    expect((await fail(readMigrationFiles(withDir))).exitCode).toBe(2);
+  });
   test("the repo's db/migrations parses and holds the baseline", async () => {
     const files = await readMigrationFiles(join(__dirname, '..', '..', '..', '..', 'db', 'migrations'));
     expect(files.map((f) => `${f.version}/${f.name}`)).toContain('20261111000200/baseline');
@@ -136,6 +153,25 @@ describe('runMigrations', () => {
     expect(e.cause).toBeUndefined();
     expect(JSON.stringify(log.mock.calls)).not.toMatch(/pw-SENTINEL|127\.0\.0\.1/);
   });
+});
+
+test('malformed URL: connect failure leaks neither password nor host', async () => {
+  const e = await fail(runMigrations({ connectionString: 'postgres://u:pw-SENTINEL%ZZ@h-SENTINEL:notaport/x', dir: tmpDir({ '20261111000200_a.sql': 'select 1;' }) }));
+  expect(e.exitCode).toBe(1);
+  for (const text of [e.message, String(e), inspect(e, { showHidden: true, depth: Infinity })]) expect(text).not.toMatch(/SENTINEL/);
+  expect(e.cause).toBeUndefined();
+});
+
+describe('safeDetail', () => {
+  test('keeps a server error message, hides everything else', () => {
+    expect(safeDetail(new pg.DatabaseError('division by zero', 0, 'error'))).toBe('division by zero');
+    expect(safeDetail(new Error('connect ECONNREFUSED 10.0.0.1:5432 pw-SENTINEL'))).toBe('unexpected error');
+    expect(safeDetail('x')).toBe('unexpected error');
+  });
+});
+
+test('the lock key is above 2^31 so it cannot collide with int4 hashtext keys', () => {
+  expect(BigInt(MIGRATION_LOCK_KEY) > 2n ** 31n).toBe(true);
 });
 
 describe('migrateFromEnv', () => {
