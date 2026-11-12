@@ -9,6 +9,7 @@ import { runFinancialsSync } from './jobs/financials-sync';
 import { runMediumSignals } from './jobs/medium-signals';
 import { runNewsSync } from './jobs/news-sync';
 import { runResolveHolidayGaps } from './jobs/resolve-holiday-gaps';
+import { migrateCommand, type MigrateDeps } from './migrate';
 import { TCBS_FINANCIALS_EPS_BASIS, TCBS_FINANCIALS_SOURCE_NAME } from './sources/tcbs-financials';
 import { VCI_IQ_FINANCIALS_EPS_BASIS, VCI_IQ_FINANCIALS_SOURCE_NAME, VciIqFinancialsSource } from './sources/vci-iq-financials';
 import { createNewsSources } from './sources/news-source';
@@ -20,7 +21,7 @@ export type ParsedArgs =
   | { ok: true; job: 'eod-prices' | 'financials' | 'financial-statements' | 'signals' | 'resolve-holiday-gaps' | 'news'; dryRun: boolean; backfillTradingDays?: number; source?: PriceSourceId | FinancialsSourceId | NewsSourceId }
   | { ok: false; usage: string };
 
-const USAGE = 'usage: cli.ts <eod-prices|financials|financial-statements|signals|resolve-holiday-gaps|news> [--dry-run] [--backfill [<tradingDays>]  (eod-prices only)] [--source <vci-public|tcbs-public>  (eod-prices) | <vci-iq|tcbs-public>  (financials)]  | <cafef|vietstock|vnexpress>  (news)]  (financial-statements takes --dry-run only)';
+const USAGE = 'usage: cli.ts migrate (no flags) | <eod-prices|financials|financial-statements|signals|resolve-holiday-gaps|news> [--dry-run] [--backfill [<tradingDays>]  (eod-prices only)] [--source <vci-public|tcbs-public>  (eod-prices) | <vci-iq|tcbs-public>  (financials)]  | <cafef|vietstock|vnexpress>  (news)]  (financial-statements takes --dry-run only)';
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const [job, ...flags] = argv;
@@ -63,7 +64,11 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 }
 
 /** `openDb` is injectable for tests; the handle is opened only after the arguments parse, and always ended. */
-export async function main(argv: readonly string[], openDb: () => Db = () => createPgDb(process.env, 'worker')): Promise<void> {
+export async function main(argv: readonly string[], openDb: () => Db = () => createPgDb(process.env, 'worker'), migrateDeps?: Partial<MigrateDeps>): Promise<void> {
+  if (argv[0] === 'migrate') {
+    await migrateCommand(argv.slice(1), migrateDeps);
+    return;
+  }
   const args = parseArgs(argv);
   if (!args.ok) {
     console.error(args.usage);

@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import pg from 'pg';
 import { runMigrations } from '../src/pg/migrate';
+import { OWNER_ROLE, OWNER_ROLE_LOCK_KEY, ownerPassword, ownerRoleSql, ownerUrl } from './owner';
 
 const ROOT = join(__dirname, '..', '..', '..');
 const SUFFIX = String(process.pid);
@@ -38,6 +39,31 @@ async function withClient<T>(url: string, fn: (c: pg.Client) => Promise<T>): Pro
   }
 }
 
+/** Creates the role if missing and always re-applies its attributes and password, under an advisory lock. Retried once on a concurrent create. */
+async function ensureOwnerRole(adminUrl: string, admin: URL) {
+  const once = () =>
+    withClient(adminUrl, async (c) => {
+      await c.query('begin');
+      try {
+        await c.query('select pg_advisory_xact_lock($1::bigint)', [OWNER_ROLE_LOCK_KEY]);
+        const { rowCount } = await c.query('select 1 from pg_roles where rolname = $1', [OWNER_ROLE]);
+        if (!rowCount) await c.query(`create role ${OWNER_ROLE}`);
+        await c.query(ownerRoleSql(ownerPassword(admin)));
+        await c.query('commit');
+      } catch (e) {
+        await c.query('rollback').catch(() => undefined);
+        throw e;
+      }
+    });
+  try {
+    await once();
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    if (code !== '42710' && code !== '23505') throw e;
+    await once();
+  }
+}
+
 export default async function setup() {
   let admin: URL;
   try {
@@ -50,10 +76,11 @@ export default async function setup() {
   // Test workers are separate processes: hand them this run's suffix.
   process.env.DB_TEST_SUFFIX = SUFFIX;
   const adminDb = admin.toString();
+  await ensureOwnerRole(adminDb, admin);
   await withClient(adminDb, async (c) => {
-    await c.query(`create database ${TEMPLATE}`);
+    await c.query(`create database ${TEMPLATE} owner ${OWNER_ROLE}`);
   });
-  const tplUrl = withDb(admin, TEMPLATE);
+  const tplUrl = ownerUrl(admin, TEMPLATE);
   const cleanup = async () => {
     await withClient(adminDb, async (c) => {
       // `_` is a LIKE wildcard: escape it so another run's databases are never matched.
@@ -65,6 +92,9 @@ export default async function setup() {
     });
   };
   try {
+    await withClient(withDb(admin, TEMPLATE), async (c) => {
+      await c.query(`alter schema public owner to ${OWNER_ROLE}; revoke all on schema public from public;`);
+    });
     await migrate(tplUrl);
   } catch (e) {
     console.error(`pnpm test:db setup failed: ${(e as Error).message}`);
