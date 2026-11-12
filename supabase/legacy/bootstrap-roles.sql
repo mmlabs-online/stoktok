@@ -10,7 +10,7 @@ alter default privileges in schema public grant all on tables to anon, authentic
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 
--- TEST ONLY (never a migration): minimal stand-in for Supabase Vault. Kept only so 20261110000200 applies; delete it with the supabase/ chain in STK-083.
+-- TEST ONLY (never a migration): minimal stand-in for Supabase Vault. Moved from scripts/db-check in STK-086. Used only by scripts/schema-diff.sh for the STK-083 faithfulness proof; never by db:check, test:db or any runner.
 -- Its schema comment is also the marker the 20261111000100 guard accepts (a real Vault is refused). It stores plaintext; real Vault encrypts.
 do $$
 begin

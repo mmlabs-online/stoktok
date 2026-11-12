@@ -61,7 +61,7 @@ done
 legacy() { # $1 = db, rest = files
   local db="$1"; shift
   psql_as postgres postgres -c "create database $db"
-  psql_as postgres "$db" -f "$ROOT/scripts/db-check/bootstrap-roles.sql"
+  psql_as postgres "$db" -f "$ROOT/supabase/legacy/bootstrap-roles.sql"
   for f in "$@"; do psql_as postgres "$db" --single-transaction -f "$f"; done
 }
 legacy legacy_full "${UP_ALL[@]}"
