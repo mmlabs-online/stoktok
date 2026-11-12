@@ -1,6 +1,6 @@
 import { inspect } from 'node:util';
 import { describe, expect, test, vi } from 'vitest';
-import { AI_KEYS_MASTER_KEY_ENV, createPgDb, DATABASE_URL_ENV } from './client';
+import { AI_KEYS_MASTER_KEY_ENV, createPgDb, DATABASE_URL_ENV, databaseUrlFromEnv } from './client';
 import { PG_POOL_PROFILES, type PgProfile, type PoolProfile } from './config';
 
 /** Builds a PgDb while spying on the pg.Pool constructor to read its config and instance. */
@@ -129,5 +129,24 @@ describe('AI keyring on the handle', () => {
     expect(shown).not.toContain(Buffer.from(VALID, 'base64').toString('hex'));
     expect(Object.keys(db)).toEqual(['end', 'stats']);
     await db.end();
+  });
+});
+
+describe('databaseUrlFromEnv', () => {
+  test('missing or empty', () => {
+    expect(databaseUrlFromEnv({})).toEqual({ ok: false, reason: 'missing' });
+    expect(databaseUrlFromEnv({ [DATABASE_URL_ENV]: '' })).toEqual({ ok: false, reason: 'missing' });
+  });
+  test('invalid scheme, and the failure does not contain the value', () => {
+    for (const u of ['http://u:pw-SENTINEL@h/x', 'mysql://u:pw-SENTINEL@h/x']) {
+      const r = databaseUrlFromEnv({ [DATABASE_URL_ENV]: u });
+      expect(r).toEqual({ ok: false, reason: 'invalid' });
+      expect(JSON.stringify(r)).not.toContain('pw-SENTINEL');
+    }
+  });
+  test('postgres:// and postgresql:// are accepted', () => {
+    for (const u of ['postgres://u:p@h/x', 'postgresql://u:p@h/x']) {
+      expect(databaseUrlFromEnv({ [DATABASE_URL_ENV]: u })).toEqual({ ok: true, url: u });
+    }
   });
 });
