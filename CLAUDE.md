@@ -68,8 +68,8 @@ Do not change the stack without Ming's explicit decision.
 One orchestrated loop per ticket. **The main session is the orchestrator** (subagents cannot dispatch other subagents), driven by `/run`.
 
 ```
-/ticket "..."  →  BACKLOG
-/run STK-xxx   →  CONSULT (optional specialists) → PLAN → IMPLEMENT → REVIEW ─PASS→ DONE → PR (Ming merges)
+/ticket "..."  →  BACKLOG      (/bug "..." → BACKLOG, a BUG-xxx ticket)
+/run [ID]      →  CONSULT (optional specialists) → PLAN → IMPLEMENT → REVIEW ─PASS→ DONE → PR (Ming merges)
                                                       ^                  │
                                                       └──── REWORK ──────┘  max 2 reworks → ESCALATED (stop, ask Ming)
 ```
@@ -81,8 +81,9 @@ One orchestrated loop per ticket. **The main session is the orchestrator** (suba
 | Command | Purpose |
 |---|---|
 | `/ticket <description>` | Create `work/tickets/STK-xxx/ticket.md` and a backlog row |
-| `/run [STK-xxx]` | Run the full loop for a ticket (no ID = highest-priority BACKLOG ticket) |
+| `/run [ID]` | Run the full loop for a ticket (no ID = S1 bug first, else highest-priority BACKLOG ticket) |
 | `/status` | Board summary from `work/backlog.md` |
+| `/bug <description>` | Record a bug as `work/tickets/BUG-xxx/ticket.md` (repro, expected/actual, root cause, severity) and a backlog row on a batch branch, then ask: A) open a record PR and stop, B) record another bug (asks again), C) fix the batch now through the loop and open one PR |
 | `/solo <description>` | Small direct change outside the loop (still must pass checks; logged) |
 
 ### Agents (`.claude/agents/`)
@@ -106,8 +107,8 @@ Specialists (consult-only, read-only; `/run` saves their output to the ticket fo
 ### Files (`work/`)
 ```
 work/backlog.md                 board: one row per ticket
-work/templates/                 ticket, plan, impl-log, review, escalation
-work/tickets/STK-xxx/
+work/templates/                 ticket, bug, plan, impl-log, review, escalation
+work/tickets/<ID>/
   ticket.md                     goal, acceptance criteria, areas, state, attempts
   consult-<agent>.md            specialist notes (optional)
   plan.md                       planner output
@@ -117,6 +118,8 @@ work/tickets/STK-xxx/
   escalation.md                 only when ESCALATED
 ```
 
+Ticket IDs: `STK-xxx` for features and other work; `BUG-xxx` for bugs (`/bug`, template `work/templates/bug.md`, [ADR 0012](docs/adr/0012-bug-tickets.md)): every bug fix ships with a regression test that fails before the fix, and the reviewer gives REWORK without it.
+
 Ticket states: `BACKLOG` → `PLANNING` → `IN_PROGRESS` → `REVIEW` → `DONE`, plus `REWORK`, `BLOCKED`, `ESCALATED`.
 
 ---
@@ -124,6 +127,6 @@ Ticket states: `BACKLOG` → `PLANNING` → `IN_PROGRESS` → `REVIEW` → `DONE
 ## Conventions
 
 - Language: code, comments, docs, commit messages in English. UI labels in Vietnamese.
-- Commits: `STK-xxx: <imperative summary>`.
+- Commits: `<ID>: <imperative summary>` (`STK-xxx` or `BUG-xxx`).
 - Secrets: only in `.env.local` (git-ignored), the deploy repo, and — for AI provider keys entered on Settings — the `ai_keys` table, encrypted app-side (ADR 0011). Keys are never returned to the browser or logged. `.env.example` lists keys with no values.
 - Third-party agent definitions come from msitarzewski/agency-agents (MIT) — see `THIRD_PARTY_NOTICES.md`.

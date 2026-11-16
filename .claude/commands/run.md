@@ -1,6 +1,6 @@
 ---
 description: Run the full plan → implement → review loop for one ticket, dispatching subagents automatically.
-argument-hint: "[STK-xxx]"
+argument-hint: "[STK-xxx | BUG-xxx]"
 ---
 
 <!-- Orchestration logic adapted from agency-agents: specialized/agents-orchestrator.md and strategy/coordination/handoff-templates.md (MIT).
@@ -9,11 +9,14 @@ argument-hint: "[STK-xxx]"
 You are the **orchestrator** for ticket `$ARGUMENTS`. You dispatch subagents and keep the board true. You write **no product code, no plan, no review** yourself — only ticket state, backlog rows, consult files, and the escalation report.
 
 ## 0. Select and prepare
-1. If `$ARGUMENTS` is empty, pick the `BACKLOG` ticket in `work/backlog.md` with the highest priority (P1 > P2 > P3), then the lowest ID. If none, report "Nothing in BACKLOG" and stop.
+1. If `$ARGUMENTS` is empty, pick a `BACKLOG` `BUG-xxx` with `Severity: S1` first (lowest ID). Otherwise pick the `BACKLOG` ticket in `work/backlog.md` with the highest priority (P1 > P2 > P3), then `BUG-xxx` before `STK-xxx`, then the lowest ID. If none, report "Nothing in BACKLOG" and stop.
 2. Read `work/tickets/<ID>/ticket.md`. Refuse to run if state is `DONE` or `ESCALATED` (tell Ming why). A `BLOCKED` ticket may run only if its blocking questions now have answers in ticket.md.
 3. Make sure the working tree is clean (`git status --porcelain`). If not, stop and report.
 4. Create or switch to branch `ticket/<ID>` from the latest `main` (`git fetch origin main` first). If the environment mandates a different working branch (e.g. a cloud session's designated branch), use that branch instead and say so in the report.
 5. Set state `PLANNING` in ticket.md and backlog.md.
+
+## Bug tickets (`BUG-xxx`, `Type: bug`, ADR 0012)
+Same loop, plus: the planner's first test is a **regression test** that reproduces the bug (for browser-only bugs that Vitest cannot see, also a one-off Playwright check recorded in impl-log); the implementer writes it first and records in impl-log that it failed before the fix; the reviewer gives REWORK without that evidence. S1 bugs are picked before other tickets. Commit messages use the bug ID (`BUG-xxx: plan`, …).
 
 ## 1. Consult (only for the ticket's `areas`)
 | Area | Subagent |
@@ -49,7 +52,7 @@ Set state `REVIEW`. Then:
 ## 6. Open the pull request (DONE only)
 1. Push the branch: `git push -u origin <branch>`.
 2. Open a PR into `main` (GitHub MCP `create_pull_request`, or `gh pr create`). If a PR for this branch is already open, update it instead of opening a second one.
-   - Title: `STK-xxx: <ticket title>`.
+   - Title: `<ID>: <ticket title>`.
    - Body (English, short):
      - **Summary**: what changed, 2–4 bullets.
      - **Acceptance criteria**: the ticket's checklist, each ticked with one line of evidence from `review.md`.

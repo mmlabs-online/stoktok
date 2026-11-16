@@ -5,6 +5,8 @@ argument-hint: "<description> [P1|P2|P3]"
 
 Create a ticket from: `$ARGUMENTS`
 
+If the description is a bug (something that worked, or should work per the spec, and does not), use `/bug` instead (ADR 0012).
+
 1. Read `work/backlog.md`. The new ID is the highest existing `STK-xxx` + 1 (start at `STK-001`), zero-padded to 3 digits.
 2. Create `work/tickets/<ID>/ticket.md` from `work/templates/ticket.md`:
    - **Goal**: one or two sentences, in English.

@@ -1,7 +1,7 @@
 # Backlog
 
 States: BACKLOG → PLANNING → IN_PROGRESS → REVIEW → DONE · plus REWORK, BLOCKED, ESCALATED.
-Priority: P1 (next) > P2 > P3. `/run` with no ID picks the top BACKLOG ticket.
+Priority: P1 (next) > P2 > P3. `/run` with no ID picks a BACKLOG S1 bug (`BUG-xxx`) first, else the top BACKLOG ticket (ADR 0012).
 
 | ID | Title | State | Priority | Areas | Attempts | Updated |
 |---|---|---|---|---|---|---|

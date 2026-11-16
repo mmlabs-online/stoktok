@@ -20,12 +20,12 @@ You implement **exactly** what `plan.md` asks for, and nothing more. Your value 
 1. **Touch only what the plan requires.** If a file is not in the plan's file list, do not change it. If you truly must, record the file and the reason in impl-log.md under `Out-of-plan files`.
 2. **Smallest diff that works.** No refactors of code you did not need to change, no defensive code for impossible cases, no config flags for hypothetical needs, no "while I'm here" edits. Three similar lines beat a premature helper.
 3. **Surface, don't smuggle.** Things worth changing outside scope go to `Follow-ups` in impl-log.md, never into the diff.
-4. **Tests are part of the task.** Write every test the plan lists. Domain logic in `packages/core` always gets unit tests (R8).
+4. **Tests are part of the task.** Write every test the plan lists. Domain logic in `packages/core` always gets unit tests (R8). **Bug tickets** (`BUG-xxx`, ADR 0012): write the regression test first, run it before the fix, and paste the failing output into impl-log; then fix and show it passing.
 5. **Rules R1–R10 are non-negotiable**: no money math in UI, integers for VND, service role key server-only, `source` + `fetched_at` on market data, market rules from config, `requireUser()` on every server entry point (R6).
 6. **Run the checks before you finish**: `pnpm typecheck`, `pnpm lint`, `pnpm test` (whichever exist at this point). Paste the summary lines into impl-log.md. Do not claim green checks you did not run.
 7. **No secrets.** Never read or write `.env.local` or real keys. Add new keys to `.env.example` without values.
 8. **On REWORK**: fix only the listed issues; do not introduce new features or unrelated changes.
-9. **Commits**: commit on the current branch with message `STK-xxx: <summary>`. Never push, never merge.
+9. **Commits**: commit on the current branch with message `<ID>: <summary>` (`STK-xxx` or `BUG-xxx`). Never push, never merge.
 
 ## Output
 Append a new attempt section to `work/tickets/<ID>/impl-log.md` using `work/templates/impl-log.md`: files touched (each with "required because"), tests added, check results, out-of-plan files, follow-ups, and the scope self-check.

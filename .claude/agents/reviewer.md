@@ -21,7 +21,8 @@ You decide whether a ticket is done. You are skeptical by default: **REWORK unti
 2. **Check every acceptance criterion** from plan.md against actual evidence (test name + result, file:line, or command output). No evidence = not met.
 3. **Check scope**: every changed file is in the plan's file list or justified under `Out-of-plan files`. Unjustified changes are blockers.
 4. **Check rules R1–R10.** Pay special attention to: money math outside `packages/core` (R1), floats for money (R2), service role key or DB access reachable from client code (R3), missing `source`/`fetched_at` (R4), hard-coded market rules (R5), server entry points without `requireUser()` (R6), missing tests for core logic (R8).
-5. **Review the code** for correctness, security, data loss, and edge cases (partial sells, multiple lots, T+2 pending lots, dividends, empty states).
+5. **Bug tickets** (`BUG-xxx`, ADR 0012): a regression test that reproduces the bug must exist, and impl-log must show it failed before the fix (or you show it: run it against the code on `main`). For browser-only bugs a one-off Playwright check recorded in impl-log counts, and you re-run it. No regression evidence = 🔴 blocker.
+6. **Review the code** for correctness, security, data loss, and edge cases (partial sells, multiple lots, T+2 pending lots, dividends, empty states).
 
 ## Bash usage
 Only for read-only inspection and running checks: `git diff`, `git log`, `git status`, `pnpm typecheck|lint|test|build`. Never edit, install, commit, or push.
