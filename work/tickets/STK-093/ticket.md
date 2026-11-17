@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P1 |
 | Areas | db, security, architecture |
 | Attempts | 0 |
@@ -24,3 +24,4 @@ CLAUDE.md Stack, R3, R5; ADR 0010; work/tickets/STK-084/ticket.md (shared-Postgr
 - 2026-11-17 (orchestrator): created from the STK-084 planner's split proposal.
 - 2026-11-17 (orchestrator, from STK-084 security review attempt 2 🟡5 and review nits; Ming chose to carry them here): in `scripts/check-deploy-env.sh` pin that the `$pw =~ $re_pw` guard is followed by `exit 1` within a few lines and comes before the `STOKTOK_DATABASE_URL=` line (reuse the master-key awk pattern); use `IFS= read -r pw`; optional: test that a failed `/readyz` result expires after 3 s, `performance.now()` for the memo clock, a short per-query timeout on the ping; a comment that the config guard assumes the `compose` array convention. Also verify the pg-backup paths against the live deployment repo (STK-084 review follow-up).
 - 2026-11-17 (orchestrator, from STK-092 security review): STK-093 builds `STOKTOK_DATABASE_URL` from `postgres/secrets/apps/stoktok.password` — give it the same audit (env file mode, no echo of the URL, no `set -x`). If Ming reports the empty `stoktok` dump is ≤ 1 KiB (rclone-sync freshness floor), decide a follow-up here or in STK-094.
+- 2026-11-17 (orchestrator): STK-092 merged (deployment#88, stoktok#72); its `deploy-postgres` run was still queued on the self-hosted runner when this ticket started — the `stoktok` role/DB exist on the server only once that run is green (Ming checks). Consult skipped: STK-084's consults (software-architect F1–F7, data-engineer, database-optimizer) were written for this slice. Deployment work goes on a new branch `stoktok/expand-shared-postgres` from origin/main; PR into `mmlabs-online/deployment` (Ming allowed, 2026-11-17).
