@@ -51,3 +51,66 @@ No violations found. R3: the URL is still read only in `client.ts`; `/readyz` ne
 - spec §4.2 still has the open question about "how the app DB's RLS trusts the Authen JWT" and §9 open question 1; both are moot with no RLS on the shared Postgres — tidy in STK-094 or a docs ticket.
 - STK-093 must verify `$HOME/srv/postgres/compose.yml` and `/backup.sh` against the live deployment repo (plan assumption).
 - `news`, `financial-statements`, `resolve-holiday-gaps` not scheduled (plan follow-up).
+
+## Attempt 2 — 2026-11-17 (rework: security-review 🟡1, 🟡2, 🟡4; no `::add-mask::`)
+Verdict: PASS
+
+Scope of this attempt: rework commit `b7e835c` against Ming's 2026-11-17 note. Numbering: Ming's note calls the items "🟡1–3" and the add-mask item "🟡4". In security-review.md "## Attempt 1" they are 🟡2 (check the value read), 🟡4 (config guard), 🟡1 (/readyz) and 🟡3 (add-mask). The content is the same either way. All three requested fixes are in; `::add-mask::` was correctly not added (`grep add-mask` in the workflow: no match).
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exit 0.
+- lint: `pnpm lint` exit 0, no warnings or errors in the output.
+- test: `pnpm test` exit 0: core 834, sources 35, ai 184, db 158, worker 310, web 359 passed. Web went from 358 to 359 because of the new memo test. Matches impl-log.
+- test:db: `DB_TEST_URL=postgresql://postgres:postgres@127.0.0.1:55432/postgres pnpm test:db` on a throwaway local Postgres 16.15 cluster (since stopped and deleted): 26 files, 148 tests passed. Matches impl-log.
+- db:check: `DB_CHECK_URL=… pnpm db:check` gives `db:check OK`.
+- check:deploy-env: `OK: deploy env lists consistent`. `bash -n scripts/check-deploy-env.sh` is OK.
+- Diff since the attempt-1 review (`git diff --stat 5d2140d HEAD`): only the 5 rework files plus `work/` files. Working tree clean.
+
+### Fix verification
+- **sec 🟡2: the password value actually read is checked** (`deploy/deployment-repo/.github/workflows/deploy-stoktok.yml:218-224`). The code is `pw=""`, `read -r pw < "$pwfile" || true`, then `[[ "$pw" =~ $re_pw ]]` against `^[A-Za-z0-9_-]{16,}$`, all before `mktemp`. The any-line `grep` is gone. I ran the exact snippet under `set -e` with a range of password files:
+  - Accepted: a valid line; a valid line with no trailing newline (this is why `|| true` is needed).
+  - Rejected: a blank first line followed by a valid line (the original 🟡2 case); a malformed first line containing `@/:`; CRLF; an empty file; a short value; a missing file.
+  - The regex-in-variable form also works on macOS bash 3.2 (the runner's default shell; there is no `shell:` override).
+- **sec 🟡4: tighter config guard** (`scripts/check-deploy-env.sh:109-112`). Mutations on a scratch `git archive HEAD` copy (the unmodified copy exits 0). Caught, exit 1 with "compose config without --quiet or --services":
+  - `--profile jobs --profile migrate config` without `--quiet`
+  - `config --services` changed to bare `config`
+  - a new `docker compose -f x.yml config` line
+  - a new `"${compose[@]}"   config` line
+  - `config --environment`
+
+  Two escapes, both minor; see nits.
+- **sec 🟡2 pinned literals** (`check-deploy-env.sh:241-246`). Each mutation exits 1:
+  - guard removed
+  - guard tests `$pwfile` instead of `$pw`
+  - `re_pw` replaced by `.*`
+  - `{16,}` weakened to `{1,}`
+  - `|| true` dropped
+  - `pw=""` dropped
+- **sec 🟡1: /readyz memo and docs.**
+  - `apps/web/app/readyz/route.ts:9-38` memoises one shared promise for 3 s, so concurrent calls share a single ping.
+  - `check()` never rejects, so a failure is cached for 3 s too. That is intended: it also caps the log rate.
+  - The 2 s timeout is shorter than the 3 s cache, so a hung ping cannot pin the cache.
+  - The body, status and `no-store` headers are unchanged, and logs still carry the code only.
+  - New test: `readyz.test.ts` › "memoises the result for 3 s…" passes. I confirmed it catches regressions on a scratch copy: `CACHE_MS = 0` fails it, and so does a cache that never refreshes. The other 6 readyz tests still pass with per-test `vi.resetModules()`.
+  - `docs/deploy.md:99` says `/readyz` is public, memoised for 3 s, and must never get a Cloudflare Access bypass. Ming asked for both the doc line and the memo; both are done.
+
+### Acceptance criteria
+The attempt-1 evidence still holds for AC 1–15 (plan.md verification table). The rework only tightens AC 1/2 (`/readyz`, still green), AC 7 (secrets step guard, now on the value read) and AC 10 (check script guards). All checks are green, so AC 15 holds. Ticket AC 4 holds: `typecheck`, `lint`, `test`, `test:db` and `db:check` are green. No `packages/db` logic changed in this attempt.
+
+### Issues
+None blocking.
+
+### Rules R1–R10
+No violations found.
+- R3: the URL is built only from the read-checked `$pw` with no echo or argv. The new config guard narrows the paths by which resolved env could be printed.
+- R6: `/readyz` is unchanged as the documented public exception, and its DB load is now capped.
+- R7: only the three requested items, no add-mask.
+- R8: the route change has a test.
+
+### Nits (do not block)
+- The config guard is line-based. A `"${compose[@]}" … \` continuation with `config` on the next line slips through (mutation exit 0). So does `config --services --environment`, because any line with `--services` passes. Neither exists today. Possible tightening: reject `--environment` explicitly, and reject a trailing `\` on compose lines.
+- `read -r pw` with the default IFS trims leading and trailing spaces and tabs, so a pwfile line such as `"  <valid>"` is accepted and used trimmed. `add-app-db.sh` writes no whitespace, and `IFS= read -r pw` would make the check exact.
+- impl-log names the items by Ming's numbering in the heading but by security-review numbering in the body. The two numberings differ (see the scope line above).
+
+### Follow-ups (out of scope)
+- Same as attempt 1. Also: decide whether the cutover release's compose health check on `/readyz` should tolerate the 3 s cached failure. It is negligible with `--wait-timeout 120`, but worth knowing in STK-094.
