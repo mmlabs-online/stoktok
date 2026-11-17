@@ -12,10 +12,12 @@ const getDb = vi.fn();
 vi.mock('server-only', () => ({}));
 vi.mock('../server/db', () => ({ DataError: FakeDataError, getDb: () => getDb(), pingDb: (d: unknown) => pingDb(d) }));
 
-const { GET } = await import('../app/readyz/route');
+let GET: () => Promise<Response>;
 let log: ReturnType<typeof vi.spyOn>;
 
-beforeEach(() => {
+beforeEach(async () => {
+  vi.resetModules();
+  ({ GET } = await import('../app/readyz/route'));
   vi.clearAllMocks();
   getDb.mockReturnValue({});
   log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -69,6 +71,17 @@ describe('GET /readyz', () => {
     pingDb.mockResolvedValue(undefined);
     await GET();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('memoises the result for 3 s: one ping for repeated calls, a new one after', async () => {
+    vi.useFakeTimers();
+    pingDb.mockResolvedValue(undefined);
+    await Promise.all([GET(), GET()]);
+    await GET();
+    expect(pingDb).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(3000);
+    await GET();
+    expect(pingDb).toHaveBeenCalledTimes(2);
   });
 
   it('route source imports only server/db and does not call requireUser', () => {

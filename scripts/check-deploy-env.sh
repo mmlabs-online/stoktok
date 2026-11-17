@@ -106,8 +106,8 @@ if grep -nE 'set -[A-Za-z]*x|set -o xtrace' "$WF"; then
   echo "FAIL: set -x in workflow" >&2
   fail=1
 fi
-if grep -F '" config' "$WF" | grep -vF -- '--quiet'; then
-  echo "FAIL: compose config without --quiet" >&2
+if grep -E '(compose\[@\]\}"|docker compose).* config([[:space:]]|$)' "$WF" | grep -vE -- '--(quiet|services)'; then
+  echo "FAIL: compose config without --quiet or --services" >&2
   fail=1
 fi
 if grep -nF '<<' "$WF"; then
@@ -239,8 +239,10 @@ if ! grep -qE '^  DB_APP: stoktok\s*$' "$WF"; then
 fi
 mktemp_line="$(echo "$secrets_step" | grep -n 'mktemp' | head -n 1 | cut -d: -f1 || true)"
 for lit in 'pwfile="postgres/secrets/apps/$DB_APP.password"' \
-           "if ! grep -Eq '^[A-Za-z0-9_-]{16,}\$' \"\$pwfile\"; then" \
-           'read -r pw < "$pwfile"' \
+           'pw=""' \
+           'read -r pw < "$pwfile" || true' \
+           "re_pw='^[A-Za-z0-9_-]{16,}\$'" \
+           'if ! [[ "$pw" =~ $re_pw ]]; then' \
            'STOKTOK_DATABASE_URL="postgres://$DB_APP:$pw@postgres:5432/$DB_APP"'; do
   l="$(echo "$secrets_step" | grep -nF -- "$lit" | head -n 1 | cut -d: -f1 || true)"
   if [ -z "$l" ] || [ -z "$mktemp_line" ] || [ "$l" -ge "$mktemp_line" ]; then

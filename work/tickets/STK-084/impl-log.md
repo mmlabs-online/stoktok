@@ -49,3 +49,33 @@
 ### Scope self-check
 - Could the diff be smaller? No: every file is in the plan table except the two noted above.
 - Diff size: see `git show --stat` of the commit.
+
+## Attempt 2 (REWORK: security-review 🟡1, 🟡2, 🟡4; 🟡3 add-mask not done by Ming's decision)
+
+### Files touched
+- deploy/deployment-repo/.github/workflows/deploy-stoktok.yml: required because 🟡2: `read -r pw < "$pwfile" || true`, then `re_pw='^[A-Za-z0-9_-]{16,}$'` is matched against the value actually read; else `::error::` + exit 1 (replaces the any-line grep).
+- scripts/check-deploy-env.sh: required because 🟡2 (pinned literals updated: `pw=""`, read line, `re_pw=...`, guard line, all before mktemp) and 🟡4 (config guard now matches any `"${compose[@]}"`/`docker compose` line with ` config` and requires `--quiet` or `--services`).
+- apps/web/app/readyz/route.ts: required because 🟡1: the check result (ok or code) is memoised 3 s as a shared promise, so concurrent and repeated calls cause one ping.
+- apps/web/test/readyz.test.ts: required because 🟡1: routes re-imported per test (module-level cache), new memo test (one ping for 3 calls, second ping after 3 s).
+- docs/deploy.md: required because 🟡1: /readyz is public, memoised, and must not get a Cloudflare Access bypass (like /healthz).
+
+### Tests / mutation proof (scratch copy of the repo scripts, all exit 1)
+- `config --services` -> `config` (unquiet, with `--profile migrate` before it): FAIL "compose config without --quiet or --services".
+- `config --quiet` -> `config` (with two `--profile`): same FAIL.
+- `|| true` removed from the read line / `re_pw` changed: FAIL "secrets step lacks ... read -r pw", "re_pw=", and (guard line replaced) "if ! [[ "$pw" =~ $re_pw ]]".
+
+### Checks
+- typecheck: green; lint: green
+- test: sources 35, ai 184, db 158, worker 310, web 359 passed (core unchanged)
+- test:db: 26 files, 148 tests passed (local throwaway Postgres 16, no Docker)
+- db:check: OK; check:deploy-env: OK
+- format: `pnpm format` run on changes.
+
+### Out-of-plan files
+- none beyond the rework scope.
+
+### Follow-ups
+- none new.
+
+### Scope self-check
+- Only 🟡1, 🟡2, 🟡4 addressed; no `::add-mask::`.
