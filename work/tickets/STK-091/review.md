@@ -198,3 +198,81 @@ No violations found.
 ### Follow-ups (out of scope)
 - F4 (pin `PG_CLIENT_IMAGE` by digest) and F7 (`verify-full` with a root cert) are in STK-096, as Ming decided.
 - STK-096 runbook: run the real move inside `tmux`/`screen`, so an SSH drop does not HUP a real run halfway. Rotate the Supabase DB password after the cutover (Ming's note item 3).
+
+## Attempt 3 — 2026-11-17
+Verdict: PASS
+
+Scope: the attempt-2 review items, all for the implementer: Issue 1 (F3 blocker), Issue 2 (F5 partial-dump mode), Issue 3 (`$TMPDIR` docs) and Issue 5 (F6 DB-name guard). Issue 4 (plan.md:136) belongs to the orchestrator and is recorded in ticket.md notes. The rework commit is 24a400e. Branch head 60c1abd adds only review.md. PR #71 head 396785f adds only `security-review.md` (GitHub compare: 1 file, +48), so the code is the same as in 24a400e.
+
+### Checks (run by reviewer)
+- typecheck: green (rc 0).
+- lint: green (rc 0).
+- test: green. core 834, sources 35, ai 184, db 158, worker 310, web 359. This matches impl-log.
+- test:db, on a throwaway local PG 16 (127.0.0.1:55493): 26 files, 148 tests passed. The server was stopped and its data dir deleted afterwards.
+- db:check: `db:check OK`.
+- check:deploy-env: `OK: deploy env lists consistent`.
+- `bash -n` on both scripts (bash 5.2): ok.
+- test:move, run by the reviewer with the full harness: **all 11 cases, 90 `ok`, 0 FAIL, `test:move OK`**. MOVE_TEST_URL was on `localhost`.
+  - I used my host docker stand-in from attempt 2, first on PATH. It runs PG 16 tools, maps `/work` and `/secrets`, reports pg_dump 17, emulates `ps`/`run -d`/`rm -f`, and maps `bash:3.2 -n` to host bash `-n`.
+  - It ran against a temp mirror with `scripts/` copied. In the copy, only the `-ge 170000` guard (:203) was relaxed to 160000. The harness copy was byte-identical (`cmp`), and the committed scripts are untouched (`git status` clean).
+  - No `stoktok*` databases or roles were left behind. No new `pgpass` file was left in `/tmp`.
+- **F3 bypass reproduction, re-run.** I used a scratch harness copy (deleted afterwards, not committed) with `log_statement = 'all'` on the server. For each case I checked the server log after the run for `md5(ROW(`, a marker that appears only in the verify SQL built from the source column list.
+  - Positive control: a normal dry run logged 34 such statements (17 tables × 2 servers), so the marker works.
+  - **Attempt-2 bypass, column `"a|b<LF>c|d"` on the source:** exit 1, `unexpected source column list for table watchlist`, no `syntax error`, and **0** verify statements reached either server.
+  - The same reproduction against the attempt-2 script (ba1f2b5): `ERROR: syntax error at or near "C"`, with verify SQL sent. So the reproduction tells the two versions apart.
+  - Extra adversarial cases, all refused before any verify SQL (0 statements):
+    - Column `"x<LF>foo|bar|baz<LF>y"`: the middle fragment looks valid, but the first fragment is refused first.
+    - Column `"Note"`: quoted by `quote_ident`.
+    - Table `"watchlist|id|id<LF>zzz"`: refused with `source table zzz is not a target data table`.
+    - An extra source table `zzz`: refused with the same message.
+- Mutation checks, run on the mirror copy and reverted afterwards (final diff to the committed script: only the version guard):
+  - Removing the DB-name guard (:85) fails "source database name equal to the target (exit 2)" and "no docker call for any guard". Without the guard, the run gets as far as the dump step.
+  - Removing the `$DATA_TABLES` membership check (:258-262) fails my two table-name cases. The committed harness does not catch it (Issue 1 below).
+  - Removing the two `list_re` checks (:256-257) leaves **the whole committed harness green**, including `t_column_pipe_newline`. See Issue 1.
+- **CI evidence** (GitHub REST API). The `ci` run on 60c1abd (job 134094116928) was `cancelled`, superseded by 396785f.
+  - Job `ci` 134094735187 on PR #71 head 396785f concluded `success`. Every step was green: typecheck, lint, test, test:db (26 files), check:service-key (`OK: no secret or AI SDK material in client bundle`), check:deploy-env, db:check (`db:check OK`), and test:move (11 cases, 90 `ok`, 0 `FAIL:`, `test:move OK`).
+  - `images (worker)` succeeded. `images (web)` was still in progress when I read it, and it is not part of this ticket's checks.
+  - **The following rest on CI alone:** PG 17 server and client paths, real-docker `t_freeze`, bash 3.2 `-n` (`t_static`), and the dump mode 600 under a real container umask (`t_force` "the dump has mode 600").
+  - The pre-created 0600 dump (Issue 2 of attempt 2) cannot be told apart from the `chmod` backstop locally, because `umask 077` already gives 600. It also cannot be told apart in CI, because the dump succeeds there and the `chmod` runs. It is verified by reading the code: `pg_dump -f` truncates an existing file and keeps its mode, and the container runs as the same uid (`--user $UIDGID`).
+
+### Acceptance criteria (attempt-2 review items)
+- [x] **F3: reject `|`/newline in source column lists; no SQL from a malformed list.**
+  - Evidence: the reproduction above, with 0 verify statements on either server.
+  - Code: `scripts/db-migrate-from-supabase.sh:256-257` checks `tcols`/`tpk` against `^[a-z_][a-z0-9_]*(,[a-z_][a-z0-9_]*)*$`, and :258-262 checks `tname` against the target's `$DATA_TABLES`.
+  - All of this happens inside the loop, before `vsql` is sent (:267-268). Every value put into SQL is now a validated bare identifier.
+  - The target verify is still read-only (`dst_ro`, :268).
+- [x] **F5: partial dump mode.** `: > "$WORK/$DUMP"` at :333 runs under umask 077 before `src_dump`, and `chmod 600` is kept at :335. `DUMP` is set before the pre-create, so a failed dry run still removes the file (:130). Evidence: code reading, plus CI `t_force` mode 600 and "a failed dry run leaves no dump" (local and CI).
+- [x] **`$TMPDIR` docs.** `docs/deploy.md:112` now names macOS `/var/folders/.../T/` and `echo $TMPDIR`.
+- [x] **F6: DB-name guard.** The guard is at :85 (exit 2, before any docker call). The harness assertion is at test :154 (local and CI, mutation-checked). `docs/deploy.md:118` states that both checks are string comparisons and do not detect aliases.
+- [x] **No regression.** All 10 earlier cases are green locally (full run) and in CI. The happy-path dry run still verifies 17 tables, so no real stoktok column is refused by the stricter regex. `db/migrations` has no quoted identifiers.
+- [x] **Nothing is applied to Supabase; no secret is committed.** The diff touches only the script, harness, docs and impl-log. `assert_no_leak` is green in both pipe cases.
+- [x] **Repo checks green**: see above. test:move under PG 17 and real docker rests on CI.
+
+### Issues
+#### Issue 1 — 🟡 should-fix (does not block) — `t_column_pipe_newline` does not test the new F3 check
+- **Where**: `scripts/test-db-migrate-from-supabase.sh:299-309`, with the column name `"n|o<LF>te"`.
+- **Expected**: the new case fails when the attempt-3 F3 fix is removed. My attempt-2 instruction gave `"a|b"$'\n'"c|d"` for this reason.
+- **Actual**: for `"n|o<LF>te"`, the second fragment `te"|…` already fails the attempt-2 `line_re` (:247). As a result:
+  - the case passes against the attempt-2 script (ba1f2b5);
+  - it also passes with :256-257 removed.
+  - The committed harness therefore has no regression guard for the bypass. The fix itself is proven by the reviewer's reproduction above.
+- **Fix instruction** (follow-up; a one-line change):
+  - In `t_column_pipe_newline`, rename to `"a|b<LF>c|d"` instead of `"n|o<LF>te"`, so the second fragment `c|d",…|id` matches `line_re`.
+  - Then add a case that creates a source table `zzz (id int primary key)` on the drift DB and asserts exit 1 and `out_has "not a target data table"`.
+  - Both of the new cases fail on ba1f2b5. I checked this with my scratch copy.
+
+### Rules R1–R10
+No violations found.
+- R3: no new secret exposure. The pgpass handling is unchanged.
+- R7: 24a400e touches only the script, harness, docs and impl-log, all in the plan's list.
+- R8: no `packages/core` change; the checks are green.
+- R10: the source is still read only by `pg_dump` and by read-only, rolled-back SELECTs.
+- R1, R2, R4, R5, R6 and R9 are not applicable.
+
+### Nits (do not block)
+- :247: the message `unexpected source column list (a name with | or a newline?)` and the :256 message `… for table <t>` can both appear for the same input, depending on where the fragment splits. Both contain the asserted substring.
+- Still open from attempt 2: :278 uses `q_dst` (read-write session) for the `ai_keys` count. `$last` is not checked as numeric. There is no harness case for the HUP trap; I verified it by hand in attempt 2.
+
+### Follow-ups (out of scope)
+- Issue 1 above: strengthen `t_column_pipe_newline` and add the extra-table case. Suitable for `/solo` or STK-096.
+- From earlier attempts: F4 (pin the client image by digest) and F7 (`verify-full`) are in STK-096. Run the real move inside `tmux`/`screen`. Rotate the Supabase DB password after the cutover.

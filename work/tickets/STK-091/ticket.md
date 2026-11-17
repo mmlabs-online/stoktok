@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P1 |
 | Areas | db, data, security |
 | Attempts | 2 |
 | Created | 2026-11-17 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/71 |
 
 ## Goal
 Split from STK-084 (see work/tickets/STK-084/plan.md "Split proposal" and its consults). Scope: stoktok: `scripts/db-migrate-from-supabase.sh` and the cutover runbook in docs/deploy.md, per the consults in work/tickets/STK-084/ and plan.md decision D4 (schema-diff mandatory in the dry run, informational at the real cutover).
