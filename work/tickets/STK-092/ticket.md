@@ -7,7 +7,7 @@
 | Areas | db, security |
 | Attempts | 0 |
 | Created | 2026-11-17 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/deployment/pull/88 · https://github.com/mmlabs-online/stoktok/pull/72 |
 
 ## Goal
 Split from STK-084 (see work/tickets/STK-084/plan.md "Split proposal" and its consults). Scope: deployment repo PR: `bash postgres/scripts/add-app-db.sh stoktok` (role + DB + password file + config/databases entry); after Ming merges, run `/backup.sh` and `restore-test.sh stoktok` once. Orchestrator may open the PR (Ming, 2026-11-17).
