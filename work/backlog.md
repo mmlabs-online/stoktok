@@ -84,8 +84,9 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks a BACKLOG S1 bug (`BUG-xx
 | STK-088 | Migration-lint tokeniser gaps and legacy-reference guard (STK-086 split) | DONE | P1 | db, security | 1 | 2026-11-12 |
 | STK-089 | Worker migrate command, image and schema drift test (STK-087 split) | DONE | P1 | db, security, architecture | 2 | 2026-11-17 |
 | STK-090 | Owner-role test:db (STK-089 split) | BACKLOG | P2 | db, security | 0 | 2026-11-17 |
-| STK-091 | Data-move script and cutover runbook (STK-084 slice A2) | PLANNING | P1 | db, data, security | 0 | 2026-11-17 |
+| STK-091 | Data-move script (STK-084 slice A2a; runbook split to STK-096) | IN_PROGRESS | P1 | db, data, security | 0 | 2026-11-17 |
 | STK-092 | Deployment repo: register stoktok on the shared Postgres (STK-084 slice B) | BACKLOG | P1 | db, security | 0 | 2026-11-17 |
 | STK-093 | Deployment repo: expand step for stoktok (STK-084 slice C) | BACKLOG | P1 | db, security, architecture | 0 | 2026-11-17 |
 | STK-094 | Cutover to the shared Postgres (STK-084 slice D) | BACKLOG | P1 | db, data, security | 0 | 2026-11-17 |
 | STK-095 | Contract after the 14-day rollback window (STK-084 slice E) | BACKLOG | P2 | security | 0 | 2026-11-17 |
+| STK-096 | Cutover runbook in docs/deploy.md (STK-091 split A2b) | BACKLOG | P1 | db, data, security | 0 | 2026-11-17 |

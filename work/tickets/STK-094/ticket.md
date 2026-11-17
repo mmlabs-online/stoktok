@@ -13,7 +13,7 @@
 Split from STK-084 (see work/tickets/STK-084/plan.md "Split proposal" and its consults). Scope: drafts updated to the cutover state; the release-PR commit adds the `migrate` service and switches the health check to `/readyz`; Ming runs the runbook; new AI provider keys entered on Settings, old ones revoked; confirm `ai_keyring_invalid` never appears in logs.
 
 ## Spec reference
-CLAUDE.md Stack, R3, R5; ADR 0010; work/tickets/STK-084/ticket.md (shared-Postgres standard, Ming's notes). Depends on: STK-091, STK-093, and STK-090 per ADR 0010 (unless Ming waives).
+CLAUDE.md Stack, R3, R5; ADR 0010; work/tickets/STK-084/ticket.md (shared-Postgres standard, Ming's notes). Depends on: STK-091, STK-096, STK-093, and STK-090 per ADR 0010 (unless Ming waives).
 
 ## Acceptance criteria
 - [ ] The scope above is done as described in STK-084's plan and consults.
