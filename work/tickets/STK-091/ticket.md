@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P1 |
 | Areas | db, data, security |
 | Attempts | 0 |
@@ -22,3 +22,4 @@ CLAUDE.md Stack, R3, R5; ADR 0010; work/tickets/STK-084/ticket.md (shared-Postgr
 
 ## Notes / answers from Ming
 - 2026-11-17 (orchestrator): created from the STK-084 planner's split proposal.
+- 2026-11-17 (orchestrator): consult step reuses STK-084's consults (work/tickets/STK-084/consult-database-optimizer.md §1–§11, consult-data-engineer.md runbook/freeze/smoke/AI-ledger, consult-software-architect.md R2/R3/R7/R8), which were written for exactly this slice; plan decisions D4 (schema check mandatory in the dry run) and the A2 row of STK-084/plan.md apply. PR #70 (STK-084 A1) merged.
