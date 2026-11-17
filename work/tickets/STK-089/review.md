@@ -74,3 +74,65 @@ None.
 ### Follow-ups (out of scope)
 - The root has no `format`/`format:check` script, although the agent rules mention one (already noted by the implementer).
 - `next build` depends on a registry advisory lookup that can fail transiently in offline or proxied environments. Consider disabling it in CI and agent runs if it recurs.
+
+## Attempt 2 — 2026-11-17
+Verdict: PASS
+
+Scope of this attempt: Ming's note of 2026-11-17 in ticket.md, which asks for security-review 🟡1 and 🟢6 plus the attempt-1 drift-parser and `find` exit-status nits. The diff `adf07d4..d022ace` changes only `scripts/check-image.sh` and `packages/db/test-db/schema-drift.test.ts`, plus the orchestrator's tracker rows (`work/backlog.md` and ticket.md, where Attempts goes to 2 and the note is added).
+
+### Checks (run by reviewer)
+- typecheck: exit 0.
+- lint: exit 0.
+- test: exit 0. Counts: core 834, sources 35 (1 file skipped), ai 184, db 158, worker 310 (1 file skipped), web 352.
+- test:db: run against a throwaway PG 16.15 on 127.0.0.1:54329 (`DB_TEST_URL`). Result: 25 files and 145 tests passed.
+- db:check: `DB_CHECK_URL=postgresql://postgres:x@localhost:54329/postgres pnpm db:check` printed `db:check OK`. The server is PG 16, not 17.
+- `bash -n scripts/check-image.sh`: OK.
+- These numbers match impl-log attempt 2. The PG data directory and scratch copy have been deleted.
+
+### Acceptance criteria (Ming's 2026-11-17 fixes)
+- [x] **🟡1: `node` cannot write any file under `/app/migrations`, and `find`'s exit status is not ignored.**
+  - Code: `scripts/check-image.sh:79-86` now runs every `find` as a plain `f=$(find …)` assignment followed by `test -z "$f"`, and adds `find /app/migrations -writable`.
+  - Evidence: I extracted the in-container script verbatim, pointed it at a simulated tree and ran it under `dash` (`/bin/sh` is dash here and in bookworm-slim) with GNU findutils 4.9.0, as the non-root user `nobody`. Results:
+    - clean root-owned 644/755 tree: rc 0;
+    - file chmod o+w: rc 1;
+    - file owned by the runtime user but 444: rc 1 (caught by `! -user root`);
+    - directory o+w: rc 1;
+    - `*.down.sql` present: rc 1;
+    - unreadable subdirectory: rc 1. `dash -x` shows the script stops right after the first `find` prints `Permission denied`, so the exit comes from the find failure through `set -e` and not from a later test.
+  - `dash -c 'set -e; f=$(false); echo X'` exits 1 without printing X, which confirms that dash propagates the status of an assignment-only command.
+- [x] **🟢6: the no-URL `migrate` smoke runs under `timeout 20`.**
+  - Code: `check-image.sh:53` adds `timeout 20`, and `:58` reports a hang on exit 124 before the exit-2 check.
+  - This is safe because the outer script uses `set -uo pipefail` without `-e` (line 4), so `code=$?` captures 2 or 124 as intended.
+- [x] **Nit: two members on one line throw.**
+  - Code: `schema-drift.test.ts:24`, where the regex is now `^\w+:\s*[^;]+;$`.
+  - Fixture: "two members on one line fail closed".
+  - Proven to fail without the fix: on a scratch copy of the repo I restored the old regex `^\w+:\s*.+;$`, and the fixture failed with 1 failed, 4 passed. With the fix restored, all 6 passed.
+- [x] **Nit: `| null` only in a `ColumnType` insert/update position is not nullable.**
+  - Code: `selectNullable` at `schema-drift.test.ts:44-50` checks a top-level `null` member, recursing into the first argument of `ColumnType`/`Generated` through a depth-aware `splitTop`. `parseSchemaTs` uses it at `:59`.
+  - Fixture: "nullable means the select type is nullable", which has 8 direct cases and one end-to-end case through `parseSchemaTs`.
+  - Proven to fail without the fix, on the scratch copy:
+    - with both `selectNullable` and the `cols.set` wiring reverted to `/\|\s*null\b/`, the test failed at `:134`, the first `ColumnType<string, string | null | undefined, …>` case;
+    - with only the `cols.set` wiring reverted, the end-to-end assertion failed at `:140`.
+  - The real `schema.ts` still parses (the test "reads every table" passes), and `fee` is still nullable.
+- [x] Scope: only the two named files changed. Neither file touches production code.
+
+### Image-check reading (CI is the first real run)
+- **Shell.** The inner script runs under `sh -c` as `USER node` (Dockerfile line 30), and `--entrypoint` does not reset the user. In `node:22-bookworm-slim`, `sh` is dash and `find` is GNU findutils (an Essential package), which supports `-writable` through access(2).
+- **Quoting.** The new comment inside the single-quoted block contains no single quote, so the quoting still nests correctly.
+- **Expected CI behaviour.** The migrations are root-owned 644 files in a 755 directory (`COPY --from=build` without `--chown`), so every `find` prints nothing and exits 0, and the block passes. This is the same as the clean case in the simulation.
+
+### Issues
+None.
+
+### Rules R1–R10
+- R3 is unaffected.
+- R7: the diff stays within Ming's listed items.
+- R8: the new parser logic has unit fixtures, and all checks are green.
+- No violations found.
+
+### Nits (do not block)
+- `scripts/check-image.sh:53`: the timed no-URL `migrate` run has no `--name`, so the EXIT trap cannot remove it if it ever hangs. `timeout` kills the CLI, and the container may keep running until the runner is torn down. This is harmless on hosted runners. Adding `--name "$MNAME-nourl"` and the trap entry would make it consistent with the other timed smokes.
+- `schema-drift.test.ts:32-33`: `splitTop` counts the `>` of `=>` as a closing bracket. No function types appear in `schema.ts`, and the bidirectional diff would surface a misparse anyway.
+
+### Follow-ups (out of scope)
+- Unchanged from attempt 1.
