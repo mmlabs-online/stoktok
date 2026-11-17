@@ -7,7 +7,7 @@
 | Areas | db, security, architecture |
 | Attempts | 2 |
 | Created | 2026-11-12 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/69 |
 
 ## Goal
 Split from STK-087 (see work/tickets/STK-087/plan.md "Split proposal"; consult in work/tickets/STK-083/consult-database-optimizer.md §5–§6). Scope:
