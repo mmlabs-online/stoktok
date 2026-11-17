@@ -90,3 +90,111 @@ No violations found.
 - STK-096 runbook: say what to do with a dump left by a failed dry run. Prefer the prompt over an exported `MOVE_SRC_PGPASSWORD`, which keeps the password out of shell history. Consider rotating the Supabase DB password after the cutover.
 - Pin `PG_CLIENT_IMAGE` by digest (security F4). Add a host:port inequality guard between source and target (F6). Optionally support `verify-full` with a mounted Supabase CA (F7).
 - Ming should confirm the plan's S1 reading: "read-only access" includes SELECTs in READ ONLY transactions, not strictly `pg_dump` only. The security review raises the same question. Without it, step 11 loses its source side.
+
+## Attempt 2 — 2026-11-17
+Verdict: REWORK
+
+Scope: Ming's note "after attempt 1 PASS" item 1 (security F1, F2, F3, F5, F6 and the listed nits). The rework commit is ba1f2b5. The current branch head is 072f5ce, which only adds `security-review.md` attempt 2, so the code is the same as in ba1f2b5.
+
+### Checks (run by reviewer)
+- typecheck: green (rc 0).
+- lint: green (rc 0).
+- test: green. core 834, sources 35, ai 184, db 158, worker 310, web 359. This matches impl-log.
+- test:db, on a throwaway local PG 16 (127.0.0.1:55491): 26 files, 148 tests passed.
+- db:check: `db:check OK`.
+- check:deploy-env: `OK: deploy env lists consistent`.
+- `bash -n` on both scripts (bash 5.2): ok.
+- test:move, run locally by the reviewer: **10/10 cases, 83 assertions ok, `test:move OK`**, with MOVE_TEST_URL on `localhost`, the same as CI.
+  - I used my own docker stand-in, first on PATH. It runs the host PG 16 tools, maps `/work` and `/secrets`, and reports pg_dump 17. It emulates `ps --filter label`, `run -d --label` and `rm -f` with a state file. It maps `bash:3.2 bash -n` to host bash `-n`.
+  - The run used a temp mirror of the repo, with `scripts/` copied. In the copy, only the `-ge 170000` guard (:202) was relaxed to 160000. The harness was byte-identical and the committed script is unchanged.
+  - A subset run with `127.0.0.1` (t_usage_guards, t_dry_run_happy, t_column_pipe; 41 ok) passed too, so both alias directions work.
+  - No `stoktok*` databases or roles were left behind.
+- Mutation checks, each reverted afterwards. Every new assertion fails when its fix is removed:
+  - Removing the cleanup dump `rm` fails "a failed dry run leaves no dump".
+  - Removing the line regex fails "says so". The exit is still 1, from a later SQL error.
+  - Removing the host:port guard fails "target host:port equal…" and "no docker call for any guard".
+  - Changing NSEQ to 7 fails "exit 0" and "dry run OK".
+- HUP, by hand: I sent SIGHUP to the script during preflight, with a reachable target. Result: exit 1, `FAILED at step: preflight`, no other error, and the `$TMPDIR` pgpass dir was removed.
+- **CI evidence** (GitHub REST API; the orchestrator should confirm). Job `ci` 134089356950 on PR #71 head 072f5ce concluded `success`. Every step was green: typecheck, lint, test, test:db, check:service-key (`OK: no secret or AI SDK material in client bundle`), check:deploy-env, db:check, and test:move (10 cases, 83 `ok`, `test:move OK`).
+  - The `CHECK FAILED` lines in that log are db:check's own negative self-tests in the Postgres service log. They are not failures.
+  - The `ci` run on d474423 was cancelled, superseded by 072f5ce.
+  - **The following rest on CI alone:** the `127.0.0.1` target alias under real docker with `--network host` (it works: CI uses `localhost` for the source and `127.0.0.1` for the target), the real-container dump mode 600 (locally the dump is already 600 through `umask 077`, so the local assertion does not tell the two apart), bash 3.2 `-n`, the real-docker freeze leg, and the PG 17 server and client paths.
+
+### Acceptance criteria (Ming's fix list for this attempt)
+- [x] **F1 docs wording.** `docs/deploy.md:112` states that the migrate container gets the URL in `-e STOKTOK_DATABASE_URL` and that it is visible to `docker inspect`, like the worker. This matches script :220-221. plan.md:136 still says "never … in container env". See Issue 4.
+- [x] **F2 HUP trap and leftover note.** `trap 'exit 129' HUP` is at :138, and the HUP test above passed. The docs note is at :112, but its location is wrong on macOS (Issue 3).
+- [ ] **F3: target verify read-only and reject `|`/newline.** FAILED, see Issue 1.
+  - The read-only part is done: `dst_ro` (:181-185) is used at :260.
+  - The rejection can be bypassed.
+- [x] **F5 dump mode and failed-dry-run cleanup.** `chmod 600` is at :325 and the cleanup is at :129. Evidence: the `t_force` mode assertion (CI) and `t_schema_drift` "a failed dry run leaves no dump" (local and CI, mutation-checked). There is a small gap for partial dumps in a real run (Issue 2).
+- [x] **F6 host:port guard.** :82-84, a case-insensitive string check. Evidence: the `t_usage_guards` case (mutation-checked). It is lexical only (Issue 5).
+- [x] **Nits.**
+  - `collate "C"` (:233) and `LC_ALL=C sort` (:327).
+  - Numeric `$mx` check (:355).
+  - Assertion of 6 identity sequences (:365, mutation-checked).
+  - Drift wording in docs:113.
+- [x] **No regression.** All 9 attempt-1 cases are still green locally and in CI.
+- [x] **Nothing is applied to Supabase; no secret is committed.** The diff touches only the script, harness, docs and impl-log. `assert_no_leak` is green in every case that has it.
+- [x] **Repo checks green**: see above.
+
+### Issues
+#### Issue 1 — 🔴 blocker — F3 column-list rejection can be bypassed (Ming's fix list)
+- **Where**: `scripts/db-migrate-from-supabase.sh:245-254`
+- **Expected**: Ming asked to "reject `|`/newline in source column lists". No SQL built from a malformed source column list should be sent to either server.
+- **Actual**: the regex is applied per line after the output is split on newlines.
+  - A column name that contains both `|` and a newline yields two lines that each match `line_re`.
+  - Reproduced: on a scratch copy of the harness (not committed), I renamed `watchlist.note` to `"a|b<LF>c|d"` on the drift source and ran `--verify-only`.
+  - Both fragments passed the check, and the script sent the malformed SQL to the source: `ERROR: syntax error at or near "C" … ROW(…,"a)::text), '' order by (ROW(b)::text) collate "C"`, exit 1.
+  - So the generated SQL still contains source-controlled, unbalanced quoted identifiers. The security re-review (`security-review.md` Attempt 2, F3) reaches the same conclusion.
+  - Real-world risk is low: it needs DDL rights on Supabase, the SQL runs inside a read-only transaction, and no working injection has been shown. But this is one of the fixes Ming required before the PR, and it is not met.
+- **Fix instruction**: after the `tpk` check (:253), add:
+  - `[[ "$tcols" =~ ^[a-z_][a-z0-9_]*(,[a-z_][a-z0-9_]*)*$ && "$tpk" =~ ^[a-z_][a-z0-9_]*(,[a-z_][a-z0-9_]*)*$ ]] || fail "unexpected source column list (a name with | or a newline?)"`. All stoktok columns are lowercase snake_case, so `quote_ident` never quotes them.
+  - `printf '%s\n' "$DATA_TABLES" | grep -qx -- "$tname" || fail "source table $tname is not a target table"`.
+  - In the harness, add a case next to `t_column_pipe` that renames a source column to a name with `|` **and** a newline (for example `"a|b"$'\n'"c|d"`). Assert exit 1 and `out_has "unexpected source column list"`. Keep the existing `t_column_pipe`.
+
+#### Issue 2 — 🟡 should-fix — a partial dump from a failed real run keeps the container's mode
+- **Where**: `scripts/db-migrate-from-supabase.sh:323-325`
+- **Expected**: the dump is never readable beyond the owner (F5).
+- **Actual**: `chmod 600` runs only after `src_dump` succeeds.
+  - If pg_dump fails partway in a real run, or in a `--keep-dump` dry run, the partial file stays at the container's default 0644. Cleanup deletes the dump only in a failed dry run without `--keep-dump`.
+  - The work dir is 700, so the impact is small.
+- **Fix instruction**: before :324, add `: > "$WORK/$DUMP"`. That creates the file as 0600 under the script's `umask 077`, and pg_dump runs as the same uid, so it keeps the mode. Keep :325 as a backstop.
+
+#### Issue 3 — 🟡 should-fix — docs point to the wrong place for a leftover pgpass on macOS
+- **Where**: `docs/deploy.md:112`, "check `$TMPDIR` (default `/tmp`)"
+- **Expected**: the runbook names the place where `mktemp -d` actually created the dir. The script runs on Ming's Mac.
+- **Actual**: on macOS, `$TMPDIR` is normally `/var/folders/…/T/`, so a reader who checks `/tmp` misses the file that holds both passwords.
+- **Fix instruction**: reword to "check `$TMPDIR` of the shell that ran the script (`echo $TMPDIR`; on macOS usually `/var/folders/…/T/`, `/tmp` only when it is unset) for a leftover `tmp.*/pgpass` and delete that directory".
+
+#### Issue 4 — 🟡 should-fix (orchestrator or planner, not the implementer) — plan.md still has the wrong F1 claim
+- **Where**: `work/tickets/STK-091/plan.md:136`, "Passwords are never … in container env (pgpass)"
+- **Expected**: Ming asked to "correct plan/docs wording" for F1.
+- **Actual**: docs are corrected. plan.md is not, which impl-log:48-49 acknowledges because the implementer may not edit the plan.
+- **Fix instruction**: the orchestrator or planner amends plan.md:136 to say the migrate container gets the URL in its env, visible to `docker inspect` for its lifetime (plan S2).
+
+#### Issue 5 — 🟡 should-fix — the F6 guard is lexical only
+- **Where**: `scripts/db-migrate-from-supabase.sh:82-84`, `docs/deploy.md:118`
+- **Expected**: the target leg can never be the source (F6 "by construction").
+- **Actual**: aliases get past the guard: `localhost`/`127.0.0.1`, a name and its IP, a trailing dot, `05432`. The harness relies on exactly this (:97). Ming's literal wording, a host:port comparison, is met.
+- **Fix instruction**: in section 1, add `[ "$SRC_DB" != "$TARGET" ] || usage_err "the source database equals the target database; refusing"`.
+  - Every write goes to `$TARGET`, and preflight asserts `current_database() = $TARGET`, so with this guard no write can reach the source database under any alias.
+  - The harness still passes (`stoktok_mvsrc_*` ≠ `stoktok_scratch_mv*`). Add one `t_usage_guards` assertion (`XENV="MOVE_SRC_DB=$DST_DB"`, exit 2).
+  - Change docs:118 to "refuses a target host:port string equal to the source's, and a target database name equal to the source's".
+
+### Rules R1–R10
+No violations found.
+- R1, R2, R4, R5, R6 and R9 are not applicable.
+- R3: passwords are not on argv, and the pgpass dir is removed on EXIT, INT, TERM and HUP. The migrate-leg env exposure is now documented.
+- R7: only the script, harness, docs and impl-log changed, all in the plan's list.
+- R8: no `packages/core` change; `test:move` covers the script.
+- R10: nothing writes to Supabase.
+
+### Nits (do not block)
+- :267: the target `ai_keys` count still uses `dst_psql` (read-write session). It is a plain SELECT; `q_dst` via `dst_ro` would make the whole verify phase read-only.
+- :357: `$last` is not checked as numeric the way `$mx` is. It comes from `pg_sequences.last_value::text`, so the risk is nil.
+- The `t_force` mode-600 assertion cannot tell the two cases apart locally, because `umask 077` already gives 600. Only CI's real container (umask 022) proves the `chmod`.
+- The HUP trap has no harness case; it was verified by hand above.
+
+### Follow-ups (out of scope)
+- F4 (pin `PG_CLIENT_IMAGE` by digest) and F7 (`verify-full` with a root cert) are in STK-096, as Ming decided.
+- STK-096 runbook: run the real move inside `tmux`/`screen`, so an SSH drop does not HUP a real run halfway. Rotate the Supabase DB password after the cutover (Ming's note item 3).
