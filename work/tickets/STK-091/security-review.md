@@ -77,3 +77,66 @@ Security review of STK-091 (`scripts/db-migrate-from-supabase.sh`, test harness,
 - plan.md:162 reads Ming's "only read-only pg_dump" as allowing read-only SELECTs as well. Has Ming confirmed that reading?
 
 Files: /home/user/stoktok/scripts/db-migrate-from-supabase.sh, /home/user/stoktok/scripts/test-db-migrate-from-supabase.sh, /home/user/stoktok/.github/workflows/ci.yml, /home/user/stoktok/docs/deploy.md, /home/user/stoktok/work/tickets/STK-091/plan.md
+
+## Attempt 2
+
+Security re-review of STK-091 attempt 2. I read `scripts/db-migrate-from-supabase.sh`, `scripts/test-db-migrate-from-supabase.sh`, `docs/deploy.md` (lines 101-120) and the impl-log "Attempt 2". I changed nothing and ran nothing.
+
+**Verdict: no 🔴.** F1, F2 and F5 are closed. F6 is closed only as a hostname check: an alias or IP gets past it, and the test harness itself relies on that. F3 is only partly closed: the new line check can be passed with a crafted column name. Each gap has a one-line fix, listed below. Cleanup can never delete the dump on a real run.
+
+### Status of each attempt-1 finding
+
+**F1: closed (docs).** `docs/deploy.md:112` now says the migrate container has the URL, password included, in its env, visible to `docker inspect` for its lifetime, like the worker. That matches the code at `scripts/db-migrate-from-supabase.sh:220-221`. One loose end: `plan.md:136` still says passwords are never in container env. impl-log:48-49 records the mismatch; leave it to the planner or a follow-up.
+
+**F2: closed, with one docs nit.**
+- `:138` `trap 'exit 129' HUP` is in place. `cleanup` (`:125-135`) runs `rm -rf "$SECRETS"` first, before any write to stderr. So even if the SSH tty is gone and the `echo` fails, the pgpass file has already been deleted. Bash runs the trap once the foreground `docker run` exits, and the docker CLI gets the same HUP, so the delay is short.
+- 🟡 `docs/deploy.md:112` says to check "`$TMPDIR` (default `/tmp`)". On the Mac where this runs, `$TMPDIR` is normally `/var/folders/<..>/T/`, not `/tmp`. A runbook reader who looks in `/tmp` will miss the leftover `tmp.*/pgpass`. Fix: "check `$TMPDIR` (on macOS usually `/var/folders/.../T/`; `/tmp` only if unset)". Also run `echo $TMPDIR` in the session that ran the script.
+- Still untested, as impl-log:56 says: no harness case sends HUP. That's acceptable.
+
+**F3: partly closed. 🟡 The column-list check is too loose.** `:245` `line_re='^[a-z_][a-z0-9_]*[|][^|]+[|][^|]*$'` and `:248`.
+- The check runs on each line, but the source output is split on newlines (`:246`). A column name containing both `|` and a newline can produce two lines that each match.
+  - Example: a column named `a|b<LF>c|d` on `watchlist`. `quote_ident` gives `"a|b<LF>c|d"`.
+  - Line 1 is `watchlist|symbol,…,"a|b`. It matches, with `tcols` = `symbol,…,"a` (an unbalanced quote) and `tpk` = `b`.
+  - Line 2 is `c|d"|symbol`. It also matches, with `tname=c` (passes `:252`) and `tcols` = `d"`.
+- So `vsql` gets built with unbalanced quoted identifiers, which is exactly what F3 was about. `t_column_pipe` (harness `:287-295`) only tests `n|ote`. That has 3 pipes on one line, so it is caught, and the case above is not tested.
+- I could not build a payload that puts attacker-chosen SQL outside the quotes: `quote_ident` doubles inner `"`, and the template's `collate "C"` changes the quote parity. So actual injection is unproven (medium confidence).
+- The new `dst_ro` (`:181-185`) is the right fix for accidents, but it does not stop deliberate injection. Injected SQL can run `commit; set default_transaction_read_only = off; …`, so the input validation is the real defence.
+- The threat still needs DDL rights on Supabase, so it stays low.
+- Fix (one line each, after `:252`):
+  - `[[ "$tcols" =~ ^[a-z_][a-z0-9_]*(,[a-z_][a-z0-9_]*)*$ && "$tpk" =~ ^[a-z_][a-z0-9_]*(,[a-z_][a-z0-9_]*)*$ ]] || fail "unexpected source column list"`. stoktok's columns are all lowercase snake case, so `quote_ident` returns them unquoted. Any name that needs quoting is therefore refused, and a split line always fails.
+  - Also require `tname` to be in `$DATA_TABLES`: `printf '%s\n' "$DATA_TABLES" | grep -qx "$tname" || fail …`. A fake `c` table from a split line can then never reach `vsql`.
+  - Add a harness case with a column name containing `|` and a newline.
+
+**F5: closed. 🟡 One small gap.**
+- `:325` `chmod 600` runs after a successful dump, and `t_force` asserts mode 600 (`:251`).
+- Cleanup deletion (`:129`) only happens when `rc≠0 && DRY=1 && KEEP_DUMP=0 && DUMP` is set. **A real run (`DRY=0`) can never delete the dump.** `DUMP` is set at `:323` before `src_dump`, so a partial dump from a failed dry run is deleted too. An exit with status 2 happens before `DUMP` is set. `t_schema_drift` (`:276`) covers the failed-dry-run path.
+- Gap: if `src_dump` fails partway through a **real** run (or a `--keep-dump` dry run), `:325` is never reached. The partial dump then stays at the container's 0644 mode. It sits inside the 700 work dir, so the risk is low.
+- Fix: before `:324`, run `: > "$WORK/$DUMP"`, which creates the file as 0600 under the script's `umask 077`. `pg_dump` runs as the same UID (`--user "$UIDGID"`), opens the existing file and keeps its mode. `:325` then stays only as a backstop.
+
+**F6: string guard only. 🟡 An alias gets past it.** `:82-84`
+- The check compares the host:port strings in lowercase. `localhost` vs `127.0.0.1`, a hostname vs its IP, a trailing dot (`host.`, allowed by the `:81` regex), a pooler vs direct hostname, and `05432` vs `5432` all get past it.
+- The harness does exactly this on purpose (`:97-98`, `ALT_HOST`). So the check prevents a copy-paste mistake, but AC2 still depends on the naming-convention guards (`DST_USER` regex, `current_database()`=TARGET, non-superuser). The "by construction" outcome F6 asked for is still not there.
+- Fix: in section 1, add `[ "$SRC_DB" != "$TARGET" ] || usage_err "source database equals the target database"`. Every write goes to database `$TARGET` (`:288`, `:335`, `:339`, `:358`), and the preflight already confirms `current_database()` equals `$TARGET` (`:200`). So if `SRC_DB ≠ TARGET`, no write can touch the source database, even when both legs reach the same server under different names. The harness still passes, because `stoktok_mvsrc_*` ≠ `stoktok_scratch_mv*`.
+- Also adjust `docs/deploy.md:118` so it doesn't promise more than a hostname comparison.
+
+**Nits: closed.** `:355` checks `$mx` is numeric before `setval`. `:365` asserts exactly 6 identity sequences. `:233`/`:327` use C collation and C sort.
+
+### New issues introduced by attempt 2
+- None 🔴.
+- Harness `:97-98`: the alias workaround is fine for tests, but it shows the F6 limit above. Once the `SRC_DB ≠ TARGET` check is added, the harness no longer depends on F6 being bypassable in a way that matters.
+- `dst_ro` (`:181-185`) sends `$pre` and then the statements inside one rolled-back read-only transaction, so `set TimeZone` etc. are scoped correctly. No issue.
+
+### Recommendations
+- **AC2:** add the `SRC_DB ≠ TARGET` guard (F6) and the strict `tcols`/`tpk` regex plus the `tname ∈ DATA_TABLES` check (F3), with a harness case for a column name containing `|` and a newline.
+- **R3/AC3 (docs):** correct the `$TMPDIR` default for macOS at `docs/deploy.md:112`.
+- Optional: pre-create the dump file as 0600 (F5 gap).
+
+### Risks
+- Unchanged from attempt 1: an unencrypted dump of the whole portfolio stays in `~/srv/backups/stoktok-cutover` for 14 days (STK-095). Also, the "not offsite-synced" claim at `docs/deploy.md:116` becomes false without anyone noticing if `~/srv/backups` is ever added to a sync or Time Machine.
+- F4 (client image not pinned by digest) and F7 (TLS `require` doesn't verify the server certificate) remain open in STK-096, as Ming decided.
+
+### Open questions
+- Should the STK-096 runbook require running the script inside `tmux`/`screen`, so an SSH drop doesn't kill a real run partway through and leave a partial dump?
+- Rotating the Supabase DB password after the cutover is still undecided (attempt-1 question).
+
+Files: /home/user/stoktok/scripts/db-migrate-from-supabase.sh, /home/user/stoktok/scripts/test-db-migrate-from-supabase.sh, /home/user/stoktok/docs/deploy.md, /home/user/stoktok/work/tickets/STK-091/impl-log.md, /home/user/stoktok/work/tickets/STK-091/security-review.md
