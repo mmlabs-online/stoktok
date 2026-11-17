@@ -50,11 +50,12 @@ if [ "$APP" = worker ]; then
   if [ "$leaked" -ne 0 ]; then echo "::error::worker output leaked the database host or password"; exit 1; fi
   echo "== smoke: worker migrate without a database URL exits 2"
   err="$(mktemp)"
-  docker run --rm "$IMAGE" migrate 2> "$err"
+  timeout 20 docker run --rm "$IMAGE" migrate 2> "$err"
   code=$?
   cat "$err"
   size="$(wc -c < "$err")"
   rm -f "$err"
+  if [ "$code" -eq 124 ]; then echo "::error::migrate without a URL hung"; exit 1; fi
   if [ "$code" -ne 2 ] || [ "$size" -eq 0 ]; then
     echo "::error::migrate without a URL: expected exit 2 with a message, got $code"; exit 1
   fi
@@ -74,11 +75,17 @@ if [ "$APP" = worker ]; then
   if ! docker run --rm --entrypoint sh "$IMAGE" -c '
     set -e
     test -f /app/migrations/20261111000200_baseline.sql
-    test -z "$(find /app/migrations -name "*.down.sql")"
-    test -z "$(find /app/migrations -mindepth 1 ! -type f)"
-    test -z "$(find /app/migrations ! -user root)"
+    # plain assignments so set -e sees a find failure (test -z "$(...)" would hide it)
+    f=$(find /app/migrations -name "*.down.sql")
+    test -z "$f"
+    f=$(find /app/migrations -mindepth 1 ! -type f)
+    test -z "$f"
+    f=$(find /app/migrations ! -user root)
+    test -z "$f"
+    f=$(find /app/migrations -writable)
+    test -z "$f"
     test ! -w /app/migrations'; then
-    echo "::error::worker image /app/migrations: missing baseline, down file, non-regular entry or writable by node"; exit 1
+    echo "::error::worker image /app/migrations: missing baseline, down file, non-regular entry, a find failure, or writable by node"; exit 1
   fi
   exit 0
 fi

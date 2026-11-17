@@ -21,9 +21,32 @@ function bodyLines(body: string, owner: string): string[] {
     .map((l) => l.trim())
     .filter((l) => l !== '' && !/^(\/\/|\/\*|\*)/.test(l))
     .map((l) => {
-      if (!/^\w+:\s*.+;$/.test(l)) throw new Error(`unparsed line in ${owner}: ${l}`);
+      if (!/^\w+:\s*[^;]+;$/.test(l)) throw new Error(`unparsed line in ${owner}: ${l}`);
       return l;
     });
+}
+
+/** Splits at the top level only, so `|` and `,` inside `<...>` or `(...)` do not count. */
+function splitTop(text: string, sep: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of text) {
+    if ('<([{'.includes(ch)) depth++;
+    else if ('>)]}'.includes(ch)) depth--;
+    if (ch === sep && depth === 0) { parts.push(cur.trim()); cur = ''; } else cur += ch;
+  }
+  parts.push(cur.trim());
+  return parts;
+}
+
+/** Nullable in the select position: `| null` at the top level, or in the first argument of ColumnType<S, I, U>. */
+export function selectNullable(type: string): boolean {
+  return splitTop(type, '|').some((member) => {
+    if (member === 'null') return true;
+    const m = /^(ColumnType|Generated)<([\s\S]*)>$/.exec(member);
+    return m ? selectNullable(splitTop(m[2]!, ',')[0]!) : false;
+  });
 }
 
 /** table name -> column -> nullable. Fails closed on anything it cannot parse. */
@@ -33,7 +56,7 @@ export function parseSchemaTs(text: string): Map<string, Cols> {
     const cols: Cols = new Map();
     for (const l of bodyLines(m[2]!, m[1]!)) {
       const [, name, type] = /^(\w+):\s*(.+);$/.exec(l)!;
-      cols.set(name!, /\|\s*null\b/.test(type!));
+      cols.set(name!, selectNullable(type!));
     }
     ifaces.set(m[1]!, cols);
   }
@@ -98,6 +121,23 @@ describe('schema.ts parser', () => {
     expect(() => parseSchemaTs(FIXTURE.replace('a: ATable', 'a: BTable'))).toThrow(/unknown interface/);
     expect(() => parseSchemaTs(`${FIXTURE.replace('  a: ATable;\n', '')}`)).toThrow(/not in the Database map/);
     expect(() => parseSchemaTs('export interface ATable {\n  x: string;\n}\n')).toThrow(/no Database/);
+  });
+
+  test('two members on one line fail closed', () => {
+    expect(() => parseSchemaTs(FIXTURE.replace('  x: string;', '  x: string; w: number;'))).toThrow(/unparsed line in ATable/);
+  });
+
+  test('nullable means the select type is nullable', () => {
+    expect(selectNullable('string | null')).toBe(true);
+    expect(selectNullable('Int8 | null')).toBe(true);
+    expect(selectNullable('ColumnType<string | null, string | null, string | null>')).toBe(true);
+    expect(selectNullable('ColumnType<string, string | null | undefined, string | null>')).toBe(false);
+    expect(selectNullable('ColumnType<string, string | null, string>')).toBe(false);
+    expect(selectNullable('ColumnType<string, string, string | null>')).toBe(false);
+    expect(selectNullable('Generated<string>')).toBe(false);
+    expect(selectNullable('ColumnType<string[], string[] | undefined, string[]>')).toBe(false);
+    const ts = parseSchemaTs(FIXTURE.replace('y: number | null;', 'y: ColumnType<number, number | null, number | null>;'));
+    expect(ts.get('a')!.get('y')).toBe(false);
   });
 
   test('diff flags a missing column and a nullability flip (fixture)', () => {

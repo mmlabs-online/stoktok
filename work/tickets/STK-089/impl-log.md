@@ -45,3 +45,28 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No.
 - Diff size: about +400 / -3 lines (roughly 200 of them tests).
+
+## Attempt 2 (REWORK: fixes requested by Ming after review attempt 1 PASS)
+
+### Files touched
+- `scripts/check-image.sh`: `/app/migrations` assertions now use plain `f=$(find ...)` assignments under `set -e`, so a `find` failure fails the check (it was hidden inside `test -z "$(...)"`); added `find /app/migrations -writable` empty (as the runtime user `node`; security-review 🟡1); the no-URL `migrate` smoke runs under `timeout 20` with a hang message on exit 124 (🟢6). Required because both are the listed fixes.
+- `packages/db/test-db/schema-drift.test.ts`: `bodyLines` rejects a line with a second `;` (two members on one line throw); new exported `selectNullable` decides nullability from the select position only (top-level `| null`, or the first argument of `ColumnType<>`/`Generated<>`), so `ColumnType<string, string | null, ...>` is not nullable. Fixtures added in the existing parser `describe` (no DB needed): "two members on one line fail closed" and "nullable means the select type is nullable". Required because both are the listed review nits; logic stays in the test-db file.
+
+### Tests added
+- The two fixtures above.
+
+### Checks
+- `bash -n scripts/check-image.sh`: OK (Docker unavailable; the image assertions are still unproven until CI).
+- `pnpm typecheck`, `pnpm lint`: OK. `pnpm test`: core 834, sources 35, ai 184, db 158, worker 310 passed.
+- `pnpm test:db` (throwaway PG16 on TCP): 25 files, 145 tests passed.
+- `pnpm db:check` (DB_CHECK_URL against the same PG16 server): `db:check OK` (server is 16, not 17).
+- No `format` script exists in the repo, so no formatter was run. PG data dir deleted.
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+None new.
+
+### Scope self-check
+Only the listed items changed; no commit, no stash.
