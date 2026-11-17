@@ -140,3 +140,51 @@ Security re-review of STK-091 attempt 2. I read `scripts/db-migrate-from-supabas
 - Rotating the Supabase DB password after the cutover is still undecided (attempt-1 question).
 
 Files: /home/user/stoktok/scripts/db-migrate-from-supabase.sh, /home/user/stoktok/scripts/test-db-migrate-from-supabase.sh, /home/user/stoktok/docs/deploy.md, /home/user/stoktok/work/tickets/STK-091/impl-log.md, /home/user/stoktok/work/tickets/STK-091/security-review.md
+
+## Attempt 3
+
+Security re-review of STK-091 attempt 3. I read `scripts/db-migrate-from-supabase.sh`, `scripts/test-db-migrate-from-supabase.sh` and `docs/deploy.md:101-119`, plus impl-log "Attempt 3" and a column-name scan of `db/migrations/`. I changed nothing and ran nothing.
+
+**Verdict: no 🔴. F3, F5 and F6 are closed, and so is the `$TMPDIR` docs item. Nothing new at security level.** There are two 🟡 info nits, neither blocking.
+
+### Status of each attempt-2 item
+
+**F3: closed.** `scripts/db-migrate-from-supabase.sh:246-262`
+- After the split, `tcols` and `tpk` must match `^[a-z_][a-z0-9_]*(,[a-z_][a-z0-9_]*)*$` (`:256-257`).
+- `quote_ident` only leaves a name unquoted when it is already lowercase snake case. So any name with `|`, a newline, uppercase or a reserved word comes back with a `"`, and the check refuses it.
+- My attempt-2 example (`a|b<LF>c|d`) now fails on line 1: `tcols` ends in `"a` and fails at `:256`. Any split piece has the same problem, because it always carries an unbalanced `"`. Nothing reaches `vsql` (`:263`) unless every part is a plain identifier, so injection through the column list is closed by construction.
+- `tname` is regex-checked (`:254`) and must be a member of `$DATA_TABLES` (`:258-262`). The membership test uses a newline-delimited `case` glob, which is safe because `tname` is already restricted to `[a-z0-9_]` and has no glob characters.
+- Functional check: the real schema only uses names `quote_ident` leaves unquoted (`symbol` and `value` are unreserved keywords), so the stricter regex does not break the real move.
+- Test: `t_column_pipe_newline` (harness `:299-309`) renames the column to `"n|o<LF>te"` and asserts exit 1 with "unexpected source column list". That exercises the new `:256` path, not only `line_re`. Both messages share that substring, so the assertion passes either way.
+
+**F5: closed.** `:332-335`
+- `DUMP` is set, then `: > "$WORK/$DUMP"` runs under `umask 077`, so the file starts at 0600 before `pg_dump`.
+- `pg_dump` runs as the same UID (`--user "$UIDGID"`, `:168`) and truncates the existing file, which keeps its mode. A partial dump from a failed real run is now 0600 too. `chmod 600` stays as a backstop.
+- `t_force` still asserts mode 600 (harness `:253`).
+- Cleanup (`:130`) is unchanged and still can never delete the dump on a real run.
+
+**F6: closed.** `:85` refuses `SRC_DB == TARGET` with exit 2, before any connection.
+- Every write goes to database `$TARGET`: the truncate (`:297`), restore (`:345`), `analyze`/`setval` (`:349`, `:368`) and the migrate URL (`:221`). Preflight confirms `current_database() = $TARGET` (`:201`).
+- So even if both legs reach the same server through an alias, the writes land in a different database from the source.
+- Test: harness `:154-155`.
+- `docs/deploy.md:118` now promises only two string comparisons and says outright that aliases are not detected. That is accurate.
+
+**`$TMPDIR` docs: closed.** `docs/deploy.md:112` now names macOS `/var/folders/.../T/`, says `/tmp` only applies when `$TMPDIR` is unset, and says to run `echo $TMPDIR` in the same session.
+
+### New issues
+- 🟡 (info, docs) `docs/deploy.md:118`: the last sentence, "The target-side comparison also runs in a read-only transaction", sits right after the host and DB-name guards, so it reads as if it describes them. It actually means the verify md5 query (`dst_ro`, `:269`). Suggested wording: "The verify step reads the target in a read-only transaction too." Not a security gap.
+- 🟡 (info, test) `t_column_pipe_newline` only works if `t_column_pipe` ran first, because it renames `"n|ote"` (harness `:301`). impl-log:80 already notes this. Running it on its own (`test:move t_column_pipe_newline`) fails on setup, which is a false failure, not a false pass. It could be made self-contained later.
+- Test caveat, not a finding: locally the move cases ran with a stand-in `docker` and the `-ge 170000` guard temporarily relaxed, then restored (impl-log:80). `t_static` and `t_freeze` run only in CI, so a green CI run is the real evidence.
+
+### Recommendations
+- No changes needed for AC2 or R3. The `deploy.md:118` wording fix is optional and can go in this diff or the STK-096 runbook.
+
+### Risks (unchanged)
+- An unencrypted dump of the portfolio stays in `~/srv/backups/stoktok-cutover` for 14 days (STK-095). The "not offsite-synced" claim (`docs/deploy.md:116`) silently becomes false if `~/srv/backups` is ever added to a sync.
+- F4 (client image not pinned by digest) and F7 (TLS `require` doesn't verify the server certificate) are still deferred to STK-096.
+
+### Open questions (carried over)
+- Should the Supabase DB password be rotated after the cutover?
+- Should the STK-096 runbook require running the script inside `tmux` or `screen`?
+
+Files: /home/user/stoktok/scripts/db-migrate-from-supabase.sh, /home/user/stoktok/scripts/test-db-migrate-from-supabase.sh, /home/user/stoktok/docs/deploy.md, /home/user/stoktok/work/tickets/STK-091/impl-log.md, /home/user/stoktok/work/tickets/STK-091/security-review.md
