@@ -64,3 +64,26 @@ None.
 
 ### Scope self-check
 Only the listed findings and nits; no refactors. Diff: +46/-11 across 3 files.
+
+## Attempt 3 — 2026-11-17 (REWORK: review attempt 2 / security attempt 2)
+
+### Files touched
+| File | Required because |
+|---|---|
+| `scripts/db-migrate-from-supabase.sh` | F3: after the source read, `tcols` and `tpk` must match strict lowercase snake_case comma lists and `tname` must be in `$DATA_TABLES`, else refuse before any SQL is built; F5: dump pre-created `0600` (`: > "$WORK/$DUMP"` under umask 077) before pg_dump, chmod kept; F6: usage error (exit 2) when `MOVE_SRC_DB` equals `--target` |
+| `scripts/test-db-migrate-from-supabase.sh` | usage guard for equal DB names; new `t_column_pipe_newline` (column name with `\|` and a newline refused before any SQL runs) |
+| `docs/deploy.md` | `$TMPDIR` wording (macOS `/var/folders/.../T/`, `/tmp` only if unset, `echo $TMPDIR`); F6 text now says only a host:port comparison plus a DB-name comparison, no alias detection |
+
+### Checks (actual)
+- typecheck, lint: green. test: core 834, sources 35, ai 184, db 158, worker 310, web 359 pass.
+- test:db (throwaway local PG 16 on 127.0.0.1:55481, data dir deleted afterwards): 26 files, 148 tests passed. db:check OK. check:deploy-env OK. `bash -n` on both scripts ok. No `pnpm format` script exists.
+- test:move: no Docker daemon. Ran with a host stand-in `docker` outside the repo (PG 16 client tools, reports pg_dump 17) and the `-ge 170000` server guard relaxed in the working file for the run only, then restored (`grep -c 'ge 170000'` = 1). Cases: t_usage_guards, t_schema_migrations_mismatch, t_dry_run_happy, t_verify_only, t_refuse_non_empty, t_force, t_schema_drift, t_column_pipe, t_column_pipe_newline: `test:move OK`, 0 FAIL. NOT run: t_static, t_freeze (need real docker; CI). t_column_pipe_newline depends on t_column_pipe having run first (same fixture DB).
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+- `--worker-image` leg and HUP trap still untested here.
+
+### Scope self-check
+Only the four listed items. plan.md not edited.

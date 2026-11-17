@@ -151,6 +151,8 @@ t_usage_guards() {
   run_move --target "$DST_DB" --skip-migrate; assert "sslmode disable with a remote source (exit 2)" rc_is 2
   XENV="MOVE_DST_HOST=$HOST"
   run_move --target "$DST_DB" --skip-migrate; assert "target host:port equal to the source (exit 2)" rc_is 2
+  XENV="MOVE_SRC_DB=$DST_DB"
+  run_move --target "$DST_DB" --skip-migrate; assert "source database name equal to the target (exit 2)" rc_is 2
   printf '%s\n' 'shortpwXYZ' > "$TMP/badpwfile"
   XENV="MOVE_DST_PWFILE=$TMP/badpwfile"
   run_move --target "$DST_DB" --skip-migrate
@@ -294,7 +296,19 @@ t_column_pipe() {
   assert_no_leak
 }
 
-ALL="t_usage_guards t_static t_schema_migrations_mismatch t_dry_run_happy t_verify_only t_refuse_non_empty t_force t_freeze t_schema_drift t_column_pipe"
+t_column_pipe_newline() {
+  echo "t_column_pipe_newline"
+  su_db "$DRIFT_DB" -c "set default_transaction_read_only = off" -c 'alter table public.watchlist rename column "n|ote" to note' >/dev/null
+  su_db "$DRIFT_DB" -c "set default_transaction_read_only = off" -c "alter table public.watchlist rename column note to \"n|o
+te\"" >/dev/null
+  XENV="MOVE_SRC_DB=$DRIFT_DB"
+  run_move --target "$DST_DB" --skip-migrate --verify-only
+  assert "a source column name with | and a newline is refused (exit 1)" rc_is 1
+  assert "says so" out_has "unexpected source column list"
+  assert_no_leak
+}
+
+ALL="t_usage_guards t_static t_schema_migrations_mismatch t_dry_run_happy t_verify_only t_refuse_non_empty t_force t_freeze t_schema_drift t_column_pipe t_column_pipe_newline"
 for t in ${*:-$ALL}; do "$t"; done
 
 if [ "$FAILS" -ne 0 ]; then echo "test:move: $FAILS assertion(s) FAILED" >&2; exit 1; fi

@@ -82,6 +82,7 @@ FREEZE_PROJECT="${MOVE_FREEZE_PROJECT:-stoktok}"
 src_hp="$(printf '%s:%s' "$SRC_HOST" "$SRC_PORT" | tr 'A-Z' 'a-z')"
 dst_hp="$(printf '%s:%s' "$DST_HOST" "$DST_PORT" | tr 'A-Z' 'a-z')"
 [ "$src_hp" != "$dst_hp" ] || usage_err "the target host:port equals the source host:port; refusing"
+[ "$SRC_DB" != "$TARGET" ] || usage_err "the source database name equals the target database name; refusing"
 [[ "$DST_USER" =~ ^stoktok[a-z0-9_]*$ ]] || usage_err "MOVE_DST_USER must match ^stoktok[a-z0-9_]*\$"
 [[ "$SRC_NET" =~ ^[A-Za-z0-9_.-]+$ ]] || usage_err "MOVE_SRC_NETWORK has unexpected characters"
 [[ "$DST_NET" =~ ^[A-Za-z0-9_.-]+$ ]] || usage_err "MOVE_DST_NETWORK has unexpected characters"
@@ -242,6 +243,7 @@ verify_phase() {
     || '|' || coalesce((select string_agg(quote_ident(a.attname), ',' order by array_position(i.indkey::int2[], a.attnum)) from pg_index i join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any (i.indkey::int2[]) where i.indrelid = c.oid and i.indisprimary), '')
     from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relname not in ('schema_migrations', 'ai_keys') order by c.relname")"
   [ -n "$cols" ] || fail "source has no tables to verify"
+  local list_re='^[a-z_][a-z0-9_]*(,[a-z_][a-z0-9_]*)*$'
   local line_re='^[a-z_][a-z0-9_]*[|][^|]+[|][^|]*$'
   while IFS= read -r line; do
     [ -n "$line" ] || continue
@@ -251,6 +253,13 @@ $line
 EOT
     [[ "$tname" =~ ^[a-z_][a-z0-9_]*$ ]] || fail "unexpected source table name '$tname'"
     [ -n "$tpk" ] || fail "source table $tname has no primary key"
+    [[ "$tcols" =~ $list_re ]] || fail "unexpected source column list for table $tname"
+    [[ "$tpk" =~ $list_re ]] || fail "unexpected source primary key list for table $tname"
+    case "
+$DATA_TABLES
+" in *"
+$tname
+"*) ;; *) fail "source table $tname is not a target data table" ;; esac
     vsql="$vsql select 't|$tname|' || count(*) || '|' || md5(coalesce(string_agg(md5(ROW($tcols)::text), '' order by (ROW($tpk)::text) collate \"C\"), '')) from public.$tname;"$'\n'
   done <<EOF
 $cols
@@ -321,6 +330,7 @@ fi
 # ---- 8. Dump and TOC ----
 step "dump (read-only pg_dump)"
 DUMP="stoktok-supabase-$(date -u +%Y%m%d-%H%M%S).dump"
+: > "$WORK/$DUMP"
 src_dump -Fc --data-only --schema=public --no-owner --no-privileges --exclude-table=public.ai_keys --exclude-table=public.schema_migrations -f "/work/$DUMP"
 chmod 600 "$WORK/$DUMP"
 step "dump table of contents"
