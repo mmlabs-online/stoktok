@@ -59,3 +59,76 @@ Caveat: I could not run `git diff` because I only have Read, Grep and Glob. I re
 ### Open questions
 - Does the Cloudflare Access application cover the whole stoktok hostname, with no bypass for `/healthz` or `/readyz`?
 - Should the password be masked with `::add-mask::`, given the "no echo" convention in the secrets step?
+
+
+## Attempt 2
+
+**Verdict: 🟡1, 🟡2 and 🟡4 are closed. No new 🔴 findings. One new low 🟡 (5) and two notes.** 🟡3 (`::add-mask::`) stays open because Ming declined it; my attempt-1 analysis still holds and nothing prints the password today.
+
+I only had Read, Grep and Glob, so I read the current files rather than a diff, and I did not run the guard script or the tests.
+
+### Re-check of the attempt-1 findings
+
+**🟡2: closed.** `/home/user/stoktok/deploy/deployment-repo/.github/workflows/deploy-stoktok.yml:217-225`
+- The regex is now checked against the same value that goes into the URL. `pw=""` is set, then `read -r pw < "$pwfile" || true`, then `[[ "$pw" =~ ^[A-Za-z0-9_-]{16,}$ ]]`, which fails with `exit 1`.
+- **Injection into the URL is not possible.**
+  - The pattern is anchored at both ends, and its character set has no `@ : / % ? #`, no whitespace and no newline (`read` stops at the first newline).
+  - So the value cannot change the userinfo, host or path of `postgres://$DB_APP:$pw@postgres:5432/$DB_APP`, and it cannot add an env line.
+  - A CRLF file leaves a trailing `\r` in `$pw`, so the check fails safely.
+- **Bad files fail closed.**
+  - A missing file makes the redirect fail; `|| true` absorbs that, `pw` stays empty and the regex rejects it.
+  - A blank first line also leaves `pw` empty and is rejected.
+  - A file with no trailing newline still fills `pw`, and `|| true` stops `bash -e` from aborting.
+- The `::error::` text names only the file path and never the value.
+- The regex is kept in a variable, which avoids bash 3.2 quirks.
+
+**🟡4: closed.** `/home/user/stoktok/scripts/check-deploy-env.sh:109`
+- The guard now matches any `"${compose[@]}"` or `docker compose` line with ` config` followed by whitespace or end of line, and it requires `--quiet` or `--services` on that line.
+- It catches the case I raised in attempt 1 (`--profile x config`). The impl-log mutation proofs cover it, with two `--profile` flags before `config`.
+- Current lines `:250` (`--quiet`) and `:252` (`--services`) pass. The `backup` line `:264` does not match.
+- What the guard still cannot catch (not a finding; a line-based grep cannot see these):
+  - a compose array under another name, such as `dc=(...)`;
+  - `docker-compose` with a hyphen;
+  - `config` placed after a `\` line continuation;
+  - `--quiet` that belongs to a different command on the same line.
+- A short comment on `:109` saying the guard assumes the `compose` array convention would help the next editor.
+
+**🟡1: closed.** `/home/user/stoktok/apps/web/app/readyz/route.ts:13,32-35` and `/home/user/stoktok/docs/deploy.md:99`
+- **A failed check is not cached forever.**
+  - `check()` cannot reject: `getDb()`, `pingDb()` and the timeout are all inside the `try`, and the `catch` returns `{ok:false, code}`.
+  - So the shared promise always resolves, and the entry is replaced once `now - at >= 3000`. A failure is served for at most about 3 s.
+  - Because `at` is taken when the check starts, and the 2 s timeout is shorter than the 3 s cache, a hanging ping cannot pin the cache either.
+- **No error details leak.**
+  - The cached value holds only `ok` and an enumerated `code` (`DataError.code`, `timeout` or `config`). It never holds a message.
+  - The body is still `{status}` only, with `no-store`.
+  - The tests at `/home/user/stoktok/apps/web/test/readyz.test.ts:39-57` still check for the SENTINEL strings.
+- **Load is capped.** Each web process now does at most one DB round trip and at most one `readyz_db_unavailable` log line every 3 s, however many anonymous calls arrive. Concurrent callers share the in-flight promise; the test at `:76-85` covers this.
+- `docs/deploy.md:99` now states that `/readyz` must never get an Access bypass. That answers my attempt-1 open question in the runbook. Step 10 at `:120` already says "no bypass rules".
+
+### New findings
+
+- 🟡5 (low): the password guard is pinned more weakly than the master-key guard. `/home/user/stoktok/scripts/check-deploy-env.sh:240-252`
+  - The pinned-literal loop only checks that each line exists before `mktemp`. It does not check that the `if ! [[ "$pw" =~ $re_pw ]]` line is followed by `exit 1`, or that it comes before the `STOKTOK_DATABASE_URL=` line.
+  - So a future edit that drops `exit 1`, or moves the URL line above the check, would still pass the guard. That would bring back the exact 🟡2 gap.
+  - The master key is protected better: an awk check at `:224-231` requires `exit 1` within 4 lines.
+  - Fix: reuse that awk pattern for `re_pw`, or add one check that the guard's line number is less than the URL line's and that `exit 1` follows within 4 lines.
+  - Rule: R3 and Conventions/secrets.
+
+### Notes (not findings)
+
+- **Abandoned pings can still hold connections.** `route.ts:21`: `Promise.race` does not cancel the ping. After the 2 s timeout, the query can keep holding a web-pool connection until `statementTimeoutMs` (15 s, `/home/user/stoktok/packages/db/src/pg/config.ts:15`). If the DB hangs, a new ping every 3 s can tie up about 5 connections, which is the whole pool.
+  - This was already true in attempt 1, and the memo lowers the rate. It only happens when the DB is already unhealthy.
+  - Optional fix: run the ping with a short per-query `statement_timeout`, for example `set local` in a transaction, or a dedicated client with `query_timeout`.
+- **Clock jumps can stretch the cache.** `route.ts:34` uses `Date.now()`. If the wall clock steps backwards, the current result (possibly a 503) is served until the clock catches up. Optional fix: use `performance.now()`.
+- **Test gap.** No test shows that a *failed* result is cached and then retried after 3 s. Optional: add one so the "not cached forever" behaviour is pinned.
+
+### Recommendations
+1. 🟡5: pin the order of the password guard and its `exit 1` in `check-deploy-env.sh`, like the master-key awk check. Rule R3; AC 1.
+2. Optional: a test for failure memoisation and expiry; `performance.now()`; a short timeout on the ping query.
+
+### Risks
+- Unchanged from attempt 1: tying `/readyz` to the DB health check (STK-094); "DB ahead" exits 0; the committed password file means the deployment repo must stay private.
+- 🟡3 is still open by decision: the password has no runner masking. It relies on no step ever printing the resolved env, which the 🟡4 guard now enforces better.
+
+### Open questions
+- None new.
