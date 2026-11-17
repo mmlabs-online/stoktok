@@ -84,6 +84,19 @@ describe('GET /readyz', () => {
     expect(pingDb).toHaveBeenCalledTimes(2);
   });
 
+  it('memoises a failed result for 3 s, then retries', async () => {
+    vi.useFakeTimers();
+    pingDb.mockRejectedValueOnce(new FakeDataError('DB_ERROR')).mockResolvedValue(undefined);
+    expect((await GET()).status).toBe(503);
+    await vi.advanceTimersByTimeAsync(2999);
+    expect((await GET()).status).toBe(503);
+    expect(pingDb).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect((await GET()).status).toBe(200);
+    expect(pingDb).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledTimes(1);
+  });
+
   it('route source imports only server/db and does not call requireUser', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../app/readyz/route.ts'), 'utf8');
     const imports = [...src.matchAll(/from '([^']+)'/g)].map((m) => m[1]);

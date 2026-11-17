@@ -106,6 +106,8 @@ if grep -nE 'set -[A-Za-z]*x|set -o xtrace' "$WF"; then
   echo "FAIL: set -x in workflow" >&2
   fail=1
 fi
+# Assumes the convention: compose is run as "${compose[@]}" (array named compose) or "docker compose" on one line;
+# another array name, docker-compose, or a line continuation is not seen.
 if grep -E '(compose\[@\]\}"|docker compose).* config([[:space:]]|$)' "$WF" | grep -vE -- '--(quiet|services)'; then
   echo "FAIL: compose config without --quiet or --services" >&2
   fail=1
@@ -240,7 +242,7 @@ fi
 mktemp_line="$(echo "$secrets_step" | grep -n 'mktemp' | head -n 1 | cut -d: -f1 || true)"
 for lit in 'pwfile="postgres/secrets/apps/$DB_APP.password"' \
            'pw=""' \
-           'read -r pw < "$pwfile" || true' \
+           'IFS= read -r pw < "$pwfile" || true' \
            "re_pw='^[A-Za-z0-9_-]{16,}\$'" \
            'if ! [[ "$pw" =~ $re_pw ]]; then' \
            'STOKTOK_DATABASE_URL="postgres://$DB_APP:$pw@postgres:5432/$DB_APP"'; do
@@ -250,6 +252,45 @@ for lit in 'pwfile="postgres/secrets/apps/$DB_APP.password"' \
     fail=1
   fi
 done
+
+# STK-093: the password guard order (pwfile < IFS= read < re_pw < guard < exit 1 within 4 lines < URL < mktemp < printf).
+pw_ok="$(echo "$secrets_step" | awk '
+  { l = $0; sub(/^[[:space:]]+/, "", l); sub(/[[:space:]]+$/, "", l) }
+  l == "pwfile=\"postgres/secrets/apps/$DB_APP.password\"" && !f { f = NR }
+  l == "IFS= read -r pw < \"$pwfile\" || true" && !rd { rd = NR }
+  l == "re_pw='"'"'^[A-Za-z0-9_-]{16,}$'"'"'" && !r { r = NR }
+  r && l == "if ! [[ \"$pw\" =~ $re_pw ]]; then" && !g { g = NR; next }
+  g && !x && NR <= g + 4 && l == "exit 1" { x = NR }
+  l == "STOKTOK_DATABASE_URL=\"postgres://$DB_APP:$pw@postgres:5432/$DB_APP\"" && !u { u = NR }
+  /mktemp/ && !m { m = NR }
+  /^[[:space:]]*printf .*> "\$tmp"/ && !p { p = NR }
+  END { print (f && rd && r && g && x && u && m && p && f < rd && rd < g && r < g && g < x && x < u && u < m && m < p) ? "yes" : "no" }')"
+if [ "$pw_ok" != yes ]; then
+  echo "FAIL: the password guard (re_pw, if ! [[ \"\$pw\" =~ \$re_pw ]] + exit 1) must follow IFS= read and precede STOKTOK_DATABASE_URL=, mktemp and the printf in the secrets step" >&2
+  fail=1
+fi
+# STK-093: the password and the URL are never echoed. Outside the secrets step no code line may mention them; inside it
+# $pw appears only on the guard and the URL assignment, $STOKTOK_DATABASE_URL only on the single printf.
+re_pwvar='\$\{?pw([^A-Za-z0-9_]|$)'
+wf_nc="$(grep -vE '^\s*#' "$WF" || true)"
+out_of_step="$(echo "$wf_nc" | sed '/^      - name: secrets[[:space:]]*$/,/^      - name: pull[[:space:]]*$/d')"
+if echo "$out_of_step" | grep -nE -e "$re_pwvar" -e 'STOKTOK_DATABASE_URL'; then
+  echo "FAIL: the database password or URL is referenced outside the secrets step" >&2
+  fail=1
+fi
+pw_lines="$(echo "$secrets_step" | grep -E "$re_pwvar" || true)"
+pw_count="$(echo "$secrets_step" | grep -cE "$re_pwvar" || true)"
+if [ "$pw_count" != 2 ] \
+   || ! echo "$pw_lines" | grep -qF 'if ! [[ "$pw" =~ $re_pw ]]; then' \
+   || ! echo "$pw_lines" | grep -qF 'STOKTOK_DATABASE_URL="postgres://$DB_APP:$pw@postgres:5432/$DB_APP"'; then
+  echo "FAIL: in the secrets step \$pw may appear only on the guard and the URL assignment" >&2
+  fail=1
+fi
+url_count="$(echo "$secrets_step" | grep -cE '\$\{?STOKTOK_DATABASE_URL' || true)"
+if [ "$url_count" != 1 ] || ! echo "$secrets_step" | grep -E '\$\{?STOKTOK_DATABASE_URL' | grep -qE "$printf_shape"; then
+  echo "FAIL: in the secrets step \$STOKTOK_DATABASE_URL may appear only on the single printf" >&2
+  fail=1
+fi
 
 # STK-084: the "database is ahead" literal is pinned in migrate.ts; the deploy workflow must grep the same text.
 ahead_prefix="$(sed -n "s/^export const MIGRATE_AHEAD_PREFIX = '\(.*\)';\$/\1/p" "$ROOT/packages/db/src/pg/migrate.ts")"
