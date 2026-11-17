@@ -1,8 +1,8 @@
-# STK-089: Worker migrate command, image, owner-role test:db and schema drift test (STK-087 split)
+# STK-089: Worker migrate command, image and schema drift test (STK-087 split)
 
 | Field | Value |
 |---|---|
-| State | PLANNING |
+| State | IN_PROGRESS |
 | Priority | P1 |
 | Areas | db, security, architecture |
 | Attempts | 0 |
@@ -63,3 +63,4 @@ CLAUDE.md R3, R7, R8; ADR 0010. Depends on STK-087.
 ## Notes / answers from Ming
 - 2026-11-12 (orchestrator): split from STK-087 per its plan.md; no manual step for Ming.
 - 2026-11-12 (orchestrator): from STK-087 security review attempt 1 — add an r3-guard rule that only apps/worker (and test-db) import `runMigrations`/`migrateFromEnv`; `check-image.sh` asserts `/app/migrations` holds only regular files.
+- 2026-11-17 (orchestrator, after planning): the owner-role test:db moved to STK-090 (P2, not a prerequisite for STK-084) per plan.md.
