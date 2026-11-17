@@ -51,6 +51,9 @@ jobs:
       - run: pnpm db:check
         env:
           DB_CHECK_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      - run: pnpm test:move
+        env:
+          MOVE_TEST_URL: postgresql://postgres:postgres@localhost:5432/postgres
 
   images:
     needs: ci
