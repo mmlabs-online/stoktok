@@ -92,7 +92,7 @@ If no auth image has been released yet, skip the allowlist secret entirely and s
 
 ## Shared Postgres (STK-084)
 App data moves from Supabase to the shared mmlabs Postgres 17 (`postgres:5432` on the Docker network `db`, database and role `stoktok`). **Production stays on the Supabase-backed release (v0.2.1) until the cutover; cut no release before the cutover runbook exists (STK-091, STK-094).** Order:
-1. B (STK-092): in the deployment repo run `bash postgres/scripts/add-app-db.sh stoktok`, merge, wait for `deploy-postgres` green.
+1. B (STK-092): in the deployment repo run `bash postgres/scripts/add-app-db.sh stoktok`, merge, wait for `deploy-postgres` green, then run one backup so the offsite sync does not report a false failure (`docker compose -p postgres -f ~/srv/postgres/compose.yml exec pg-backup /backup.sh`) and `bash ~/srv/ops/backup/restore-test.sh stoktok` once (must exit 0).
 2. C (STK-093): copy `apps/stoktok/compose.yml` and `.github/workflows/deploy-stoktok.yml` from the drafts, set the `stoktok` environment secret `STOKTOK_AI_KEYS_MASTER_KEY`, merge. v0.2.1 is recreated with the expanded env file (it keeps every `SUPABASE_*` line for the 14-day rollback window) and must stay healthy; run `run-job.sh eod-prices --dry-run`.
 3. Cutover (STK-094): the data move (`scripts/db-migrate-from-supabase.sh`, next section) and the first Postgres release; the step-by-step cutover runbook arrives with STK-096.
 
