@@ -186,6 +186,18 @@ describe('R3 guard', () => {
     expect(files.find((f) => f.path === 'packages/db/src/pg/index.ts')!.text).not.toContain('databaseUrlFromEnv');
   });
 
+  test('runMigrations / migrateFromEnv appear only in pg/migrate, pg/index, test-db/ and apps/worker/src/migrate', () => {
+    const RUNNER_ENTRY = /\b(?:runMigrations|migrateFromEnv)\b/;
+    const allowed = (p: string) =>
+      ['packages/db/src/pg/migrate.ts', 'packages/db/src/pg/migrate.test.ts', 'packages/db/src/pg/index.ts', 'apps/worker/src/migrate.ts', 'apps/worker/src/migrate.test.ts'].includes(p) ||
+      p.startsWith('packages/db/test-db/');
+    expect(files.filter((f) => RUNNER_ENTRY.test(f.text)).map((f) => f.path).filter((p) => !allowed(p))).toEqual([]);
+    expect(RUNNER_ENTRY.test("import { migrateFromEnv } from '@stoktok/db/pg'")).toBe(true);
+    expect(RUNNER_ENTRY.test("const { runMigrations: r } = await import('@stoktok/db/pg')")).toBe(true);
+    expect(RUNNER_ENTRY.test('migrateCommand')).toBe(false);
+    expect(RUNNER_ENTRY.test('runMigrationsX')).toBe(false);
+  });
+
   test('STOKTOK_AI_KEYS_MASTER_KEY is referenced only in packages/db/src/pg/client.ts and client.test.ts', () => {
     const hits = files
       .filter((f) => f.text.includes('STOKTOK_AI_KEYS_MASTER_KEY'))

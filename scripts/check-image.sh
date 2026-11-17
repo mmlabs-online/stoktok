@@ -35,7 +35,8 @@ if [ "$APP" = worker ]; then
   fi
   echo "== smoke: worker with an unreachable database exits 1 without hanging or leaking"
   NAME="stoktok-smoke-$$"
-  trap 'docker rm -f "$NAME" >/dev/null 2>&1' EXIT
+  MNAME="stoktok-smoke-mig-$$"
+  trap 'docker rm -f "$NAME" "$MNAME" >/dev/null 2>&1' EXIT
   err="$(mktemp)"
   timeout 20 docker run --rm --name "$NAME" \
     -e STOKTOK_DATABASE_URL=postgres://smoke:smoke-pw@127.0.0.1:9/smoke \
@@ -47,6 +48,38 @@ if [ "$APP" = worker ]; then
   if [ "$code" -eq 124 ]; then echo "::error::worker hung with an unreachable database"; exit 1; fi
   if [ "$code" -ne 1 ]; then echo "::error::expected exit 1 with an unreachable database, got $code"; exit 1; fi
   if [ "$leaked" -ne 0 ]; then echo "::error::worker output leaked the database host or password"; exit 1; fi
+  echo "== smoke: worker migrate without a database URL exits 2"
+  err="$(mktemp)"
+  docker run --rm "$IMAGE" migrate 2> "$err"
+  code=$?
+  cat "$err"
+  size="$(wc -c < "$err")"
+  rm -f "$err"
+  if [ "$code" -ne 2 ] || [ "$size" -eq 0 ]; then
+    echo "::error::migrate without a URL: expected exit 2 with a message, got $code"; exit 1
+  fi
+  echo "== smoke: worker migrate with an unreachable database exits 1 without hanging or leaking"
+  err="$(mktemp)"
+  timeout 20 docker run --rm --name "$MNAME" \
+    -e STOKTOK_DATABASE_URL=postgres://smoke:smoke-pw@127.0.0.1:9/smoke \
+    "$IMAGE" migrate > "$err" 2>&1
+  code=$?
+  cat "$err"
+  leaked="$(grep -cE 'smoke-pw|127\.0\.0\.1' "$err" || true)"
+  rm -f "$err"
+  if [ "$code" -eq 124 ]; then echo "::error::worker migrate hung with an unreachable database"; exit 1; fi
+  if [ "$code" -ne 1 ]; then echo "::error::migrate: expected exit 1 with an unreachable database, got $code"; exit 1; fi
+  if [ "$leaked" -ne 0 ]; then echo "::error::worker migrate output leaked the database host or password"; exit 1; fi
+  echo "== image ships db/migrations: regular files only, no down files, read-only for the runtime user"
+  if ! docker run --rm --entrypoint sh "$IMAGE" -c '
+    set -e
+    test -f /app/migrations/20261111000200_baseline.sql
+    test -z "$(find /app/migrations -name "*.down.sql")"
+    test -z "$(find /app/migrations -mindepth 1 ! -type f)"
+    test -z "$(find /app/migrations ! -user root)"
+    test ! -w /app/migrations'; then
+    echo "::error::worker image /app/migrations: missing baseline, down file, non-regular entry or writable by node"; exit 1
+  fi
   exit 0
 fi
 

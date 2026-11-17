@@ -3,8 +3,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { EOD_SYNC_CONFIG } from './config';
 import { main, parseArgs } from './cli';
 import { runMediumSignals } from './jobs/medium-signals';
+import { migrateCommand } from './migrate';
 
 vi.mock('./jobs/medium-signals', () => ({ runMediumSignals: vi.fn() }));
+vi.mock('./migrate', async (orig) => ({ ...(await orig<typeof import('./migrate')>()), migrateCommand: vi.fn() }));
 
 describe('parseArgs', () => {
   test('eod-prices -> dryRun false', () => {
@@ -134,6 +136,19 @@ describe('main lifecycle', () => {
     await main(['nonsense'], openDb);
     expect(openDb).not.toHaveBeenCalled();
     expect(process.exitCode).toBe(2);
+  });
+
+  test('main: migrate delegates and opens no db', async () => {
+    const openDb = vi.fn();
+    await main(['migrate', 'extra'], openDb);
+    expect(openDb).not.toHaveBeenCalled();
+    expect(migrateCommand).toHaveBeenCalledTimes(1);
+    expect(migrateCommand).toHaveBeenCalledWith(['extra'], { env: process.env, dir: expect.stringMatching(/migrations$/) });
+  });
+
+  test('USAGE lists migrate', async () => {
+    await main(['nonsense'], vi.fn());
+    expect(String(vi.mocked(console.error).mock.calls[0]?.[0])).toContain('migrate');
   });
 
   test('main: end() runs once after a successful job', async () => {
