@@ -17,6 +17,7 @@ TARGET=""; IMAGE=""; SKIP_MIGRATE=0; DRY=0; SCHEMA_CHECK=0; FORCE=0; CONFIRM="";
 WORK="${HOME:-/tmp}/srv/backups/stoktok-cutover"
 STEP="arguments"
 SECRETS=""
+DUMP=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -78,6 +79,9 @@ FREEZE_PROJECT="${MOVE_FREEZE_PROJECT:-stoktok}"
 [[ "$SRC_PORT" =~ ^[0-9]+$ ]] || usage_err "MOVE_SRC_PORT must be numeric"
 [[ "$DST_PORT" =~ ^[0-9]+$ ]] || usage_err "MOVE_DST_PORT must be numeric"
 [[ "$DST_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || usage_err "MOVE_DST_HOST has unexpected characters"
+src_hp="$(printf '%s:%s' "$SRC_HOST" "$SRC_PORT" | tr 'A-Z' 'a-z')"
+dst_hp="$(printf '%s:%s' "$DST_HOST" "$DST_PORT" | tr 'A-Z' 'a-z')"
+[ "$src_hp" != "$dst_hp" ] || usage_err "the target host:port equals the source host:port; refusing"
 [[ "$DST_USER" =~ ^stoktok[a-z0-9_]*$ ]] || usage_err "MOVE_DST_USER must match ^stoktok[a-z0-9_]*\$"
 [[ "$SRC_NET" =~ ^[A-Za-z0-9_.-]+$ ]] || usage_err "MOVE_SRC_NETWORK has unexpected characters"
 [[ "$DST_NET" =~ ^[A-Za-z0-9_.-]+$ ]] || usage_err "MOVE_DST_NETWORK has unexpected characters"
@@ -122,6 +126,7 @@ cleanup() {
   local rc=$?
   trap - EXIT
   if [ -n "$SECRETS" ]; then rm -rf "$SECRETS"; fi
+  if [ "$rc" -ne 0 ] && [ "$DRY" = 1 ] && [ "$KEEP_DUMP" = 0 ] && [ -n "$DUMP" ]; then rm -f "$WORK/$DUMP"; fi
   if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
     echo "db-migrate-from-supabase: FAILED at step: $STEP" >&2
     rc=1
@@ -130,6 +135,7 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
+trap 'exit 129' HUP
 
 # ---- 2. Freeze checks ----
 if [ "$VERIFY_ONLY" = 0 ]; then
@@ -172,6 +178,11 @@ src_ro() {
     | pg_run "$SRC_NET" psql $PSQL_FLAGS -h "$SRC_HOST" -p "$SRC_PORT" -U "$SRC_USER" -d "$SRC_DB"
 }
 # Target legs.
+dst_ro() {
+  PG_SSL_CUR="prefer"
+  { printf '%s\n' 'set default_transaction_read_only = on; begin transaction isolation level repeatable read read only;'; cat; printf '%s\n' ';' 'rollback;'; } \
+    | pg_run "$DST_NET" psql $PSQL_FLAGS -h "$DST_HOST" -p "$DST_PORT" -U "$DST_USER" -d "$TARGET"
+}
 dst_psql() { PG_SSL_CUR="prefer"; pg_run "$DST_NET" psql $PSQL_FLAGS -h "$DST_HOST" -p "$DST_PORT" -U "$DST_USER" -d "$TARGET"; }
 dst_dump() { PG_SSL_CUR="prefer"; pg_run "$DST_NET" pg_dump -h "$DST_HOST" -p "$DST_PORT" -U "$DST_USER" -d "$TARGET" "$@" < /dev/null; }
 q_src() { printf '%s\n' "$1" | src_ro; }
@@ -219,7 +230,7 @@ if [ "$ACTUAL" != "$EXPECTED" ]; then
 fi
 echo "schema_migrations matches db/migrations"
 
-TABLES="$(q_dst "select tablename from pg_tables where schemaname = 'public' and tablename <> 'schema_migrations' order by tablename")"
+TABLES="$(q_dst "select tablename from pg_tables where schemaname = 'public' and tablename <> 'schema_migrations' order by tablename collate \"C\"")"
 [ -n "$TABLES" ] || fail "target has no tables"
 for t in $TABLES; do [[ "$t" =~ ^[a-z_][a-z0-9_]*$ ]] || fail "unexpected table name '$t'"; done
 DATA_TABLES="$(printf '%s\n' "$TABLES" | grep -vx 'ai_keys')"
@@ -231,8 +242,13 @@ verify_phase() {
     || '|' || coalesce((select string_agg(quote_ident(a.attname), ',' order by array_position(i.indkey::int2[], a.attnum)) from pg_index i join pg_attribute a on a.attrelid = i.indrelid and a.attnum = any (i.indkey::int2[]) where i.indrelid = c.oid and i.indisprimary), '')
     from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and c.relname not in ('schema_migrations', 'ai_keys') order by c.relname")"
   [ -n "$cols" ] || fail "source has no tables to verify"
-  while IFS='|' read -r tname tcols tpk; do
-    [ -n "$tname" ] || continue
+  local line_re='^[a-z_][a-z0-9_]*[|][^|]+[|][^|]*$'
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    [[ "$line" =~ $line_re ]] || fail "unexpected source column list (a name with | or a newline?)"
+    IFS='|' read -r tname tcols tpk <<EOT
+$line
+EOT
     [[ "$tname" =~ ^[a-z_][a-z0-9_]*$ ]] || fail "unexpected source table name '$tname'"
     [ -n "$tpk" ] || fail "source table $tname has no primary key"
     vsql="$vsql select 't|$tname|' || count(*) || '|' || md5(coalesce(string_agg(md5(ROW($tcols)::text), '' order by (ROW($tpk)::text) collate \"C\"), '')) from public.$tname;"$'\n'
@@ -241,7 +257,7 @@ $cols
 EOF
   local pre="set TimeZone='UTC'; set DateStyle='ISO, YMD'; set IntervalStyle='postgres'; set extra_float_digits=1; set bytea_output='hex'; set statement_timeout=0;"
   printf '%s\n%s' "$pre" "$vsql" | src_ro > "$WORK/verify-source.txt"
-  printf '%s\n%s' "$pre" "$vsql" | dst_psql > "$WORK/verify-target.txt"
+  printf '%s\n%s' "$pre" "$vsql" | dst_ro > "$WORK/verify-target.txt"
   if ! diff -u "$WORK/verify-source.txt" "$WORK/verify-target.txt" > "$WORK/verify.diff"; then
     echo "verify: MISMATCH in table(s): $(grep '^[-+]t|' "$WORK/verify.diff" | sed -E 's/^[-+]t\|([^|]*)\|.*/\1/' | sort -u | tr '\n' ' ')" >&2
     fail "verification failed; writers may be running; re-run with --verify-only"
@@ -306,8 +322,9 @@ fi
 step "dump (read-only pg_dump)"
 DUMP="stoktok-supabase-$(date -u +%Y%m%d-%H%M%S).dump"
 src_dump -Fc --data-only --schema=public --no-owner --no-privileges --exclude-table=public.ai_keys --exclude-table=public.schema_migrations -f "/work/$DUMP"
+chmod 600 "$WORK/$DUMP"
 step "dump table of contents"
-toc="$(pg_run none pg_restore -l "/work/$DUMP" < /dev/null | awk '$4 == "TABLE" && $5 == "DATA" && $6 == "public" {print $7}' | sort)"
+toc="$(pg_run none pg_restore -l "/work/$DUMP" < /dev/null | awk '$4 == "TABLE" && $5 == "DATA" && $6 == "public" {print $7}' | LC_ALL=C sort)"
 if ! diff <(printf '%s\n' "$DATA_TABLES") <(printf '%s\n' "$toc") >&2; then
   fail "dump table list differs from the target tables (< target, > dump)"
 fi
@@ -335,6 +352,7 @@ while IFS='|' read -r rel col seq; do
   NSEQ=$((NSEQ + 1))
   mx="$(q_dst "select coalesce(max($col)::text, '') from public.$rel")"
   [ -n "$mx" ] || continue
+  [[ "$mx" =~ ^-?[0-9]+$ ]] || fail "unexpected max($col) of $rel: '$mx'"
   last="$(q_dst "select coalesce(last_value::text, '') from pg_sequences where schemaname || '.' || sequencename = '$seq'")"
   if [ -z "$last" ] || [ "$last" -lt "$mx" ]; then
     q_dst "select setval('$seq', $mx, true)" > /dev/null
@@ -344,6 +362,7 @@ while IFS='|' read -r rel col seq; do
 done <<EOF
 $idents
 EOF
+[ "$NSEQ" = 6 ] || fail "expected 6 identity sequences on the target, found $NSEQ"
 echo "sequences: $NSEQ identity sequences, $BUMPED bumped"
 
 # ---- 11. Verify ----

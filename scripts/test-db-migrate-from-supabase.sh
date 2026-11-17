@@ -94,7 +94,8 @@ export TMPDIR="$TMP/sd"
 
 export PG_CLIENT_IMAGE=postgres:17 MOVE_SRC_NETWORK=host MOVE_DST_NETWORK=host
 export MOVE_SRC_HOST="$HOST" MOVE_SRC_PORT="$PORT" MOVE_SRC_SSLMODE=disable MOVE_SRC_USER="$SRC_ROLE" MOVE_SRC_DB="$SRC_DB" MOVE_SRC_PGPASSWORD="$SRC_PW"
-export MOVE_DST_HOST="$HOST" MOVE_DST_PORT="$PORT" MOVE_DST_USER="$DST_ROLE" MOVE_DST_PWFILE="$TMP/dstpw"
+ALT_HOST=127.0.0.1; [ "$HOST" != 127.0.0.1 ] || ALT_HOST=localhost # the guard refuses target host:port == source host:port
+export MOVE_DST_HOST="$ALT_HOST" MOVE_DST_PORT="$PORT" MOVE_DST_USER="$DST_ROLE" MOVE_DST_PWFILE="$TMP/dstpw"
 export MOVE_JOB_LOCK="$LOCK" MOVE_FREEZE_PROJECT="$FREEZE_PROJECT"
 
 # ---- helpers ----
@@ -148,6 +149,8 @@ t_usage_guards() {
   run_move --target "$DST_DB" --skip-migrate --force; assert "--force without --confirm (exit 2)" rc_is 2
   XENV="MOVE_SRC_SSLMODE=disable MOVE_SRC_HOST=db.example.invalid"
   run_move --target "$DST_DB" --skip-migrate; assert "sslmode disable with a remote source (exit 2)" rc_is 2
+  XENV="MOVE_DST_HOST=$HOST"
+  run_move --target "$DST_DB" --skip-migrate; assert "target host:port equal to the source (exit 2)" rc_is 2
   printf '%s\n' 'shortpwXYZ' > "$TMP/badpwfile"
   XENV="MOVE_DST_PWFILE=$TMP/badpwfile"
   run_move --target "$DST_DB" --skip-migrate
@@ -245,6 +248,7 @@ t_force() {
   assert "target equals the source again" same "$(oracle "$SRC_DB" "$SRC_ROLE" "$SRC_PW")" "$(dst_oracle)"
   assert "schema_migrations unchanged" same "$sm" "$(su_db "$DST_DB" -At -c "select * from public.schema_migrations order by version")"
   assert "the dump is kept in a real run" bash -c "! [ -z \"\$(find '$WORK' -maxdepth 1 -name '*.dump')\" ]"
+  assert "the dump has mode 600" bash -c "[ -z \"\$(find '$WORK' -maxdepth 1 -name '*.dump' ! -perm 600)\" ]"
   rm -f "$WORK"/*.dump
 }
 
@@ -269,6 +273,7 @@ t_schema_drift() {
   run_move --target "$DST2_DB" --skip-migrate --dry-run
   assert "dry run with drift fails (exit 1)" rc_is 1
   assert "the diff names watchlist" out_has watchlist
+  assert "a failed dry run leaves no dump" no_dump
   assert "target still empty" same 0 "$(dst_rows "$DST2_DB")"
   assert_no_leak
   XENV="MOVE_SRC_DB=$DRIFT_DB"
@@ -279,7 +284,17 @@ t_schema_drift() {
   rm -f "$WORK"/*.dump
 }
 
-ALL="t_usage_guards t_static t_schema_migrations_mismatch t_dry_run_happy t_verify_only t_refuse_non_empty t_force t_freeze t_schema_drift"
+t_column_pipe() {
+  echo "t_column_pipe"
+  su_db "$DRIFT_DB" -c "set default_transaction_read_only = off" -c 'alter table public.watchlist rename column note to "n|ote"' >/dev/null
+  XENV="MOVE_SRC_DB=$DRIFT_DB"
+  run_move --target "$DST_DB" --skip-migrate --verify-only
+  assert "a source column name with | is refused (exit 1)" rc_is 1
+  assert "says so" out_has "unexpected source column list"
+  assert_no_leak
+}
+
+ALL="t_usage_guards t_static t_schema_migrations_mismatch t_dry_run_happy t_verify_only t_refuse_non_empty t_force t_freeze t_schema_drift t_column_pipe"
 for t in ${*:-$ALL}; do "$t"; done
 
 if [ "$FAILS" -ne 0 ]; then echo "test:move: $FAILS assertion(s) FAILED" >&2; exit 1; fi
