@@ -22,3 +22,4 @@ CLAUDE.md Stack, R3; ADR 0010; consults in work/tickets/STK-084/ (data-engineer 
 
 ## Notes / answers from Ming
 - 2026-11-17 (orchestrator): created from the STK-091 planner's split proposal.
+- 2026-11-17 (Ming, via STK-091): include in the runbook/scope: rotate the Supabase DB password after a successful cutover; pin `PG_CLIENT_IMAGE` by digest (STK-091 security F4); optional TLS `verify-full` with a mounted Supabase root cert (F7). Also from STK-091 review: Ming verifies the dry run against live Supabase (pooler reachability from OrbStack, schema-check result, bind-mount permissions), the `--worker-image` leg with a real release image, and one run under macOS `/bin/bash` 3.2.
