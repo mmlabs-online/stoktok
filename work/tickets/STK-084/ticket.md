@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P1 |
 | Areas | db, data, architecture, security |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-11-11 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/70 |
 
 ## Goal
 Split from STK-080 (see work/tickets/STK-080/plan.md "Split proposal"; consults in work/tickets/STK-080/), re-scoped on 2026-11-11 to the deployment repo's shared-Postgres standard. Scope:
@@ -41,3 +41,6 @@ CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010 (from STK-080). Reference repos: `
 - 2026-11-11 (Ming): the GitHub environment secret `STOKTOK_AI_KEYS_MASTER_KEY` is created in the `stoktok` environment (copy in the password manager).
 - 2026-11-11 (orchestrator): from STK-083 plan follow-ups: optional live-Supabase `pg_dump --schema-only` comparison in the cutover runbook (F1); `idle_in_transaction_session_timeout` set in `pg/client.ts` session init or the deployment repo DB config, not a migration (F2); update the CLAUDE.md Stack DB row and "Migrations in `supabase/`" (F3).
 - 2026-11-17 (orchestrator): from STK-089 security review attempt 1 — decide whether an exit-0 `migrate` when the database is AHEAD of the image (warning only) should block replacing the app during deploy.
+- 2026-11-17 (Ming, after the consults): (1) the orchestrator may create branches and open the deployment-repo PRs itself (B: `add-app-db.sh stoktok` registration; C: the expand step that adds `STOKTOK_DATABASE_URL`, the master key and the `db` network while keeping `SUPABASE_*`); Ming reviews and merges them. (2) Rollback window 14 days: `SUPABASE_*` stay in the env file during the window; if a rollback is needed, data written after the cutover is re-entered by hand; prefer fixing forward. (3) After the window, keep the Supabase `public` tables as a read-only archive; delete only the old Vault AI keys (`stoktok_ai_key_%`).
+- 2026-11-17 (Ming, after attempt 1 PASS): fix security-review 🟡1–3 before the PR (check the password value actually read; tighten the `config` guard; document that `/readyz` gets no Cloudflare Access bypass and memoise the ping for a few seconds). Do not add `::add-mask::` (🟡4) — conflicts with the no-echo convention.
+- 2026-11-17 (Ming, after attempt 2 PASS): open the PR; carry security 🟡5 to STK-093.

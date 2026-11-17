@@ -4,7 +4,7 @@ import { createAuthenClient, requestCookieAdapter } from './server/auth/authen-c
 import { loadAuthConfig } from './server/auth/config';
 import { loginPath } from './server/auth/login-path';
 
-export const PUBLIC_PATHS = ['/login', '/healthz'];
+export const PUBLIC_PATHS = ['/login', '/healthz', '/readyz'];
 
 export function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));

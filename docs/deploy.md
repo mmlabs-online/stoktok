@@ -3,7 +3,7 @@
 Decisions: `docs/adr/0003-deploy-and-scheduling.md`. Drafts for the deployment repo: `deploy/deployment-repo/` (see its README). Only Ming merges.
 
 ## Flow
-A push to a branch `release/vX.Y.Z` (its commit must already be on main) runs `release.yml`: it releases exactly `vX.Y.Z` (new, higher than every existing tag), creates and pushes that git tag, builds and pushes `stoktok-web` and `stoktok-worker`, then it opens PR `release/stoktok-vX.Y.Z` on `mmlabs-online/deployment` (only `apps/stoktok/release.env`, both images pinned by digest). Merging it runs `deploy-stoktok` on `macbook-runner`: pull, `up -d --wait` on `/healthz`, then publish compose, `release.env` and the job scripts to `/Users/mingming/stoktok/current`. A launchd job reads that directory and runs the worker jobs.
+A push to a branch `release/vX.Y.Z` (its commit must already be on main) runs `release.yml`: it releases exactly `vX.Y.Z` (new, higher than every existing tag), creates and pushes that git tag, builds and pushes `stoktok-web` and `stoktok-worker`, then it opens PR `release/stoktok-vX.Y.Z` on `mmlabs-online/deployment` (only `apps/stoktok/release.env`, both images pinned by digest). Merging it runs `deploy-stoktok` on `macbook-runner`: pull, then (when the release's compose has a `migrate` service) a pre-migration dump and `migrate`, then `up -d --wait` on `/healthz`, then publish compose, `release.env` and the job scripts to `/Users/mingming/stoktok/current`. A launchd job reads that directory and runs the worker jobs.
 
 ## Placeholders and gates
 | Placeholder | Value | Status |
@@ -31,6 +31,7 @@ Create it **before** merging the setup PR. Otherwise GitHub creates the environm
 1. `mmlabs-online/deployment`, Settings, Environments, New environment `stoktok`.
 2. Deployment branches and tags: selected branches, `main` only. This is the control GitHub enforces; the `if: github.ref == 'refs/heads/main'` guard in the workflow is not one on its own, because a manual run uses the workflow file of the chosen branch.
 3. Environment secrets, prefixed `STOKTOK_` because the deployment repo is shared by every mmlabs app: `STOKTOK_SUPABASE_URL` (`https://<ref>.supabase.co`, no trailing slash or path) and `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` (the **new** key, not the one pasted into chat on 2026-11-01). The workflow writes them into the env file as `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, the names the app reads.
+   `STOKTOK_AI_KEYS_MASTER_KEY` (STK-084, required) is the AI keyring master key: 32 random bytes in base64 (`head -c 32 /dev/urandom | base64`, 44 characters ending in `=`). Keep a copy in the password manager; never put it in the deployment repo. It is written under the same name. The database URL is not a secret of this environment: see Shared Postgres below.
    Auth (STK-004, STK-048) adds two more. Authen is Supabase Auth of the stoktok project itself: `STOKTOK_AUTHEN_SUPABASE_URL` = the stoktok project URL (same value as `STOKTOK_SUPABASE_URL`, `https://<ref>.supabase.co`, no path), `STOKTOK_AUTHEN_SUPABASE_ANON_KEY` = the stoktok project's anon or `sb_publishable_` key (never the service role key). They are written as `AUTHEN_SUPABASE_URL` and `AUTHEN_SUPABASE_ANON_KEY`.
    Two optional AI secrets (STK-072): `STOKTOK_ANTHROPIC_API_KEY` and `STOKTOK_GOOGLE_AI_API_KEY`, written as `ANTHROPIC_API_KEY` and `GOOGLE_AI_API_KEY`. Unset means that provider is off.
 4. No repo-level secrets with the same names (environment secrets would quietly override them). No required reviewers: the PR merge is already the gate.
@@ -89,6 +90,14 @@ If no auth image has been released yet, skip the allowlist secret entirely and s
 4. Check: `ls -l ~/.config/stoktok/stoktok.env` still shows `-rw------- mingming`. Do not print the file.
 5. After any later key change or rotation, run `workflow_dispatch` on `main` again.
 
+## Shared Postgres (STK-084)
+App data moves from Supabase to the shared mmlabs Postgres 17 (`postgres:5432` on the Docker network `db`, database and role `stoktok`). **Production stays on the Supabase-backed release (v0.2.1) until the cutover; cut no release before the cutover runbook exists (STK-091, STK-094).** Order:
+1. B (STK-092): in the deployment repo run `bash postgres/scripts/add-app-db.sh stoktok`, merge, wait for `deploy-postgres` green.
+2. C (STK-093): copy `apps/stoktok/compose.yml` and `.github/workflows/deploy-stoktok.yml` from the drafts, set the `stoktok` environment secret `STOKTOK_AI_KEYS_MASTER_KEY`, merge. v0.2.1 is recreated with the expanded env file (it keeps every `SUPABASE_*` line for the 14-day rollback window) and must stay healthy; run `run-job.sh eod-prices --dry-run`.
+3. Cutover (STK-094): the data move and the first Postgres release; the runbook arrives with STK-091.
+
+The expanded compose puts web on `tunnel` and `db`, and the worker on `default` and `db` (`db` is internal, so the worker keeps `default` for market-data egress). The compose health check stays on `/healthz` until the cutover release switches it to `/readyz`, which pings the database. `/healthz` does not test the DB. `/readyz` is public like `/healthz` and memoises its DB ping for 3 s; like `/healthz` it must never get a Cloudflare Access bypass (a bypass would let anyone reach it; the memo only caps the DB load).
+
 ## Rotate the Supabase key
 1. Create the new key in Supabase. For an `sb_secret_...` key, create it next to the old one. For the legacy JWT `service_role` key, rotating means rotating the JWT secret: the old key dies at once and the anon key and all sessions are invalidated too. That includes web's Authen anon key (`STOKTOK_AUTHEN_SUPABASE_ANON_KEY`) and Ming's login session, so web cannot sign anyone in until the anon key is replaced. Then do steps 2 and 3 right away. Verify which applies in the Supabase dashboard.
 2. Update the `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` secret of the `stoktok` environment. If the legacy JWT secret was rotated, also update `STOKTOK_AUTHEN_SUPABASE_ANON_KEY` with the new anon key.
@@ -99,7 +108,7 @@ If no auth image has been released yet, skip the allowlist secret entirely and s
 7. If the legacy JWT secret was rotated, sign in again at `https://<APP_HOSTNAME>/login` and confirm the dashboard shows (the old session is dead).
 
 ## Cut a release (first one is v0.1.0)
-1. Apply pending migrations by hand. Every migration must work with the previous image.
+1. Migrations run in the deploy (a backup, then `migrate`, before the app is replaced). Every migration must work with the previous image (expand, then contract).
 2. Release main as an exact version: `git fetch origin && git push origin origin/main:refs/heads/release/v0.2.0` (one branch per version, never commit to it directly). The branch name is the version: `release/vX.Y.Z` releases exactly `vX.Y.Z`. It must not exist yet and must be higher than every existing release tag. The workflow pushes the tag; do not tag by hand. Other branch names are rejected.
 3. Watch the `release` run. It fails before any PR if the commit is not on main, the commit is already released, the version exists or is not higher than the latest, a secret is missing, or an image check fails. A failed run still consumes its version tag (if it got past the guards); release again with the next version branch.
 4. Review the release PR: only `apps/stoktok/release.env`, both digests.
@@ -117,7 +126,7 @@ If no auth image has been released yet, skip the allowlist secret entirely and s
 ## Roll back
 - Automatic: if the new web image is not healthy within 120 s, `deploy-stoktok` restores the previous `apps/stoktok/`, redeploys it, republishes the scheduler directory and pushes the revert to deployment `main`. The run stays red.
 - Manual: revert the release PR's merge commit on deployment `main`. That re-triggers `deploy-stoktok`. `workflow_dispatch` from `main` only (other branches are skipped) redeploys what main pins and rewrites the env file.
-- **Migrations are not undone.** Roll back across a migration only when the old code works with the new schema.
+- **Migrations are not undone, and a restore never migrates.** Roll back across a migration only when the old code works with the new schema. After a revert, the deploy run shows the warning "Database is ahead of this image: nothing was migrated" and the PR comment gets the same suffix; that is expected and does not block the deploy.
 
 ## Logs
 ```
@@ -127,7 +136,7 @@ tail -f /Users/mingming/stoktok/logs/eod-prices.log     # also financials.log, s
 `run --rm` discards the container's logs, which is why `run-job.sh` appends to host files.
 
 ## Env list
-Names only. Values live in the `stoktok` environment secrets of the deployment repo, and `deploy-stoktok` writes the host env file; they are never in this repo (R3). Reserved variables are not passed to containers until a ticket reads them. Optional variables are always written to the env file; an empty value means the feature is off. Deploy-only variables: `STOKTOK_WEB_IMAGE`, `STOKTOK_WORKER_IMAGE` and `STOKTOK_VERSION`, written by `release.yml` into `release.env` (not secrets).
+Names only. Values live in the `stoktok` environment secrets of the deployment repo, and `deploy-stoktok` writes the host env file; they are never in this repo (R3). Reserved variables are not passed to containers until a ticket reads them. Optional variables are always written to the env file; an empty value means the feature is off. `derived` variables are written by `deploy-stoktok` from a committed file in the deployment repo (`STOKTOK_DATABASE_URL` from `postgres/secrets/apps/stoktok.password`), not from a secret of the environment. Deploy-only variables: `STOKTOK_WEB_IMAGE`, `STOKTOK_WORKER_IMAGE` and `STOKTOK_VERSION`, written by `release.yml` into `release.env` (not secrets).
 
 <!-- env-list:start -->
 | Name | Service | Status | Secret |
@@ -135,8 +144,8 @@ Names only. Values live in the `stoktok` environment secrets of the deployment r
 | `SUPABASE_URL` | web, worker | required now | n |
 | `SUPABASE_SERVICE_ROLE_KEY` | web, worker | required now | y |
 | `SUPABASE_ANON_KEY` | none | reserved | y |
-| `STOKTOK_DATABASE_URL` | web, worker | reserved | y |
-| `STOKTOK_AI_KEYS_MASTER_KEY` | web, worker | reserved | y |
+| `STOKTOK_DATABASE_URL` | web, worker | derived | y |
+| `STOKTOK_AI_KEYS_MASTER_KEY` | web, worker | required now | y |
 | `AUTHEN_SUPABASE_URL` | web | required now | n |
 | `AUTHEN_SUPABASE_ANON_KEY` | web | required now | y |
 | `ANTHROPIC_API_KEY` | web, worker | optional | y |

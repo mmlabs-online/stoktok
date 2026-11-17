@@ -28,6 +28,9 @@ export interface MigrationRef {
 interface MigrationFile extends MigrationRef {
   sql: string;
 }
+/** Pinned by scripts/check-deploy-env.sh: the deploy workflow greps for this literal to annotate the run. */
+export const MIGRATE_AHEAD_PREFIX = 'warning: database is ahead of this image';
+
 export interface RunResult {
   applied: string[];
   ahead: string[];
@@ -171,7 +174,7 @@ export async function runMigrations({ connectionString, dir, log = () => {}, loc
     const { pending, ahead } = planMigrations(files, rows);
 
     if (ahead.length) {
-      log(`warning: database is ahead of this image (${ahead.join(', ')}); nothing applied`);
+      log(`${MIGRATE_AHEAD_PREFIX} (${ahead.join(', ')}); nothing applied`);
       return { applied: [], ahead };
     }
     if (!pending.length) {

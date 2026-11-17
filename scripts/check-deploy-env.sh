@@ -20,7 +20,7 @@ if ! diff <(echo "$example_keys") <(echo "$doc_keys"); then
   fail=1
 fi
 
-allowed="$(printf '%s\n' "$example_keys" $DEPLOY_ONLY | sort -u)"
+allowed="$(printf '%s\n' $DEPLOY_ONLY | sort -u)"
 used="$(grep -oE '\$\{[A-Z][A-Z0-9_]*' "$COMPOSE" | sed 's/^\${//' | sort -u)"
 extra="$(comm -13 <(echo "$allowed") <(echo "$used"))"
 if [ -n "$extra" ]; then
@@ -49,6 +49,26 @@ if ! grep -q 'name: web' "$COMPOSE" || ! grep -q 'external: true' "$COMPOSE"; th
   echo "FAIL: compose must use the external network 'web'" >&2
   fail=1
 fi
+# STK-084: the shared Postgres network `db` is external; web is on tunnel + db, the worker on default + db (db is internal: no egress).
+if ! grep -qE '^  db:' "$COMPOSE" || ! grep -qE '^    name: db\s*$' "$COMPOSE"; then
+  echo "FAIL: compose must declare the external network 'db'" >&2
+  fail=1
+fi
+web_block="$(sed -n '/^  stoktok-web:/,/^  stoktok-worker:/p' "$COMPOSE")"
+worker_block="$(sed -n '/^  stoktok-worker:/,/^networks:/p' "$COMPOSE")"
+nets_re() { echo "^[[:space:]]+networks: \\[(.*, *)?$1(, *.*)?\\][[:space:]]*\$"; }
+for n in tunnel db; do
+  if ! echo "$web_block" | grep -qE "$(nets_re $n)"; then
+    echo "FAIL: stoktok-web networks must contain $n" >&2
+    fail=1
+  fi
+done
+for n in default db; do
+  if ! echo "$worker_block" | grep -qE "$(nets_re $n)"; then
+    echo "FAIL: stoktok-worker networks must contain $n" >&2
+    fail=1
+  fi
+done
 if grep -E '^\s*(ports:|container_name)|:latest' "$COMPOSE"; then
   echo "FAIL: compose has ports, container_name or :latest" >&2
   fail=1
@@ -86,8 +106,8 @@ if grep -nE 'set -[A-Za-z]*x|set -o xtrace' "$WF"; then
   echo "FAIL: set -x in workflow" >&2
   fail=1
 fi
-if grep -F '" config' "$WF" | grep -vF -- '--quiet'; then
-  echo "FAIL: compose config without --quiet" >&2
+if grep -E '(compose\[@\]\}"|docker compose).* config([[:space:]]|$)' "$WF" | grep -vE -- '--(quiet|services)'; then
+  echo "FAIL: compose config without --quiet or --services" >&2
   fail=1
 fi
 if grep -nF '<<' "$WF"; then
@@ -100,8 +120,7 @@ if [ -z "$wf_env_file" ] || [ "$compose_env_files" != "$wf_env_file" ]; then
   echo "FAIL: ENV_FILE in workflow differs from env_file in compose" >&2
   fail=1
 fi
-if ! grep -qF "printf 'SUPABASE_URL=" "$WF" \
-   || grep -rqF 'SUPABASE_SERVICE_ROLE_KEY=' "$ROOT/deploy/deployment-repo/apps/stoktok/"; then
+if grep -rqF -e 'SUPABASE_SERVICE_ROLE_KEY=' -e 'STOKTOK_DATABASE_URL=' -e 'STOKTOK_AI_KEYS_MASTER_KEY=' "$ROOT/deploy/deployment-repo/apps/stoktok/"; then
   echo "FAIL: env-file writer must be in the workflow, not under apps/stoktok/" >&2
   fail=1
 fi
@@ -111,28 +130,37 @@ fi
 # keys have none and an empty-allowed charset check.
 env_table="$(sed -n '/<!-- env-list:start -->/,/<!-- env-list:end -->/p' "$DOC")"
 bad_status="$(echo "$env_table" | grep -E '^\| `[A-Z][A-Z0-9_]*`' \
-  | awk -F'|' '{ s = $4; gsub(/^ +| +$/, "", s); if (s != "required now" && s != "optional" && s != "reserved") print $2 "-> " s }' || true)"
+  | awk -F'|' '{ s = $4; gsub(/^ +| +$/, "", s); if (s != "required now" && s != "optional" && s != "reserved" && s != "derived") print $2 "-> " s }' || true)"
 if [ -n "$bad_status" ]; then
-  echo "FAIL: docs/deploy.md env row has unknown status (allowed: required now, optional, reserved): $bad_status" >&2
+  echo "FAIL: docs/deploy.md env row has unknown status (allowed: required now, optional, reserved, derived): $bad_status" >&2
   fail=1
 fi
 required="$(echo "$env_table" | grep -E '^\| `[A-Z][A-Z0-9_]*` \|.*\| required now \|' | sed -E 's/^\| `([A-Z0-9_]+)`.*/\1/' | sort -u || true)"
 optional="$(echo "$env_table" | grep -E '^\| `[A-Z][A-Z0-9_]*` \|.*\| optional \|' | sed -E 's/^\| `([A-Z0-9_]+)`.*/\1/' | sort -u || true)"
+derived="$(echo "$env_table" | grep -E '^\| `[A-Z][A-Z0-9_]*` \|.*\| derived \|' | sed -E 's/^\| `([A-Z0-9_]+)`.*/\1/' | sort -u || true)"
+if [ "$derived" != "STOKTOK_DATABASE_URL" ]; then
+  echo "FAIL: the only derived key must be STOKTOK_DATABASE_URL, found: $(echo $derived)" >&2
+  fail=1
+fi
+# The secret behind an env name: names that already start with STOKTOK_ map to themselves.
+secret_of() { case "$1" in STOKTOK_*) echo "$1" ;; *) echo "STOKTOK_$1" ;; esac; }
 if [ -z "$optional" ]; then
   echo "FAIL: no optional keys in the doc table of docs/deploy.md (expected the AI keys)" >&2
   fail=1
 fi
-printf_line="$(grep -F "printf 'SUPABASE_URL=" "$WF" || true)"
+# secrets step without comment lines (line order kept).
+secrets_step="$(sed -n '/^      - name: secrets\s*$/,/^      - name: pull\s*$/p' "$WF" | grep -vE '^\s*#' || true)"
 # Exactly one printf, and it is the plain `printf '<format>' "$VAR"... > "$tmp"` line (no second command on it, no other target).
 printf_shape="^[[:space:]]+printf '[^']*'( \"\\\$[A-Z][A-Z0-9_]*\")+ > \"\\\$tmp\"[[:space:]]*\$"
-if [ "$(grep -cF "printf 'SUPABASE_URL=" "$WF")" -ne 1 ] || ! echo "$printf_line" | grep -qE "$printf_shape"; then
-  echo "FAIL: workflow needs exactly one env-file printf of the form: printf '...' \"\$VAR\"... > \"\$tmp\"" >&2
+printf_line="$(echo "$secrets_step" | grep -E "$printf_shape" || true)"
+if [ "$(echo "$printf_line" | grep -c .)" -ne 1 ] || [ "$(echo "$secrets_step" | grep -cE '^[[:space:]]*printf ')" -ne 1 ]; then
+  echo "FAIL: secrets step needs exactly one env-file printf of the form: printf '...' \"\$VAR\"... > \"\$tmp\"" >&2
   fail=1
 fi
 written_keys="$(echo "$printf_line" | grep -oE '[A-Z][A-Z0-9_]*=%s' | sed 's/=%s//' | sort -u || true)"
-wanted_keys="$(printf '%s\n' $required $optional | grep . | sort -u || true)"
+wanted_keys="$(printf '%s\n' $required $optional $derived | grep . | sort -u || true)"
 if ! diff <(echo "$wanted_keys") <(echo "$written_keys"); then
-  echo "FAIL: printf keys in the workflow differ from required + optional keys in docs/deploy.md (< doc, > workflow)" >&2
+  echo "FAIL: printf keys in the workflow differ from required + optional + derived keys in docs/deploy.md (< doc, > workflow)" >&2
   fail=1
 fi
 format_order="$(echo "$printf_line" | grep -oE '[A-Z][A-Z0-9_]*=%s' | sed 's/=%s//' || true)"
@@ -141,16 +169,26 @@ if ! diff <(echo "$format_order") <(echo "$argument_order"); then
   echo "FAIL: printf argument order differs from format key order (< format, > arguments)" >&2
   fail=1
 fi
-# secrets step without comment lines (line order kept).
-secrets_step="$(sed -n '/^      - name: secrets\s*$/,/^      - name: deploy\s*$/p' "$WF" | grep -vE '^\s*#' || true)"
 for k in $required $optional; do
-  if ! grep -qE "^\s+$k: \\$\{\{ secrets\.STOKTOK_$k \}\}\s*$" "$WF"; then
-    echo "FAIL: workflow lacks '$k: \${{ secrets.STOKTOK_$k }}'" >&2
+  sk="$(secret_of "$k")"
+  if ! grep -qE "^\s+$k: \\$\{\{ secrets\.$sk \}\}\s*$" "$WF"; then
+    echo "FAIL: workflow lacks '$k: \${{ secrets.$sk }}'" >&2
+    fail=1
+  fi
+done
+if grep -qF 'secrets.STOKTOK_STOKTOK_' "$WF"; then
+  echo "FAIL: doubled STOKTOK_ prefix in a secret name" >&2
+  fail=1
+fi
+for k in $derived; do
+  if grep -qE "^\s+$k: .*secrets\." "$WF"; then
+    echo "FAIL: derived key $k must not come from a secret" >&2
     fail=1
   fi
 done
 for k in $required; do
-  if ! grep -qF "[ -n \"\$$k\" ] || missing=\"\$missing STOKTOK_$k\"" "$WF"; then
+  sk="$(secret_of "$k")"
+  if ! grep -qF "[ -n \"\$$k\" ] || missing=\"\$missing $sk\"" "$WF"; then
     echo "FAIL: required key $k lacks its missing line in the workflow" >&2
     fail=1
   fi
@@ -166,7 +204,7 @@ for k in $optional; do
     l == "if ! [[ \"$" k "\" =~ ^[A-Za-z0-9._-]*$ ]]; then" && !g { g = NR; next }
     g && !x && NR <= g + 4 && /^[[:space:]]*exit 1[[:space:]]*$/ { x = 1 }
     /mktemp/ && !m { m = NR }
-    /printf .SUPABASE_URL=/ && !p { p = NR }
+    /^[[:space:]]*printf .*> "\$tmp"/ && !p { p = NR }
     END { print (g && x && m && p && g < m && g < p) ? "yes" : "no" }')"
   if [ "$guard_ok" != yes ]; then
     echo "FAIL: optional key $k lacks the guard 'if ! [[ \"\$$k\" =~ ^[A-Za-z0-9._-]*\$ ]]; then' + exit 1 before mktemp in the secrets step" >&2
@@ -174,12 +212,57 @@ for k in $optional; do
   fi
 done
 # The secrets step writes the env file only with the one printf; no other redirect to $tmp / $ENV_FILE, no tee.
-other_writers="$(echo "$secrets_step" | grep -vF "printf 'SUPABASE_URL=" \
+other_writers="$(echo "$secrets_step" | grep -vE "$printf_shape" \
   | grep -E '>(>|\|)?[[:space:]]*"?\$\{?(tmp|ENV_FILE)|(^|[^A-Za-z_])tee([^A-Za-z_]|$)' || true)"
 if [ -n "$other_writers" ]; then
   echo "FAIL: secrets step writes to the env file outside the single printf: $other_writers" >&2
   fail=1
 fi
+
+# STK-084: the required master key has a format guard (before mktemp and the printf); the database URL is derived from the
+# committed password file with builtins only, inside the secrets step before mktemp.
+guard_ok="$(echo "$secrets_step" | awk '
+  { l = $0; sub(/^[[:space:]]+/, "", l); sub(/[[:space:]]+$/, "", l) }
+  l == "re_master_key='"'"'^[A-Za-z0-9+/]{43}=$'"'"'" { r = NR }
+  r && l == "if ! [[ \"$STOKTOK_AI_KEYS_MASTER_KEY\" =~ $re_master_key ]]; then" && !g { g = NR; next }
+  g && !x && NR <= g + 4 && /^[[:space:]]*exit 1[[:space:]]*$/ { x = 1 }
+  /mktemp/ && !m { m = NR }
+  /^[[:space:]]*printf .*> "\$tmp"/ && !p { p = NR }
+  END { print (r && g && x && m && p && r < g && g < m && g < p) ? "yes" : "no" }')"
+if [ "$guard_ok" != yes ]; then
+  echo "FAIL: STOKTOK_AI_KEYS_MASTER_KEY lacks re_master_key='^[A-Za-z0-9+/]{43}=\$' and its guard + exit 1 before mktemp in the secrets step" >&2
+  fail=1
+fi
+if ! grep -qE '^  DB_APP: stoktok\s*$' "$WF"; then
+  echo "FAIL: workflow lacks 'DB_APP: stoktok'" >&2
+  fail=1
+fi
+mktemp_line="$(echo "$secrets_step" | grep -n 'mktemp' | head -n 1 | cut -d: -f1 || true)"
+for lit in 'pwfile="postgres/secrets/apps/$DB_APP.password"' \
+           'pw=""' \
+           'read -r pw < "$pwfile" || true' \
+           "re_pw='^[A-Za-z0-9_-]{16,}\$'" \
+           'if ! [[ "$pw" =~ $re_pw ]]; then' \
+           'STOKTOK_DATABASE_URL="postgres://$DB_APP:$pw@postgres:5432/$DB_APP"'; do
+  l="$(echo "$secrets_step" | grep -nF -- "$lit" | head -n 1 | cut -d: -f1 || true)"
+  if [ -z "$l" ] || [ -z "$mktemp_line" ] || [ "$l" -ge "$mktemp_line" ]; then
+    echo "FAIL: secrets step lacks (before mktemp): $lit" >&2
+    fail=1
+  fi
+done
+
+# STK-084: the "database is ahead" literal is pinned in migrate.ts; the deploy workflow must grep the same text.
+ahead_prefix="$(sed -n "s/^export const MIGRATE_AHEAD_PREFIX = '\(.*\)';\$/\1/p" "$ROOT/packages/db/src/pg/migrate.ts")"
+if [ -z "$ahead_prefix" ] || ! grep -qF "AHEAD_PREFIX: '$ahead_prefix'" "$WF"; then
+  echo "FAIL: workflow AHEAD_PREFIX differs from MIGRATE_AHEAD_PREFIX in packages/db/src/pg/migrate.ts" >&2
+  fail=1
+fi
+for n in backup migrate; do
+  if ! sed -n "/^      - name: $n\s*\$/,/^        run:/p" "$WF" | grep -qF "if: steps.pull.outputs.migrate == 'true'"; then
+    echo "FAIL: step '$n' must be guarded by steps.pull.outputs.migrate == 'true'" >&2
+    fail=1
+  fi
+done
 
 # STK-044: one runner user; env file, scheduler dir and log dir agree across workflow, compose, scripts, plist, runbook.
 DRAFTS="$ROOT/deploy/deployment-repo"
@@ -262,10 +345,10 @@ if [ "$(grep -cF 'for f in $PUBLISH_FILES; do cp "$APP_DIR/$f" "$SCHED_DIR.new/"
 fi
 step_line() { grep -nE "^      - name: $1\s*$" "$WF" | head -n 1 | cut -d: -f1 || true; }
 prev=0
-for n in preflight release envdir secrets deploy publish rollback agent notify; do
+for n in preflight release envdir secrets pull backup migrate deploy publish rollback agent notify; do
   l="$(step_line "$n")"
   if [ -z "$l" ] || [ "$l" -le "$prev" ]; then
-    echo "FAIL: workflow step '$n' missing or out of order (preflight, release, envdir, secrets, deploy, publish, rollback, agent, notify)" >&2
+    echo "FAIL: workflow step '$n' missing or out of order (preflight, release, envdir, secrets, pull, backup, migrate, deploy, publish, rollback, agent, notify)" >&2
     fail=1
   fi
   prev="${l:-$prev}"

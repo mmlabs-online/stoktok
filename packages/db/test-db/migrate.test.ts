@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
 import { afterAll, describe, expect, test, vi } from 'vitest';
-import { checksum, MIGRATION_LOCK_KEY, MigrationError, runMigrations } from '../src/pg/migrate';
+import { checksum, MIGRATE_AHEAD_PREFIX, MIGRATION_LOCK_KEY, MigrationError, runMigrations } from '../src/pg/migrate';
 import { emptyDb, freshDb } from './harness';
 
 const tmps: string[] = [];
@@ -164,7 +164,9 @@ describe('runner against Postgres', () => {
       const log = vi.fn();
       const r = await runMigrations({ connectionString: url, dir: tmpDir({ [f(V1)]: 'create table d1 (x int);' }), log });
       expect(r).toEqual({ applied: [], ahead: [V2] });
-      expect(log).toHaveBeenCalledWith(expect.stringContaining('database is ahead'));
+      expect(log).toHaveBeenCalledWith(expect.stringMatching(/^warning: database is ahead of this image /));
+      expect(log.mock.calls[0]![0].startsWith(MIGRATE_AHEAD_PREFIX)).toBe(true);
+      expect(MIGRATE_AHEAD_PREFIX).toBe('warning: database is ahead of this image');
       expect(await versions(q)).toEqual([V1, V2]);
     }));
 

@@ -12,6 +12,13 @@ name: deploy-stoktok
 # `preflight` reports (read-only) the login session, docker and any old LaunchDaemon; `envdir` creates the
 # env dir (mode 700) and excludes it from Time Machine before `secrets` writes the file; `agent` installs
 # or updates the stoktok LaunchAgent from the published plist. Nothing here uses root or changes system settings.
+# STK-084 (shared Postgres): `secrets` also writes STOKTOK_DATABASE_URL, built from the committed
+# postgres/secrets/apps/stoktok.password (no GitHub secret), and STOKTOK_AI_KEYS_MASTER_KEY from the `stoktok`
+# environment secret of the same name. Then, when compose.yml has a `migrate` service (it arrives with the
+# cutover release, STK-094): `pull` -> `backup` (pre-migration dump via pg-backup /backup.sh) -> `migrate`
+# (one-shot, before the app is replaced; a failure leaves the old release running) -> `deploy`.
+# "Database is ahead of this image" (a revert or rollback) is a warning annotation and a notify suffix,
+# never a failure. The SUPABASE_* lines stay in the env file for the 14-day rollback window.
 # Secrets STOKTOK_SUPABASE_URL, STOKTOK_SUPABASE_SERVICE_ROLE_KEY, STOKTOK_AUTHEN_SUPABASE_URL and
 # STOKTOK_AUTHEN_SUPABASE_ANON_KEY (prefixed: this repo is shared by every mmlabs app) come from the
 # `stoktok` environment (main only); the `secrets` step writes them to $ENV_FILE as SUPABASE_URL /
@@ -19,8 +26,8 @@ name: deploy-stoktok
 # on every run. Optional STOKTOK_ANTHROPIC_API_KEY and STOKTOK_GOOGLE_AI_API_KEY (STK-072) are written as
 # ANTHROPIC_API_KEY / GOOGLE_AI_API_KEY; unset means empty (provider off). Values are never printed.
 #
-# No migrate step: schema changes are human. Every migration must stay compatible with the
-# previous release's images, because a restore never touches the database.
+# A restore never touches the database, so every migration must stay compatible with the previous
+# release's images (expand, then contract).
 
 on:
   push:
@@ -39,6 +46,7 @@ concurrency:
 env:
   APP_DIR: apps/stoktok
   PROJECT: stoktok
+  DB_APP: stoktok
   ENV_FILE: /Users/mingming/.config/stoktok/stoktok.env
   SCHED_DIR: /Users/mingming/stoktok/current
   AGENT_LABEL: online.mmlabs.stoktok.jobs
@@ -163,6 +171,7 @@ jobs:
           AUTHEN_SUPABASE_ANON_KEY: ${{ secrets.STOKTOK_AUTHEN_SUPABASE_ANON_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.STOKTOK_ANTHROPIC_API_KEY }}
           GOOGLE_AI_API_KEY: ${{ secrets.STOKTOK_GOOGLE_AI_API_KEY }}
+          STOKTOK_AI_KEYS_MASTER_KEY: ${{ secrets.STOKTOK_AI_KEYS_MASTER_KEY }}
         run: |
           umask 077
           [[ "$ENV_FILE" == "$HOME/"* ]] || { echo "::error::ENV_FILE $ENV_FILE is not under the runner user's home $HOME ($(id -un)). Nothing was started; $ENV_FILE was not changed."; exit 1; }
@@ -171,6 +180,7 @@ jobs:
           [ -n "$SUPABASE_SERVICE_ROLE_KEY" ] || missing="$missing STOKTOK_SUPABASE_SERVICE_ROLE_KEY"
           [ -n "$AUTHEN_SUPABASE_URL" ] || missing="$missing STOKTOK_AUTHEN_SUPABASE_URL"
           [ -n "$AUTHEN_SUPABASE_ANON_KEY" ] || missing="$missing STOKTOK_AUTHEN_SUPABASE_ANON_KEY"
+          [ -n "$STOKTOK_AI_KEYS_MASTER_KEY" ] || missing="$missing STOKTOK_AI_KEYS_MASTER_KEY"
           if [ -n "$missing" ]; then
             echo "::error::Missing secret(s) in environment stoktok:$missing. Nothing was started; $ENV_FILE was not changed."
             exit 1
@@ -199,12 +209,26 @@ jobs:
             echo "::error::Secret STOKTOK_GOOGLE_AI_API_KEY has unexpected characters. Nothing was started; $ENV_FILE was not changed."
             exit 1
           fi
+          re_master_key='^[A-Za-z0-9+/]{43}=$'
+          if ! [[ "$STOKTOK_AI_KEYS_MASTER_KEY" =~ $re_master_key ]]; then
+            echo "::error::Secret STOKTOK_AI_KEYS_MASTER_KEY is not base64 of 32 bytes. Nothing was started; $ENV_FILE was not changed."
+            exit 1
+          fi
+          pwfile="postgres/secrets/apps/$DB_APP.password"
+          pw=""
+          read -r pw < "$pwfile" || true
+          re_pw='^[A-Za-z0-9_-]{16,}$'
+          if ! [[ "$pw" =~ $re_pw ]]; then
+            echo "::error::$pwfile is missing or malformed (see postgres/scripts/add-app-db.sh). Nothing was started; $ENV_FILE was not changed."
+            exit 1
+          fi
+          STOKTOK_DATABASE_URL="postgres://$DB_APP:$pw@postgres:5432/$DB_APP"
           dir="$(dirname "$ENV_FILE")"
           mkdir -p "$dir"
           chmod 700 "$dir"
           tmp="$(mktemp "$dir/.stoktok.env.XXXXXX")"
           trap 'rm -f "$tmp"' EXIT
-          printf 'SUPABASE_URL=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\nAUTHEN_SUPABASE_URL=%s\nAUTHEN_SUPABASE_ANON_KEY=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_AI_API_KEY=%s\n' "$SUPABASE_URL" "$SUPABASE_SERVICE_ROLE_KEY" "$AUTHEN_SUPABASE_URL" "$AUTHEN_SUPABASE_ANON_KEY" "$ANTHROPIC_API_KEY" "$GOOGLE_AI_API_KEY" > "$tmp"
+          printf 'STOKTOK_DATABASE_URL=%s\nSUPABASE_URL=%s\nSUPABASE_SERVICE_ROLE_KEY=%s\nAUTHEN_SUPABASE_URL=%s\nAUTHEN_SUPABASE_ANON_KEY=%s\nANTHROPIC_API_KEY=%s\nGOOGLE_AI_API_KEY=%s\nSTOKTOK_AI_KEYS_MASTER_KEY=%s\n' "$STOKTOK_DATABASE_URL" "$SUPABASE_URL" "$SUPABASE_SERVICE_ROLE_KEY" "$AUTHEN_SUPABASE_URL" "$AUTHEN_SUPABASE_ANON_KEY" "$ANTHROPIC_API_KEY" "$GOOGLE_AI_API_KEY" "$STOKTOK_AI_KEYS_MASTER_KEY" > "$tmp"
           chmod 600 "$tmp"
           if cmp -s "$tmp" "$ENV_FILE"; then changed=false; else changed=true; fi
           mv -f "$tmp" "$ENV_FILE"
@@ -218,17 +242,61 @@ jobs:
             echo "changed=$changed"
           } >> "$GITHUB_OUTPUT"
 
+      - name: pull
+        id: pull
+        if: steps.release.outputs.skip != 'true'
+        run: |
+          compose=(docker compose -p "$PROJECT" -f "$APP_DIR/compose.yml" --env-file "$APP_DIR/release.env")
+          "${compose[@]}" --profile jobs --profile migrate config --quiet
+          "${compose[@]}" --profile jobs --profile migrate pull
+          if "${compose[@]}" --profile migrate config --services | grep -qx migrate; then
+            echo "migrate=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "migrate=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::$APP_DIR/compose.yml has no migrate service yet: backup and migrate skipped."
+          fi
+
+      # A dump right before the schema changes (same sidecar and folder as the nightly dumps).
+      - name: backup
+        id: backup
+        if: steps.pull.outputs.migrate == 'true'
+        run: |
+          if ! docker compose -p postgres -f "$HOME/srv/postgres/compose.yml" exec -T pg-backup /backup.sh; then
+            echo "::error::The pre-migration backup failed. Nothing was migrated or replaced; the old release is still running."
+            exit 1
+          fi
+
+      # The runner never prints the database URL (packages/db/src/pg/migrate.ts), so its output can be shown.
+      - name: migrate
+        id: migrate
+        if: steps.pull.outputs.migrate == 'true'
+        env:
+          AHEAD_PREFIX: 'warning: database is ahead of this image'
+        run: |
+          compose=(docker compose -p "$PROJECT" -f "$APP_DIR/compose.yml" --env-file "$APP_DIR/release.env")
+          set +e
+          out="$("${compose[@]}" --profile migrate run --rm migrate 2>&1)"
+          rc=$?
+          set -e
+          printf '%s\n' "$out"
+          if [ "$rc" -ne 0 ]; then
+            echo "::error::Migrations failed. The app was not replaced; the old release is still running. Restore the database from the dump taken by the backup step if the migration left it half-applied."
+            exit 1
+          fi
+          if [[ "$out" == *"$AHEAD_PREFIX"* ]]; then
+            echo "::warning::Database is ahead of this image: nothing was migrated (expected after a revert or rollback)."
+            echo "ahead=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: deploy
         id: deploy
-        if: steps.release.outputs.skip != 'true'
+        if: steps.pull.outcome == 'success' && (steps.pull.outputs.migrate != 'true' || steps.migrate.outcome == 'success')
         env:
           CHANGED: ${{ steps.secrets.outputs.changed }}
         run: |
           recreate=()
           if [ "$CHANGED" = "true" ]; then recreate=(--force-recreate); fi
           compose=(docker compose -p "$PROJECT" -f "$APP_DIR/compose.yml" --env-file "$APP_DIR/release.env")
-          "${compose[@]}" config --quiet
-          "${compose[@]}" --profile jobs pull
           "${compose[@]}" up -d --wait --wait-timeout 120 ${recreate[@]+"${recreate[@]}"}
 
       - name: publish
@@ -344,6 +412,8 @@ jobs:
           TM: ${{ steps.envdir.outputs.tm }}
           AGENT: ${{ steps.agent.outcome }}
           DEPLOY: ${{ steps.deploy.outcome }}
+          MIGRATE: ${{ steps.migrate.outcome }}
+          AHEAD: ${{ steps.migrate.outputs.ahead }}
           RESULT: ${{ steps.rollback.outputs.result }}
           IMAGE: ${{ steps.release.outputs.image }}
           PREVIOUS: ${{ steps.release.outputs.previous }}
@@ -357,9 +427,14 @@ jobs:
             DEPLOY="secrets"
             RESULT="invalid"
           fi
+          if [ "$MIGRATE" = "failure" ]; then
+            DEPLOY="migrate"
+            RESULT="failed"
+          fi
           case "$DEPLOY:$RESULT" in
             envdir:invalid)            msg="env dir \`~/.config/stoktok\` could not be created as mode 700; nothing was started." ;;
             secrets:invalid)           msg="secrets missing or invalid in environment \`stoktok\`: nothing was started; see the run for the secret name." ;;
+            migrate:failed)            msg="migrate-failed: migrations for \`$IMAGE\` failed; the old release is still running. A dump was taken just before." ;;
             failure:env-missing)       msg="env-missing: \`$IMAGE\` failed its health check and $ENV_FILE is missing or has the wrong owner or mode; nothing was restored." ;;
             success:)                  msg="deployed: \`$IMAGE\` is running and healthy." ;;
             failure:restored)          msg="restored: \`$IMAGE\` failed its health check; \`$PREVIOUS\` is running again and the revert is on main." ;;
@@ -368,6 +443,7 @@ jobs:
             failure:restore-failed)    msg="restore-failed: \`$IMAGE\` failed its health check and so did \`$PREVIOUS\`. Stoktok needs a hand." ;;
             *)                         msg="did-not-complete: the deploy did not run to the end (deploy: ${DEPLOY:-not run}, restore: ${RESULT:-not run})." ;;
           esac
+          if [ "$AHEAD" = "true" ]; then msg="$msg Database is ahead of this image (nothing migrated)."; fi
           if [ "$AGENT" = "failure" ]; then msg="$msg Scheduler NOT installed: see the run."; fi
           if [ "$TM" = "not-excluded" ]; then msg="$msg Env dir not excluded from Time Machine."; fi
           {
