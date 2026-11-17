@@ -11,6 +11,11 @@ on `mmlabs-online/deployment` (not a `release/*` branch, so `pr-scope` does not 
 | `.github/workflows/deploy-stoktok.yml` | `.github/workflows/deploy-stoktok.yml` |
 | `.github/workflows/runner-check.yml` | `.github/workflows/runner-check.yml` (shared by every app; STK-044 only changes the expected runner user to `mingming`) |
 
+STK-084 (shared Postgres): copy `apps/stoktok/compose.yml` and `.github/workflows/deploy-stoktok.yml`
+only after `bash postgres/scripts/add-app-db.sh stoktok` has been merged (it creates
+`postgres/secrets/apps/stoktok.password`, which deploy-stoktok reads), and set the `stoktok` environment
+secret `STOKTOK_AI_KEYS_MASTER_KEY`. See `docs/deploy.md`, Shared Postgres.
+
 Also add this line to the deployment repo's `.github/CODEOWNERS`:
 
 ```

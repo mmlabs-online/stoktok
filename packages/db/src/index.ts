@@ -19,6 +19,7 @@ export type {
 export { drawIdFromNo, drawNoFromId } from './mappers';
 export { loadLedger } from './ledger';
 export { listHeldSymbols } from './holdings';
+export { pingDb } from './repos/health';
 export {
   createTransaction,
   deleteTransaction,

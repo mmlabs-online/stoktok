@@ -15,17 +15,58 @@ afterAll(async () => {
 });
 
 describe('pool session', () => {
-  test('each connection has UTC, ISO datestyle, statement_timeout and application_name', async () => {
+  test('each connection has UTC, ISO datestyle, statement_timeout, application_name and idle_in_transaction_session_timeout', async () => {
     const q = () =>
-      sql<{ tz: string; ds: string; st: string; app: string; pid: number }>`
+      sql<{ tz: string; ds: string; st: string; app: string; idle: string; pid: number }>`
         select current_setting('TimeZone') as tz, current_setting('DateStyle') as ds,
                current_setting('statement_timeout') as st, current_setting('application_name') as app,
+               current_setting('idle_in_transaction_session_timeout') as idle,
                pg_backend_pid() as pid, pg_sleep(0.2)`.execute(kyselyOf(t.pgDb));
     const [a, b] = await Promise.all([q(), q()]);
     const rows = [a.rows[0]!, b.rows[0]!];
     expect(rows[0]!.pid).not.toBe(rows[1]!.pid);
     for (const r of rows) {
-      expect(r).toMatchObject({ tz: 'UTC', ds: 'ISO, YMD', st: '2min', app: 'stoktok-worker' });
+      expect(r).toMatchObject({ tz: 'UTC', ds: 'ISO, YMD', st: '2min', app: 'stoktok-worker', idle: '1min' });
+    }
+    const web = await freshDb('web');
+    try {
+      const r = await sql<{ idle: string }>`select current_setting('idle_in_transaction_session_timeout') as idle`.execute(kyselyOf(web.pgDb));
+      expect(r.rows[0]!.idle).toBe('30s');
+    } finally {
+      await web.drop();
+    }
+  });
+
+  test('a transaction left idle past the timeout is terminated; the process survives and the pool recovers', async () => {
+    const base = await freshDb('worker');
+    const db = createPgDb({ [DATABASE_URL_ENV]: base.url }, 'worker', { idleInTransactionTimeoutMs: 300 });
+    const uncaught = vi.fn();
+    const unhandled = vi.fn();
+    process.on('uncaughtException', uncaught);
+    process.on('unhandledRejection', unhandled);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const err = await kyselyOf(db)
+        .transaction()
+        .execute(async (trx) => {
+          await sql`select 1`.execute(trx);
+          await new Promise((r) => setTimeout(r, 800));
+          await sql`select 2`.execute(trx);
+        })
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(Error);
+      await new Promise((r) => setTimeout(r, 100));
+      expect(uncaught).not.toHaveBeenCalled();
+      expect(unhandled).not.toHaveBeenCalled();
+      for (const c of log.mock.calls) expect(String(c[0])).not.toMatch(/terminat|idle-in-transaction/i);
+      const ok = await q(db, { table: 't', op: 'o' }, (k) => sql<{ n: number }>`select 1::int as n`.execute(k));
+      expect(ok.rows[0]!.n).toBe(1);
+    } finally {
+      process.off('uncaughtException', uncaught);
+      process.off('unhandledRejection', unhandled);
+      log.mockRestore();
+      await db.end().catch(() => undefined);
+      await base.drop();
     }
   });
 

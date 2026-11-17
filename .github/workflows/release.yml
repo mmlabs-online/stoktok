@@ -153,4 +153,4 @@ jobs:
           git push origin "$branch"
           gh pr create --repo mmlabs-online/deployment --base main --head "$branch" \
             --title "$APP $TAG" \
-            --body "Deploys \`$web_ref\` and \`$worker_ref\` ($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA). Apply database migrations before merging. Merging runs deploy-$APP on macbook-runner."
+            --body "Deploys \`$web_ref\` and \`$worker_ref\` ($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA). Merging runs deploy-$APP on macbook-runner: a pre-migration backup and migrate (when apps/$APP/compose.yml has a migrate service), then the new app. Every migration must work with the previous image."

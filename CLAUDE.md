@@ -16,14 +16,14 @@ Part of the mmlabs ecosystem (login via Authen). **v1 is single-user (public sig
 | Web | Next.js (App Router, TypeScript) in `apps/web` |
 | Worker | Node.js + TypeScript in `apps/worker` (scheduled jobs: prices, news, signals, AI, scoring) |
 | Domain logic | `packages/core` (TypeScript) — ledger, lots, holdings, P&L, fees/tax, signals. Shared by web and worker |
-| DB | Supabase (dedicated project for stoktok, Postgres, RLS on). Migrations in `supabase/` |
+| DB | Postgres 17 on the shared mmlabs Postgres (`postgres:5432` on Docker network `db`, database and role `stoktok`); `pg` + Kysely in `packages/db`; forward-only migrations in `db/migrations/` run by the worker `migrate` command; no RLS (single user). Supabase is used for Auth only |
 | Auth | Authen = Supabase Auth of stoktok's own Supabase project (Ming, 2026-11-05, STK-048). stoktok's own `/login` signs in server-side; the server verifies via `getClaims()`; no allowlist, single user via disabled sign-ups (Ming, 2026-11-07, STK-060) |
 | Package manager | pnpm workspaces |
 | Tests | Vitest (unit), Playwright (e2e, later) |
-| Runtime | Docker Compose on Ming's WSL2 home server behind Cloudflare Tunnel |
+| Runtime | Docker Compose (OrbStack) on Ming's Intel Mac home server behind Cloudflare Tunnel |
 | CI/CD | GitHub Actions (hosted runners) build images → Docker Hub; deploy via the shared mmlabs deploy repo |
 
-Current state: **repository scaffold only.** The workspace (`apps/`, `packages/`, `supabase/`) is created by ticket STK-001.
+Current state: the workspace (`apps/`, `packages/`, `db/`) is scaffolded. Production still runs the Supabase-backed release until the shared-Postgres cutover (STK-084).
 Standard scripts once scaffolded: `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`.
 
 Do not change the stack without Ming's explicit decision.
@@ -45,7 +45,7 @@ Do not change the stack without Ming's explicit decision.
 | R9 | **AI output (v1.2+)**: input is stored data only, every factual claim cites a stored input ID, output is schema-validated. AI explains rule-based signals; it never decides the action. |
 | R10 | **Non-goals are hard limits**: no brokerage login, no order placement, no multi-user access to suggestions. |
 
-> **R6 restored (Ming resumed STK-004, 2026-11-05).** Authen is Supabase Auth of stoktok's own Supabase project (STK-048). stoktok has its own `/login` (server action, httpOnly cookie on stoktok's host). `requireUser()` (`apps/web/server/auth`) runs in every page, route handler and server action; the public list is `/login` and `/healthz` (`apps/web/proxy.ts`). Any user in that project's Auth has full access; keep sign-ups disabled (STK-060). Cloudflare Access stays in front for now.
+> **R6 restored (Ming resumed STK-004, 2026-11-05).** Authen is Supabase Auth of stoktok's own Supabase project (STK-048). stoktok has its own `/login` (server action, httpOnly cookie on stoktok's host). `requireUser()` (`apps/web/server/auth`) runs in every page, route handler and server action; the public list is `/login`, `/healthz` and `/readyz` (`apps/web/proxy.ts`). Any user in that project's Auth has full access; keep sign-ups disabled (STK-060). Cloudflare Access stays in front for now.
 
 ---
 
@@ -128,5 +128,5 @@ Ticket states: `BACKLOG` → `PLANNING` → `IN_PROGRESS` → `REVIEW` → `DONE
 
 - Language: code, comments, docs, commit messages in English. UI labels in Vietnamese.
 - Commits: `<ID>: <imperative summary>` (`STK-xxx` or `BUG-xxx`).
-- Secrets: only in `.env.local` (git-ignored), the deploy repo, and — for AI provider keys entered on Settings — the `ai_keys` table, encrypted app-side (ADR 0011). Keys are never returned to the browser or logged. `.env.example` lists keys with no values.
+- Secrets: only in `.env.local` (git-ignored), the deploy repo, and — for AI provider keys entered on Settings — the `ai_keys` table, encrypted app-side (ADR 0011). Keys are never returned to the browser or logged. `.env.example` lists keys with no values. The database password is `postgres/secrets/apps/stoktok.password` in the deployment repo (shared-Postgres standard), written into the host env file by `deploy-stoktok`; the AI master key is the `stoktok` environment secret `STOKTOK_AI_KEYS_MASTER_KEY`.
 - Third-party agent definitions come from msitarzewski/agency-agents (MIT) — see `THIRD_PARTY_NOTICES.md`.

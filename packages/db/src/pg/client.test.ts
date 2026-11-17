@@ -57,6 +57,8 @@ describe('createPgDb', () => {
     expect(PG_POOL_PROFILES.web.max).toBe(5);
     expect(PG_POOL_PROFILES.worker.max).toBe(2);
     expect(PG_POOL_PROFILES.web.applicationName).toBe('stoktok-web');
+    expect(PG_POOL_PROFILES.web.idleInTransactionTimeoutMs).toBe(30_000);
+    expect(PG_POOL_PROFILES.worker.idleInTransactionTimeoutMs).toBe(60_000);
     const web = await build(url, 'web');
     expect(web.pool.cfg).toMatchObject({ max: 5, idleTimeoutMillis: 10_000, connectionTimeoutMillis: 5_000 });
     await web.db.end();

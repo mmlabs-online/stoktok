@@ -31,9 +31,9 @@ beforeEach(() => {
 });
 
 describe('proxy', () => {
-  it('lets /login and /healthz through without a cookie and without auth env', async () => {
+  it('lets /login, /healthz and /readyz through without a cookie and without auth env', async () => {
     vi.stubEnv('AUTHEN_SUPABASE_URL', '');
-    for (const p of ['/login', '/healthz']) {
+    for (const p of ['/login', '/healthz', '/readyz']) {
       const res = await proxy(req(p));
       expect(res.status).toBe(200);
       expect(res.headers.get('location')).toBeNull();

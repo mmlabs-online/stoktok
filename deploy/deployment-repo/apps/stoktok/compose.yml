@@ -11,10 +11,15 @@
 # Worker: one-shot jobs (profile `jobs`), started by run-job.sh from launchd, never by `up -d`.
 # The worker is not on `web`.
 #
-# The server-only secrets (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are written to
-# /Users/mingming/.config/stoktok/stoktok.env by deploy-stoktok from the `stoktok` environment
-# secrets, never stored in this repository. It sits outside the checkout because the runner's
+# The server-only secrets are written to /Users/mingming/.config/stoktok/stoktok.env by deploy-stoktok,
+# never stored in this repository: the Supabase keys and the AI provider keys from the `stoktok`
+# environment secrets, the AI master key likewise, and the database URL derived from the committed
+# postgres/secrets/apps/stoktok.password (STK-084). It sits outside the checkout because the runner's
 # checkout deletes untracked files. If it is missing, `config` fails and nothing starts.
+#
+# Expand state (STK-084): web and worker join the external `db` network (the shared Postgres is
+# `postgres:5432` there). The `migrate` service and the /readyz health check arrive in the cutover
+# release PR (STK-094), because the running image (v0.2.1) has neither a `migrate` command nor /readyz.
 
 name: stoktok
 
@@ -40,7 +45,7 @@ services:
       options:
         max-size: 10m
         max-file: "3"
-    networks: [tunnel]
+    networks: [tunnel, db]
 
   stoktok-worker:
     image: ${STOKTOK_WORKER_IMAGE:?STOKTOK_WORKER_IMAGE is unset - pass --env-file apps/stoktok/release.env}
@@ -50,9 +55,15 @@ services:
     environment:
       STOKTOK_VERSION: ${STOKTOK_VERSION:-}
       TZ: Asia/Ho_Chi_Minh
+    # `db` is internal: keep `default` so the worker can still reach TCBS, VCI and the RSS feeds.
+    networks: [default, db]
 
 networks:
   tunnel:
     external: true
     # The network cloudflared is on: `web`, created by proxy/compose.yml.
     name: web
+  db:
+    external: true
+    # The shared Postgres network, created by postgres/compose.yml.
+    name: db

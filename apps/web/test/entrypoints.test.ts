@@ -12,11 +12,11 @@ function walk(dir: string): string[] {
 }
 
 const rel = (f: string) => path.relative(appDir, f).split(path.sep).join('/');
-const exempt = (f: string) => rel(f).startsWith('login/') || rel(f) === 'healthz/route.ts';
+const exempt = (f: string) => rel(f).startsWith('login/') || rel(f) === 'healthz/route.ts' || rel(f) === 'readyz/route.ts';
 const all = walk(appDir).filter((f) => !exempt(f));
 
 describe('R6 entry points', () => {
-  it('every page.tsx and route.ts outside /login and /healthz calls await requireUser()', () => {
+  it('every page.tsx and route.ts outside /login, /healthz and /readyz calls await requireUser()', () => {
     const entries = all.filter((f) => /(^|\/)(page\.tsx|route\.ts)$/.test(rel(f)));
     expect(entries.length).toBeGreaterThan(0);
     for (const f of entries) expect(fs.readFileSync(f, 'utf8'), rel(f)).toMatch(/await requireUser\(\)/);

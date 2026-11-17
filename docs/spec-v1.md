@@ -2,7 +2,7 @@
 
 > Working name: **stock investment assistant** (placeholder — final app name TBD by Ming)
 > Owner: Ming · Status: Draft v1 · Date: 2026-10-21
-> Ecosystem: mmlabs (auth via Authen) · Stack: Next.js · Hosting: WSL home server
+> Ecosystem: mmlabs (auth via Authen) · Stack: Next.js · Hosting: Intel Mac home server (OrbStack)
 
 ---
 
@@ -125,12 +125,12 @@ Personal record of Vietlott tickets Ming buys elsewhere (Vietlott SMS, MoMo). **
                                                         │
                                    worker (scheduler) ──┤
                                     │                   ▼
-                     ┌──────────────┼───────── App DB (Supabase project — dedicated, RLS on)
+                     ┌──────────────┼───────── App DB (shared mmlabs Postgres 17, database `stoktok`)
                      ▼              ▼
           Market data adapters   News adapters ──► LLM provider (summaries / explanations)
 ```
 
-### 4.1 Services (Docker Compose on WSL, same network as cloudflared)
+### 4.1 Services (Docker Compose on the home server, Intel Mac with OrbStack, same network as cloudflared)
 | Service | Responsibility |
 |---|---|
 | `web` | Next.js UI and API routes; reads/writes app DB; verifies the Authen JWT |
@@ -139,7 +139,7 @@ Personal record of Vietlott tickets Ming buys elsewhere (Vietlott SMS, MoMo). **
 ### 4.2 Auth integration
 - Login through Authen; `web` verifies the session JWT server-side (`getClaims()` + issuer/aud/role/expiry, non-anonymous session) on every request.
 - Single user enforced by disabled public sign-ups in the stoktok Supabase project, not an app-level allowlist.
-- App data lives in a **separate Supabase project**; it never stores data in the shared auth project.
+- App data lives in the shared mmlabs Postgres (database `stoktok`); Supabase is used for Auth only.
 - Open question: how the app DB's RLS trusts the Authen JWT (shared JWT secret vs server-side service role with app-level checks). See §9.
 
 ### 4.3 Data source adapters
@@ -211,7 +211,7 @@ Holdings and P&L are **derived** from `transactions` + `corporate_actions` + `lo
   - App repo (private): CI and image build on GitHub-hosted runners, images pushed to the Docker Hub account used by other mmlabs apps.
   - Shared deploy repo: Compose definitions + env; deploy jobs on the self-hosted runner on the home server.
 - Subdomain under mmlabs.online, exposed via the existing Cloudflare Tunnel.
-- Secrets: Supabase keys only in the deploy repo's env handling, never in the app repo. LLM API keys may be entered on Settings and are stored encrypted app-side (AES-256-GCM, master key server-only; ADR 0011), decrypted only on the server; env keys in the deploy repo are the fallback. Never in the app repo.
+- Secrets: the database URL is derived by the deploy from the committed password file; Supabase keys (Auth, and during the 14-day rollback window the old data API) only in the deploy repo's env handling, never in the app repo. LLM API keys may be entered on Settings and are stored encrypted app-side (AES-256-GCM, master key server-only; ADR 0011), decrypted only on the server; env keys in the deploy repo are the fallback. Never in the app repo.
 - `worker` must tolerate restarts: jobs are idempotent and resume from last successful run.
 - Operational note: the PC must be on during trading hours for intraday data; gaps are recorded in `data_gaps`.
 
@@ -250,7 +250,7 @@ Adaptation before use:
 | LLM fabricates facts | Misleading suggestions | Rules decide, LLM explains; mandatory citations; schema validation |
 | Short-term suggestions are often wrong | Overtrust | Scorecard with visible hit rate; reference-only notice |
 | App later opened to other users | Regulatory exposure | v1 single user (public sign-ups disabled); any public version drops suggestions |
-| Supabase Free plan limits/pausing | App DB unavailable | Monitor; upgrade plan or migrate if it becomes an issue |
+| Supabase Free plan pausing | Login unavailable (data is on the shared Postgres) | Accepted (Ming, 2026-11-11); a login after a quiet week may need the project resumed |
 
 ### Open questions
 1. JWT trust between Authen and the app's separate Supabase project (shared secret vs server-side checks).

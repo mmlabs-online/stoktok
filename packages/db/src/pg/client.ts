@@ -75,8 +75,8 @@ export function createPgDb(
       await super.connect();
       try {
         await this.query(
-          "select set_config('TimeZone','UTC',false), set_config('DateStyle','ISO, YMD',false), set_config('statement_timeout',$1,false), set_config('application_name',$2,false)",
-          [String(p.statementTimeoutMs), p.applicationName],
+          "select set_config('TimeZone','UTC',false), set_config('DateStyle','ISO, YMD',false), set_config('statement_timeout',$1,false), set_config('application_name',$2,false), set_config('idle_in_transaction_session_timeout',$3,false)",
+          [String(p.statementTimeoutMs), p.applicationName, String(p.idleInTransactionTimeoutMs)],
         );
       } catch (e) {
         // Fail closed. Log the code only: messages can carry host and credentials.
@@ -85,6 +85,9 @@ export function createPgDb(
         // eslint-disable-next-line preserve-caught-error -- the cause message can carry host and credentials
         throw new Error('db session init failed');
       }
+      // A backend terminated while this client is checked out and idle (e.g. the idle-in-transaction timeout) emits 'error' on the
+      // client; pg-pool only listens while the client is idle in the pool, so without this listener the process would crash.
+      this.on('error', (e: unknown) => console.error(JSON.stringify({ event: 'db_client_error', code: sqlstateOf(e) ?? null })));
     }
   }
   const pool = new pg.Pool({

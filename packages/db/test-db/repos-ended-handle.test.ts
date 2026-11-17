@@ -22,6 +22,7 @@ type Call = (db: repos.Db) => Promise<unknown>;
 const CALLS: Record<string, Call> = {
   loadLedger: (db) => repos.loadLedger(db, '2026-11-01'),
   listHeldSymbols: (db) => repos.listHeldSymbols(db, '2026-11-01'),
+  pingDb: (db) => repos.pingDb(db),
   createTransaction: (db) => repos.createTransaction(db, tx, { source: 'manual' }),
   deleteTransaction: (db) => repos.deleteTransaction(db, ID),
   getTransaction: (db) => repos.getTransaction(db, ID),
