@@ -82,4 +82,5 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks a BACKLOG S1 bug (`BUG-xx
 | STK-086 | db:check rewrite for the single-owner model (STK-083 split) | DONE | P1 | db, security | 2 | 2026-11-11 |
 | STK-087 | Migrate runner (STK-083 split) | DONE | P1 | db, security, architecture | 2 | 2026-11-12 |
 | STK-088 | Migration-lint tokeniser gaps and legacy-reference guard (STK-086 split) | DONE | P1 | db, security | 1 | 2026-11-12 |
-| STK-089 | Worker migrate command, image, owner-role test:db and schema drift test (STK-087 split) | BACKLOG | P1 | db, security, architecture | 0 | 2026-11-12 |
+| STK-089 | Worker migrate command, image and schema drift test (STK-087 split) | DONE | P1 | db, security, architecture | 2 | 2026-11-17 |
+| STK-090 | Owner-role test:db (STK-089 split) | BACKLOG | P2 | db, security | 0 | 2026-11-17 |

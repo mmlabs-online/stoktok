@@ -1,8 +1,11 @@
-import { pathToFileURL } from 'node:url';
+import { existsSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Db } from '@stoktok/db';
 import { createPgDb } from '@stoktok/db/pg';
 import { EOD_SYNC_CONFIG, FINANCIAL_STATEMENTS_SYNC_CONFIG, FINANCIALS_SYNC_CONFIG, HOLIDAY_GAPS_CONFIG, NEWS_SYNC_CONFIG, SIGNALS_JOB_CONFIG, isFinancialsSourceId, isNewsSourceId, isPriceSourceId } from './config';
 import type { FinancialsSourceId, NewsSourceId, PriceSourceId } from './config';
+import { migrateCommand, resolveMigrationsDir } from './migrate';
 import { runEodSync } from './jobs/eod-sync';
 import { runFinancialStatementsSync } from './jobs/financial-statements-sync';
 import { runFinancialsSync } from './jobs/financials-sync';
@@ -20,7 +23,7 @@ export type ParsedArgs =
   | { ok: true; job: 'eod-prices' | 'financials' | 'financial-statements' | 'signals' | 'resolve-holiday-gaps' | 'news'; dryRun: boolean; backfillTradingDays?: number; source?: PriceSourceId | FinancialsSourceId | NewsSourceId }
   | { ok: false; usage: string };
 
-const USAGE = 'usage: cli.ts <eod-prices|financials|financial-statements|signals|resolve-holiday-gaps|news> [--dry-run] [--backfill [<tradingDays>]  (eod-prices only)] [--source <vci-public|tcbs-public>  (eod-prices) | <vci-iq|tcbs-public>  (financials)]  | <cafef|vietstock|vnexpress>  (news)]  (financial-statements takes --dry-run only)';
+const USAGE = 'usage: cli.ts <migrate|eod-prices|financials|financial-statements|signals|resolve-holiday-gaps|news> [--dry-run] [--backfill [<tradingDays>]  (eod-prices only)] [--source <vci-public|tcbs-public>  (eod-prices) | <vci-iq|tcbs-public>  (financials)]  | <cafef|vietstock|vnexpress>  (news)]  (financial-statements takes --dry-run only)';
 
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   const [job, ...flags] = argv;
@@ -64,6 +67,10 @@ export function parseArgs(argv: readonly string[]): ParsedArgs {
 
 /** `openDb` is injectable for tests; the handle is opened only after the arguments parse, and always ended. */
 export async function main(argv: readonly string[], openDb: () => Db = () => createPgDb(process.env, 'worker')): Promise<void> {
+  if (argv[0] === 'migrate') {
+    await migrateCommand(argv.slice(1), { env: process.env, dir: resolveMigrationsDir(dirname(fileURLToPath(import.meta.url)), existsSync) });
+    return;
+  }
   const args = parseArgs(argv);
   if (!args.ok) {
     console.error(args.usage);

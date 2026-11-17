@@ -26,5 +26,6 @@ ENV NODE_ENV=production
 COPY --from=build --chown=node:node /out/node_modules ./node_modules
 COPY --from=build --chown=node:node /repo/apps/worker/dist ./dist
 COPY --from=build --chown=node:node /repo/apps/worker/package.json ./
+COPY --from=build /repo/db/migrations ./migrations
 USER node
 ENTRYPOINT ["node", "dist/cli.js"]

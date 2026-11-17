@@ -40,3 +40,4 @@ CLAUDE.md Stack, R2, R3, R5, R6, R8; ADR 0010 (from STK-080). Reference repos: `
 - Ming's manual step: merge the deployment-repo PR, run the cutover runbook, re-enter AI keys on Settings. Open: how long to keep the Supabase tables after cutover (proposed 14 days).
 - 2026-11-11 (Ming): the GitHub environment secret `STOKTOK_AI_KEYS_MASTER_KEY` is created in the `stoktok` environment (copy in the password manager).
 - 2026-11-11 (orchestrator): from STK-083 plan follow-ups: optional live-Supabase `pg_dump --schema-only` comparison in the cutover runbook (F1); `idle_in_transaction_session_timeout` set in `pg/client.ts` session init or the deployment repo DB config, not a migration (F2); update the CLAUDE.md Stack DB row and "Migrations in `supabase/`" (F3).
+- 2026-11-17 (orchestrator): from STK-089 security review attempt 1 — decide whether an exit-0 `migrate` when the database is AHEAD of the image (warning only) should block replacing the app during deploy.
