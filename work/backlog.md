@@ -77,7 +77,7 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks a BACKLOG S1 bug (`BUG-xx
 | STK-081 | pg handle hardening: opaque PgDb, q(), session-init crash fix (STK-080 slice b1) | DONE | P1 | architecture, db, data, security | 2 | 2026-11-11 |
 | STK-082 | AI provider keys encrypted app-side, replacing Vault (STK-080 slice c) | DONE | P1 | security, db, architecture | 2 | 2026-11-11 |
 | STK-083 | Plain-Postgres baseline and faithfulness proof (STK-080 slice d1) | DONE | P1 | db, security | 2 | 2026-11-11 |
-| STK-084 | Register stoktok on the shared Postgres, move data from Supabase, cutover and docs (STK-080 slice e) | REVIEW | P1 | db, data, architecture, security | 1 | 2026-11-17 |
+| STK-084 | Register stoktok on the shared Postgres, move data from Supabase, cutover and docs (STK-080 slice e) | DONE | P1 | db, data, architecture, security | 1 | 2026-11-17 |
 | STK-085 | Data layer on pg + Kysely: port the 17 repos, callers, bundling and guards (STK-080 slice b2) | DONE | P1 | architecture, db, data, security | 2 | 2026-11-11 |
 | STK-086 | db:check rewrite for the single-owner model (STK-083 split) | DONE | P1 | db, security | 2 | 2026-11-11 |
 | STK-087 | Migrate runner (STK-083 split) | DONE | P1 | db, security, architecture | 2 | 2026-11-12 |
