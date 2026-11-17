@@ -101,3 +101,52 @@ Files reviewed:
 - /home/user/stoktok/docs/adr/0010-self-hosted-postgres-data-layer.md
 - /home/user/stoktok/work/tickets/STK-089/{ticket,plan,impl-log}.md
 - /home/user/stoktok/work/tickets/STK-087/security-review.md
+
+## Security review: STK-089, attempt 2
+
+**Verdict: 🟡1 and 🟢6 are both fixed. Nothing blocks.** There are no 🔴 or 🟡 findings. I only read the code (commit d022ace) and ran nothing. Docker was not available here, so the image assertions are proven only once the PR's CI `images` job (worker leg) passes.
+
+### Attempt-1 items
+- **🟡1 is fixed.** `scripts/check-image.sh:85-86`
+  - `f=$(find /app/migrations -writable); test -z "$f"` runs as `node`, because no `--user` is passed and `apps/worker/Dockerfile:30` sets `USER node`.
+  - The runtime base is `node:22-bookworm-slim` (`Dockerfile:23`), which ships GNU findutils, so `-writable` is supported. It checks access for the current user, so a root-owned file with mode 0666, or the directory itself, now fails the check.
+  - `:87` (`test ! -w /app/migrations`) is now redundant, since `-writable` also lists the starting directory. It does no harm.
+- **🟢6 is fixed.** `scripts/check-image.sh:53,58`
+  - The no-URL `migrate` smoke runs under `timeout 20`, and exit 124 has its own hang message. Exit 124 is not 2, so it would also have been caught as a failure without that message.
+
+### Shell correctness (`sh -c` under dash, `set -e`), `:75-87`
+- **🟢 A `find` failure now fails the check.**
+  - POSIX gives a command made only of an assignment the exit status of its last command substitution, and dash follows that. So a non-zero exit from `find` on `:79/81/83/85` aborts the script under `set -e`.
+  - The comment at `:78` is accurate: `test -z "$(…)"` would discard that status.
+  - `find`'s stderr is not suppressed, so the cause shows in the CI log.
+- **🟢 `set -e` still applies inside the container.** The outer `if ! docker run …` runs on the host, and the inner `sh -c` is a separate process, so the outer `if` does not switch off the inner `set -e`.
+  - Outer `bash` has no `-e` (`:4`), and the explicit `if !` handles the exit code correctly.
+- **🟢 Quoting is sound.**
+  - The single-quoted block contains no `'`.
+  - `"*.down.sql"` is double-quoted, so the shell cannot expand the glob.
+  - The `#` comment line is harmless inside `sh -c`.
+  - Fail-closed: if a subdirectory cannot be read, `find` exits non-zero and the check fails.
+- **🟢 Optional, new:** `scripts/check-image.sh:53` runs an unnamed container, so the trap at `:39` cannot remove it.
+  - If `timeout` kills the docker client, the container could keep running. `docker run` forwards SIGTERM to it, but node running as PID 1 with no handler ignores SIGTERM.
+  - Hosted runners are throwaway, so the impact is negligible. If wanted, add `--name "$UNAME"` and include it in the trap, as `:38-39` already do for `$MNAME`.
+
+### Drift-parser test
+- 🟢 I only read the description in impl-log.md:53. The change rejects a second `;` on one line (fail-closed) and decides nullability from the select position only. It interpolates no SQL and needs no DB, so it raises no security concern.
+
+### Recommendations
+1. None required for this ticket.
+2. Optional: give the `:53` container a name and add it to the trap.
+3. Optional: drop `:87`, which is now redundant.
+
+### Risks
+- These are unchanged from attempt 1 and accepted under D24.
+- The image checks remain unproven until CI is green.
+
+### Open questions
+- None.
+
+Files reviewed:
+- /home/user/stoktok/scripts/check-image.sh
+- /home/user/stoktok/apps/worker/Dockerfile
+- /home/user/stoktok/work/tickets/STK-089/impl-log.md
+- /home/user/stoktok/work/tickets/STK-089/security-review.md
