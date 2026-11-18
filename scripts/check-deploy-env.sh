@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# STK-018/STK-037 (R3): keep docs/deploy.md env table, the draft deployment-repo compose, release.yml
+# STK-094: cutover state (migrate + /readyz). STK-018/STK-037 (R3): keep docs/deploy.md env table, the draft deployment-repo compose, release.yml
 # and .env.example in sync, STK-044: one runner user and agreeing paths across drafts, and guard the draft compose against secrets and published ports.
 set -euo pipefail
 
@@ -41,8 +41,8 @@ if grep -q '\${SUPABASE_' "$COMPOSE"; then
   echo "FAIL: compose interpolates SUPABASE_*; secrets come from env_file only" >&2
   fail=1
 fi
-if [ "$(grep -c '^\s*env_file:' "$COMPOSE")" -lt 2 ]; then
-  echo "FAIL: compose needs env_file on both services" >&2
+if [ "$(grep -c '^\s*env_file:' "$COMPOSE")" -lt 3 ]; then
+  echo "FAIL: compose needs env_file on web, worker and migrate" >&2
   fail=1
 fi
 if ! grep -q 'name: web' "$COMPOSE" || ! grep -q 'external: true' "$COMPOSE"; then
@@ -54,8 +54,22 @@ if ! grep -qE '^  db:' "$COMPOSE" || ! grep -qE '^    name: db\s*$' "$COMPOSE"; 
   echo "FAIL: compose must declare the external network 'db'" >&2
   fail=1
 fi
-web_block="$(sed -n '/^  stoktok-web:/,/^  stoktok-worker:/p' "$COMPOSE")"
-worker_block="$(sed -n '/^  stoktok-worker:/,/^networks:/p' "$COMPOSE")"
+# A service block: from `  NAME:` up to, not including, the next service key or top-level key.
+svc_block() {
+  awk -v n="$1" '
+    $0 == "  " n ":" { p = 1; print; next }
+    p && (/^  [A-Za-z0-9_-]+:/ || /^[^[:space:]#]/) { exit }
+    p { print }' "$COMPOSE"
+}
+web_block="$(svc_block stoktok-web)"
+worker_block="$(svc_block stoktok-worker)"
+migrate_block="$(svc_block migrate)"
+for pair in "web:$web_block" "worker:$worker_block" "migrate:$migrate_block"; do
+  if ! echo "${pair#*:}" | grep -qE '^[[:space:]]+env_file:'; then
+    echo "FAIL: compose service ${pair%%:*} lacks env_file" >&2
+    fail=1
+  fi
+done
 nets_re() { echo "^[[:space:]]+networks: \\[(.*, *)?$1(, *.*)?\\][[:space:]]*\$"; }
 for n in tunnel db; do
   if ! echo "$web_block" | grep -qE "$(nets_re $n)"; then
@@ -69,6 +83,37 @@ for n in default db; do
     fail=1
   fi
 done
+# STK-094: web health check is /readyz with a client timeout; migrate is a one-shot on `db` only.
+if ! echo "$web_block" | grep -qF "fetch('http://127.0.0.1:3000/readyz',{signal:AbortSignal.timeout(3000)})" \
+   || echo "$web_block" | grep -q '/healthz'; then
+  echo "FAIL: stoktok-web health check must be fetch('http://127.0.0.1:3000/readyz',{signal:AbortSignal.timeout(3000)}) and not /healthz" >&2
+  fail=1
+fi
+if echo "$web_block" | grep -qE '^[[:space:]]+profiles:'; then
+  echo "FAIL: stoktok-web must have no profiles" >&2
+  fail=1
+fi
+if [ -z "$migrate_block" ]; then
+  echo "FAIL: compose lacks the migrate service" >&2
+  fail=1
+else
+  migrate_lines="$(echo "$migrate_block" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+  if ! echo "$migrate_lines" | grep -qF 'image: ${STOKTOK_WORKER_IMAGE:?'; then
+    echo "FAIL: migrate image must be \${STOKTOK_WORKER_IMAGE:?...}" >&2
+    fail=1
+  fi
+  for want in 'restart: "no"' 'profiles: [migrate]' 'command: ["migrate"]' 'networks: [db]' \
+              'cap_drop: [ALL]' 'security_opt: ["no-new-privileges:true"]'; do
+    if ! echo "$migrate_lines" | grep -qxF -- "$want"; then
+      echo "FAIL: migrate service lacks the line: $want" >&2
+      fail=1
+    fi
+  done
+  if echo "$migrate_lines" | grep -qE '^(healthcheck|ports|environment):'; then
+    echo "FAIL: migrate must have no healthcheck, ports or environment" >&2
+    fail=1
+  fi
+fi
 if grep -E '^\s*(ports:|container_name)|:latest' "$COMPOSE"; then
   echo "FAIL: compose has ports, container_name or :latest" >&2
   fail=1

@@ -178,18 +178,28 @@ t_usage_guards() {
   XENV="MOVE_SRC_HOST=db.example.invalid MOVE_SRC_SSLMODE=require PG_CLIENT_IMAGE=postgres:17"
   run_move --target "$DST_DB" --skip-migrate; assert "an unpinned client image with a remote source (exit 2)" rc_is 2
   assert "says pinned by digest" out_has "pinned by digest"
+  XENV="MOVE_SRC_HOST=db.example.invalid MOVE_SRC_SSLMODE=require PG_CLIENT_IMAGE=postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  run_move --target "$DST_DB" --worker-image mingming21400/stoktok-worker:v0.3.0; assert "an undigested worker image with a remote source (exit 2)" rc_is 2
+  assert "says --worker-image must be pinned by digest" out_has "--worker-image must be pinned by digest"
+  XENV="MOVE_SRC_HOST=db.example.invalid MOVE_SRC_SSLMODE=require PG_CLIENT_IMAGE=postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  run_move --target "$DST_DB" --worker-image mingming21400/stoktok-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000:x; assert "a worker image with text after the digest (exit 2)" rc_is 2
   printf '%s\n%s\n%s\n' '-----BEGIN CERTIFICATE-----' 'ZmlsbGVy' '-----END CERTIFICATE-----' > "$TMP/ca.pem"
   printf '%s\n' 'not a certificate' > "$TMP/bad.pem"
   XENV="MOVE_SRC_SSLROOTCERT=$TMP/ca.pem MOVE_SRC_SSLMODE=disable"
   run_move --target "$DST_DB" --skip-migrate; assert "a root cert with sslmode disable (exit 2)" rc_is 2
+  assert "says: needs MOVE_SRC_SSLMODE verify-ca or verify-full" out_has "needs MOVE_SRC_SSLMODE verify-ca or verify-full"
   XENV="MOVE_SRC_SSLMODE=verify-full"
   run_move --target "$DST_DB" --skip-migrate; assert "verify-full without a root cert (exit 2)" rc_is 2
+  assert "says: needs MOVE_SRC_SSLROOTCERT" out_has "needs MOVE_SRC_SSLROOTCERT"
   XENV="MOVE_SRC_SSLROOTCERT=$TMP/none.pem MOVE_SRC_SSLMODE=verify-full"
   run_move --target "$DST_DB" --skip-migrate; assert "a missing root cert file (exit 2)" rc_is 2
+  assert "says: is missing or unreadable" out_has "is missing or unreadable"
   XENV="MOVE_SRC_SSLROOTCERT=relative/ca.pem MOVE_SRC_SSLMODE=verify-full"
   run_move --target "$DST_DB" --skip-migrate; assert "a relative root cert path (exit 2)" rc_is 2
+  assert "says: must be an absolute path" out_has "must be an absolute path"
   XENV="MOVE_SRC_SSLROOTCERT=$TMP/bad.pem MOVE_SRC_SSLMODE=verify-full"
   run_move --target "$DST_DB" --skip-migrate; assert "a file without a PEM certificate (exit 2)" rc_is 2
+  assert "says: is not a PEM certificate" out_has "is not a PEM certificate"
   assert "no docker call for any guard" bash -c "[ ! -s '$LOG' ]"
 }
 
@@ -362,6 +372,12 @@ t_client_image_pin() {
   assert "no pin complaint" out_lacks "pinned by digest"
   assert "fails at preflight (the source host does not resolve)" out_has "FAILED at step: preflight"
   assert "the docker run used the digest image" bash -c "grep '^run ' '$LOG' | grep -qF '$digest'"
+  assert_no_leak
+  XENV="PG_CLIENT_IMAGE=$digest MOVE_SRC_HOST=db.example.invalid MOVE_SRC_SSLMODE=require"
+  run_move --target "$DST3_DB" --worker-image "$digest" --dry-run
+  assert "a digest-pinned worker image passes the S6 guard (exit 1, not 2)" rc_is 1
+  assert "no worker pin complaint" out_lacks "--worker-image must be pinned"
+  assert "fails at preflight" out_has "FAILED at step: preflight"
   assert_no_leak
 }
 

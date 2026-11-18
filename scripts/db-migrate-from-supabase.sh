@@ -5,6 +5,7 @@
 # Reference: docs/deploy.md "Data move script (STK-091)". Bash 3.2 compatible (macOS /bin/bash).
 # STK-096: a remote source needs PG_CLIENT_IMAGE pinned by digest (F4); MOVE_SRC_SSLROOTCERT (optional, F7) is
 # mounted read-only into the source legs only. Runbook: docs/deploy.md "Cutover runbook (STK-096)".
+# STK-094 (S6): a remote source also needs --worker-image pinned by digest (the image receives the target password).
 set -euo pipefail
 unset PGHOST PGHOSTADDR PGPORT PGSERVICE PGSERVICEFILE PGDATABASE PGUSER PGOPTIONS PGPASSWORD PGPASSFILE PGSSLMODE
 umask 077
@@ -102,6 +103,9 @@ esac
 SRC_LOCAL=0; case "$SRC_HOST" in localhost|127.0.0.1) SRC_LOCAL=1 ;; esac
 if [ "$SRC_LOCAL" = 0 ] && ! [[ "$PG_CLIENT_IMAGE" =~ ^[A-Za-z0-9._/:-]+@sha256:[0-9a-f]{64}$ ]]; then
   usage_err "PG_CLIENT_IMAGE must be pinned by digest (<repo>@sha256:<64 hex>) for a remote source; see docs/deploy.md Cutover runbook"
+fi
+if [ -n "$IMAGE" ] && [ "$SRC_LOCAL" = 0 ] && ! [[ "$IMAGE" =~ ^[A-Za-z0-9._/:-]+@sha256:[0-9a-f]{64}$ ]]; then
+  usage_err "--worker-image must be pinned by digest (<repo>[:tag]@sha256:<64 hex>) for a remote source: use STOKTOK_WORKER_IMAGE from the release PR's release.env"
 fi
 SRC_CERT="${MOVE_SRC_SSLROOTCERT:-}"
 if [ -n "$SRC_CERT" ]; then
@@ -356,6 +360,7 @@ DUMP="stoktok-supabase-$(date -u +%Y%m%d-%H%M%S).dump"
 src_dump -Fc --data-only --schema=public --no-owner --no-privileges --exclude-table=public.ai_keys --exclude-table=public.schema_migrations -f "/work/$DUMP"
 chmod 600 "$WORK/$DUMP"
 step "dump table of contents"
+PG_SSL_CUR="prefer"; PG_CERT_CUR=""
 toc="$(pg_run none pg_restore -l "/work/$DUMP" < /dev/null | awk '$4 == "TABLE" && $5 == "DATA" && $6 == "public" {print $7}' | LC_ALL=C sort)"
 if ! diff <(printf '%s\n' "$DATA_TABLES") <(printf '%s\n' "$toc") >&2; then
   fail "dump table list differs from the target tables (< target, > dump)"
