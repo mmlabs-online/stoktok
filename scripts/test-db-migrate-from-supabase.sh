@@ -378,7 +378,6 @@ t_client_image_pin() {
   assert "fails at preflight (the source host does not resolve)" out_has "FAILED at step: preflight"
   assert "the docker run used the digest image" bash -c "grep '^run ' '$LOG' | grep -qF '$digest'"
   assert_no_leak
-  wdigest="mingming21400/stoktok-worker:v0.3.0@sha256:0000000000000000000000000000000000000000000000000000000000000000"
   XENV="PG_CLIENT_IMAGE=$digest MOVE_SRC_HOST=db.example.invalid MOVE_SRC_SSLMODE=require"
   run_move --target "$DST3_DB" --worker-image "$wdigest" --dry-run
   assert "a digest-pinned worker image passes the S6 guard (exit 1, not 2)" rc_is 1

@@ -109,12 +109,18 @@ else
       fail=1
     fi
   done
-  # Allow-list: every top-level key of the migrate block (indent 4) must be one of these (no privileged, volumes, cap_add, ...).
-  bad_keys="$(echo "$migrate_block" | sed -n -E 's/^    ([A-Za-z_]+):.*/\1/p' | grep -vxE 'image|restart|profiles|env_file|cap_drop|security_opt|command|networks' || true)"
-  if [ -n "$bad_keys" ]; then
-    echo "FAIL: migrate has keys outside the allow-list (image restart profiles env_file cap_drop security_opt command networks): $(echo $bad_keys)" >&2
+  # Allow-list over every line: blank, comment, an allowed indent-4 key, or a indent-6 list item. Quoted keys, flow maps, re-indents fail.
+  bad_lines="$(echo "$migrate_block" | sed -n '2,$p' | grep -vE '^[[:space:]]*(#.*)?$' \
+    | grep -vE '^    (image|restart|profiles|env_file|cap_drop|security_opt|command|networks):( |$)' \
+    | grep -vE '^      - ' || true)"
+  if [ -n "$bad_lines" ]; then
+    echo "FAIL: migrate has lines outside the allow-list (keys: image restart profiles env_file cap_drop security_opt command networks): $bad_lines" >&2
     fail=1
   fi
+fi
+if grep -vE '^[[:space:]]*#' "$COMPOSE" | grep -E '<<[[:space:]]*:|(^|[[:space:]:,{[-])[&*][A-Za-z_]'; then
+  echo "FAIL: compose uses a YAML merge key, anchor or alias" >&2
+  fail=1
 fi
 if grep -E '^\s*(ports:|container_name)|:latest' "$COMPOSE"; then
   echo "FAIL: compose has ports, container_name or :latest" >&2

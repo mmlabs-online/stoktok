@@ -91,3 +91,26 @@ None.
 
 ### Scope self-check
 Only the listed findings were changed; no deployment repo, release, push or PR.
+
+## Attempt 3 (REWORK)
+
+### Files touched
+- `scripts/check-deploy-env.sh`: migrate block is now checked line by line (every line must be blank, a comment, an indent-4 `image|restart|profiles|env_file|cap_drop|security_opt|command|networks:` key, or an indent-6 list item); compose also fails on any `<<:` merge key or `&anchor`/`*alias`. Required because review/security Attempt 2 showed quoted keys, flow-style and re-indented keys bypassed the key allow-list.
+- `work/ming-todo.md`: stage 0 "open, not merged, and a draft"; stage 4 "mark ... ready (`gh pr ready`), then merge it".
+- `docs/deploy.md` "Cutover release (STK-094)": draft conversion moved to right after `release.yml` opens the PR (step 2, before the compose commit); step 5 says it stays a draft; fallback "Ming does it at stage 0.3" added; isDraft check at stage 0.3 unchanged.
+- `scripts/test-db-migrate-from-supabase.sh`: removed the duplicate `wdigest` assignment.
+
+### Mutation proofs (compose edited in place, restored after; each run of check-deploy-env.sh)
+- `"privileged": true`: FAIL (rc 1). `'cap_add': [SYS_ADMIN]`: FAIL. `privileged : true`: FAIL. `<<: *priv` + top-level `x-priv: &priv {...}`: FAIL. Block re-indented to 6 spaces: FAIL. Unchanged draft: OK (rc 0).
+
+### Checks
+- typecheck, lint, test: green (core 834, sources 35, ai 184, db 169, worker 310, web 360 passed). check:deploy-env OK. `bash -n` on both scripts clean. test:db/db:check not run: nothing under packages/ or db/ changed.
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+None new.
+
+### Scope self-check
+Only the four listed items; no release, push, deployment repo or PR.
