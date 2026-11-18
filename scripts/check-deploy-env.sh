@@ -342,65 +342,25 @@ if ! grep -qF 'launchctl bootstrap "$dom"' "$WF" || ! grep -qF 'dom="gui/$(id -u
   fail=1
 fi
 
-# STK-097: the deployment-side guard job is exactly the least-privilege PR job: pull_request_target on main only,
-# read-only token, no secrets or environment, nothing credentialed, one run line (the checker from main, on the PR's file).
+# STK-097: the deployment-side guard job is pinned as a whole: the sha256 of stoktok-guards.yml must equal the committed
+# value below (pull_request_target on main only, read-only token, no secrets or environment, nothing credentialed, one run
+# line). Any edit, however small, fails until the file and the hash are updated together. To update after a deliberate change:
+#   shasum -a 256 deploy/deployment-repo/.github/workflows/stoktok-guards.yml   (macOS; sha256sum on Linux)
+# paste the hash into GUARDS_SHA256 and copy the file verbatim to the deployment repo in the same PR.
 # STK097_GUARDS_WF lets scripts/test-deploy-guards.sh point this check at a mutated copy.
+GUARDS_SHA256="da5f972e00d975ae73db72fa5901be4b4c11d708b24cfae364316d9ee282dc08"
 GUARDS_WF="${STK097_GUARDS_WF:-$DRAFTS/.github/workflows/stoktok-guards.yml}"
 if [ ! -f "$GUARDS_WF" ]; then
   echo "FAIL: missing stoktok-guards.yml draft" >&2
   fail=1
 else
-  g_nc="$(grep -vE '^[[:space:]]*#' "$GUARDS_WF" || true)"
-  g_block() { echo "$g_nc" | awk -v k="$1" '$0 == k { o = 1; print; next } o && /^[^[:space:]]/ { o = 0 } o && NF { print }'; }
-  if [ "$(g_block 'on:')" != "$(printf '%s\n' 'on:' '  pull_request_target:' '    branches: [main]')" ]; then
-    echo "FAIL: stoktok-guards.yml on: must be exactly pull_request_target with branches [main]" >&2
-    fail=1
+  if command -v shasum >/dev/null 2>&1; then
+    g_sum="$(shasum -a 256 "$GUARDS_WF" | cut -d' ' -f1)"
+  else
+    g_sum="$(sha256sum "$GUARDS_WF" | cut -d' ' -f1)"
   fi
-  if [ "$(g_block 'permissions:')" != "$(printf '%s\n' 'permissions:' '  contents: read')" ]; then
-    echo "FAIL: stoktok-guards.yml permissions must be exactly contents: read" >&2
-    fail=1
-  fi
-  if [ "$(echo "$g_nc" | grep -cE '^[[:space:]]+persist-credentials: false[[:space:]]*$')" -ne 2 ] \
-     || [ "$(echo "$g_nc" | grep -c 'persist-credentials')" -ne 2 ]; then
-    echo "FAIL: stoktok-guards.yml needs persist-credentials: false on both checkouts" >&2
-    fail=1
-  fi
-  if [ "$(echo "$g_nc" | grep -cxF '          ref: refs/pull/${{ github.event.pull_request.number }}/merge')" -ne 1 ] \
-     || ! echo "$g_nc" | grep -qxF '          path: pr'; then
-    echo "FAIL: stoktok-guards.yml must check out refs/pull/<n>/merge into path: pr" >&2
-    fail=1
-  fi
-  if [ "$(echo "$g_nc" | grep -cE '^[[:space:]]+uses: actions/checkout@v7[[:space:]]*$')" -ne 2 ] || [ "$(echo "$g_nc" | grep -c 'uses:')" -ne 2 ]; then
-    echo "FAIL: stoktok-guards.yml must use only the two actions/checkout@v7 steps" >&2
-    fail=1
-  fi
-  if echo "$g_nc" | grep -qE 'secrets\.|environment:'; then
-    echo "FAIL: stoktok-guards.yml must not use secrets or an environment" >&2
-    fail=1
-  fi
-  # The checker must come from main: the only ref: is the merge ref; no job-level permissions or env; no token; sparse checkout kept.
-  if [ "$(echo "$g_nc" | grep -cE '^[[:space:]]+ref:')" -ne 1 ] || [ "$(echo "$g_nc" | grep -c 'permissions:')" -ne 1 ] \
-     || [ "$(echo "$g_nc" | grep -c '^permissions:')" -ne 1 ] || echo "$g_nc" | grep -qiE 'github\.token|GITHUB_TOKEN' \
-     || [ "$(echo "$g_nc" | grep -cxF '          sparse-checkout: .github/workflows/deploy-stoktok.yml')" -ne 1 ] \
-     || [ "$(echo "$g_nc" | grep -c 'sparse-checkout:')" -ne 1 ] \
-     || [ "$(echo "$g_nc" | grep -cxF '          sparse-checkout-cone-mode: false')" -ne 1 ] \
-     || [ "$(echo "$g_nc" | grep -c 'sparse-checkout-cone-mode:')" -ne 1 ]; then
-    echo "FAIL: stoktok-guards.yml: one ref (the merge ref), one top-level permissions, no token, sparse-checkout and cone-mode false once each" >&2
-    fail=1
-  fi
-  # The only env: is the HEAD_SHA mapping of the check step (the merge commit is verified against it).
-  if [ "$(echo "$g_nc" | grep -c 'env:')" -ne 1 ] || [ "$(echo "$g_nc" | grep -cxF '        env:')" -ne 1 ] \
-     || [ "$(echo "$g_nc" | grep -cE '^ +[A-Z_]+: ')" -ne 1 ] \
-     || [ "$(echo "$g_nc" | grep -cxF '          HEAD_SHA: ${{ github.event.pull_request.head.sha }}')" -ne 1 ]; then
-    echo "FAIL: stoktok-guards.yml must have exactly one env: (step level, HEAD_SHA from the pull request head)" >&2
-    fail=1
-  fi
-  g_run="$(echo "$g_nc" | awk '$0 == "        run: |" { o = 1; print; next } o && /^          / { print; next } { o = 0 }')"
-  g_want="$(printf '%s\n' '        run: |' \
-    '          git -C pr cat-file -p HEAD | grep -qxF "parent $HEAD_SHA" || { echo "merge ref is not current for head $HEAD_SHA; re-run" >&2; exit 1; }' \
-    '          bash ops/check-stoktok-workflow.sh pr/.github/workflows/deploy-stoktok.yml')"
-  if [ "$(echo "$g_nc" | grep -c 'run:')" -ne 1 ] || [ "$g_run" != "$g_want" ]; then
-    echo "FAIL: stoktok-guards.yml must have exactly one run: (verify the merge commit parent, then the checker on pr/.github/workflows/deploy-stoktok.yml)" >&2
+  if [ "$g_sum" != "$GUARDS_SHA256" ]; then
+    echo "FAIL: stoktok-guards.yml differs from the pinned copy (sha256 $g_sum, expected $GUARDS_SHA256); see the update note above GUARDS_SHA256" >&2
     fail=1
   fi
 fi

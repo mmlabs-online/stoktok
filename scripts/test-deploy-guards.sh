@@ -149,6 +149,8 @@ fresh; ins_end deploy 'set -euo pipefail'; expect 0 C3-set-with-options
 fresh; ins_end secrets 'echo "::warning::x"; set'; expect 1 P1-no-line-starts-with-colons
 
 # CR / Unicode line breaks: rejected up front (they hide lines from grep but not from YAML or bash), nothing printed from the file
+fresh; ins_end deploy 'run: "true\nset"'; expect 1 M44-quoted-run
+fresh; ins_end deploy 'run: true'; expect 1 M45-plain-oneline-run
 fresh; ins_end deploy "$(printf 'echo hi\r          set')"; expect 1 M40-cr-hides-bare-set
 fresh; ins_end deploy "$(printf 'set | true\r::error::x')"; expect 1 P2-cr-forged-command
 fresh; ins_end deploy "$(printf 'echo hi\302\205          set')"; expect 1 M41-nel
@@ -176,6 +178,13 @@ if [ "${STK097_SKIP_CROSSFILE:-0}" != 1 ]; then
   cp "$GUARDS" "$cur"; del 'sparse-checkout: .github/workflows/deploy-stoktok.yml' 2; gcase 1 G8-sparse-checkout-removed
   cp "$GUARDS" "$cur"; del 'HEAD_SHA: ${{ github.event.pull_request.head.sha }}'; gcase 1 G9-head-sha-env-removed
   cp "$GUARDS" "$cur"; del 'git -C pr cat-file -p HEAD | grep -qxF "parent $HEAD_SHA" || { echo "merge ref is not current for head $HEAD_SHA; re-run" >&2; exit 1; }'; gcase 1 G10-parent-check-removed
+  cp "$GUARDS" "$cur"; ins_after 'persist-credentials: false' '"ref": ${{ github.event.pull_request.head.sha }}'; gcase 1 G11-quoted-ref
+  cp "$GUARDS" "$cur"; ins_after 'path: pr' "X: \${{ github['token'] }}"; gcase 1 G12-github-token-bracket
+  cp "$GUARDS" "$cur"; ins_after 'timeout-minutes: 5' 'continue-on-error: true'; gcase 1 G13-continue-on-error
+  cp "$GUARDS" "$cur"; ins_after 'path: pr' "if: always()"; gcase 1 G14-if
+  cp "$GUARDS" "$cur"; ins_after 'timeout-minutes: 5' 'defaults: { run: { shell: sh } }'; gcase 1 G15-shell
+  cp "$GUARDS" "$cur"; ins_after 'path: pr' 'working-directory: pr'; gcase 1 G16-working-directory
+  cp "$GUARDS" "$cur"; ins_after 'path: pr' 'repository: someone/else'; gcase 1 G17-repository
   cur="$W/c/.github/workflows/deploy-stoktok.yml"
 fi
 

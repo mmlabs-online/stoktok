@@ -218,6 +218,9 @@ if [ "$(grep -cE '^      - name: secrets[[:space:]]*$' "$WF")" -ne 1 ] || [ "$(g
    || [ "$(grep -nE '^      - name: secrets[[:space:]]*$' "$WF" | cut -d: -f1)" -ge "$(grep -nE '^      - name: pull[[:space:]]*$' "$WF" | cut -d: -f1)" ]; then
   bad "exactly one '- name: secrets' step, followed by exactly one '- name: pull' step, is required"
 fi
+# STK-097: every `run:` is a plain `|` block scalar: a quoted or one-line run (`run: "true\nset"`) hides code from the line checks.
+{ echo "$wf_nc" | grep -E '(^|[[:space:]-])run[[:space:]]*:' | grep -vE '^[[:space:]]+run: \|[[:space:]]*$' || true; } \
+  | flag "every run: must be a '|' block scalar (no quoted or one-line run:)" || fail=1
 # STK-097: every printf key except the derived database URL has a format guard, a whole line
 # `if ! [[ "$KEY" =~ ... ]]; then` with `exit 1` within 4 lines, before mktemp (name-independent: no key list here).
 for k in $(echo "$printf_line" | grep -oE '[A-Z][A-Z0-9_]*=%s' | sed 's/=%s//' | grep -vx STOKTOK_DATABASE_URL || true); do

@@ -34,7 +34,7 @@ jobs:
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
-      # refs/pull/<n>/merge is recomputed asynchronously: judge the file only if the merge commit's second parent is
+      # refs/pull/<n>/merge is recomputed asynchronously: judge the file only if the merge commit has a `parent` line naming
       # the head this run was triggered for, so the status never lands on content the check did not read.
       - name: check
         env:

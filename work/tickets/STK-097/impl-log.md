@@ -15,7 +15,7 @@ stoktok repo, commit 1 `8ed5663` (pure move, `pnpm check:deploy-env` OK before a
 | `docs/deploy.md` | guards subsection; 🟡7 / fail-closed note; step 6 "repeat steps 2-5"; stage 0.3 `gh pr ready --undo` |
 | `work/ming-todo.md` | line 39 wording; STK-097 Ming items |
 
-deployment repo (`/home/user/deployment`), branch `stoktok/stk-097-workflow-guards` from fetched origin/main `563d1e2`, commit `0428c97`, branch pushed at 0428c97; PR not yet opened. Exactly 3 files, each `cmp`-equal to the stoktok draft: `.github/workflows/deploy-stoktok.yml`, `.github/workflows/stoktok-guards.yml`, `ops/check-stoktok-workflow.sh`. Nothing under `apps/`. Created through a temporary worktree (removed), so the checked-out branch `stoktok/expand-shared-postgres` was not touched.
+deployment repo (`/home/user/deployment`), branch `stoktok/stk-097-workflow-guards` from fetched origin/main `563d1e2`, commit `0428c97`, deployment branch pushed at 02dec4d; PR not yet opened. Exactly 3 files, each `cmp`-equal to the stoktok draft: `.github/workflows/deploy-stoktok.yml`, `.github/workflows/stoktok-guards.yml`, `ops/check-stoktok-workflow.sh`. Nothing under `apps/`. Created through a temporary worktree (removed), so the checked-out branch `stoktok/expand-shared-postgres` was not touched.
 
 Pre-edit parity: `git fetch --depth=50 origin main`, then `git show origin/main:.github/workflows/deploy-stoktok.yml | cmp - <stoktok draft at 233b075>` was silent (byte-equal). No drift.
 
@@ -90,3 +90,29 @@ None.
 
 ### Scope self-check
 Only the listed review/security items were changed.
+
+## Attempt 3 - 2026-11-18 (REWORK: Ming's note after attempt 2 PASS)
+
+### Files touched
+| File | Required because |
+|---|---|
+| `scripts/check-deploy-env.sh` | Item 1: key-by-key pins on `stoktok-guards.yml` replaced by a whole-file sha256 (`GUARDS_SHA256`, `shasum -a 256` with `sha256sum` fallback; update steps in the comment above it) |
+| `scripts/test-deploy-guards.sh` | Mutation cases G11 (quoted `"ref":`), G12 (`github['token']`), G13 (`continue-on-error`), G14 (`if:`), G15 (`shell:`), G16 (`working-directory:`), G17 (`repository:`), M44/M45 (quoted / plain one-line `run:`); G0 (real file) passes |
+| `deploy/deployment-repo/ops/check-stoktok-workflow.sh` | Item 2: every `run:` must be a `|` block scalar (all 12 in the live workflow already are) |
+| `deploy/deployment-repo/.github/workflows/stoktok-guards.yml` | Item 3: comment says "a `parent` line" (hash updated to match) |
+| `deploy/deployment-repo/README.md` | Item 3: "a `parent` line"; adds "Require branches to be up to date before merging" |
+| `work/tickets/STK-097/impl-log.md` | this log; push status corrected (deployment branch pushed at 02dec4d; PR not yet opened) |
+
+Deployment branch: checker and `stoktok-guards.yml` re-copied byte for byte via a temporary worktree (hash in the final report; not pushed).
+
+### Checks
+typecheck, lint, test, `pnpm check:deploy-env` (all G/M/B cases ok, `OK: deploy guard mutation proofs`), `bash -n` on the three scripts: exit 0. bash 3.2 not run locally.
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+Hash-pinning means any edit to `stoktok-guards.yml` needs the hash updated in the same PR (documented).
+
+### Scope self-check
+Only Ming's three items.
