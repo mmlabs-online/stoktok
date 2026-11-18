@@ -55,6 +55,13 @@ jobs:
         env:
           MOVE_TEST_URL: postgresql://postgres:postgres@localhost:5432/postgres
 
+  # STK-097: the deployment-repo guard checker runs on the Mac runner's macOS /bin/bash 3.2 and BSD tools.
+  deploy-guards-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: env PATH=/usr/bin:/bin:/usr/sbin:/sbin STK097_SKIP_CROSSFILE=1 /bin/bash scripts/test-deploy-guards.sh
+
   images:
     needs: ci
     runs-on: ubuntu-latest

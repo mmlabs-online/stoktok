@@ -342,5 +342,48 @@ if ! grep -qF 'launchctl bootstrap "$dom"' "$WF" || ! grep -qF 'dom="gui/$(id -u
   fail=1
 fi
 
+# STK-097: the deployment-side guard job is exactly the least-privilege PR job: pull_request_target on main only,
+# read-only token, no secrets or environment, nothing credentialed, one run line (the checker from main, on the PR's file).
+# STK097_GUARDS_WF lets scripts/test-deploy-guards.sh point this check at a mutated copy.
+GUARDS_WF="${STK097_GUARDS_WF:-$DRAFTS/.github/workflows/stoktok-guards.yml}"
+if [ ! -f "$GUARDS_WF" ]; then
+  echo "FAIL: missing stoktok-guards.yml draft" >&2
+  fail=1
+else
+  g_nc="$(grep -vE '^[[:space:]]*#' "$GUARDS_WF" || true)"
+  g_block() { echo "$g_nc" | awk -v k="$1" '$0 == k { o = 1; print; next } o && /^[^[:space:]]/ { o = 0 } o && NF { print }'; }
+  if [ "$(g_block 'on:')" != "$(printf '%s\n' 'on:' '  pull_request_target:' '    branches: [main]')" ]; then
+    echo "FAIL: stoktok-guards.yml on: must be exactly pull_request_target with branches [main]" >&2
+    fail=1
+  fi
+  if [ "$(g_block 'permissions:')" != "$(printf '%s\n' 'permissions:' '  contents: read')" ]; then
+    echo "FAIL: stoktok-guards.yml permissions must be exactly contents: read" >&2
+    fail=1
+  fi
+  if [ "$(echo "$g_nc" | grep -cE '^[[:space:]]+persist-credentials: false[[:space:]]*$')" -ne 2 ] \
+     || [ "$(echo "$g_nc" | grep -c 'persist-credentials')" -ne 2 ]; then
+    echo "FAIL: stoktok-guards.yml needs persist-credentials: false on both checkouts" >&2
+    fail=1
+  fi
+  if [ "$(echo "$g_nc" | grep -cxF '          ref: refs/pull/${{ github.event.pull_request.number }}/merge')" -ne 1 ] \
+     || ! echo "$g_nc" | grep -qxF '          path: pr'; then
+    echo "FAIL: stoktok-guards.yml must check out refs/pull/<n>/merge into path: pr" >&2
+    fail=1
+  fi
+  if [ "$(echo "$g_nc" | grep -cE '^[[:space:]]+uses: actions/checkout@v7[[:space:]]*$')" -ne 2 ] || [ "$(echo "$g_nc" | grep -c 'uses:')" -ne 2 ]; then
+    echo "FAIL: stoktok-guards.yml must use only the two actions/checkout@v7 steps" >&2
+    fail=1
+  fi
+  if echo "$g_nc" | grep -qE 'secrets\.|environment:'; then
+    echo "FAIL: stoktok-guards.yml must not use secrets or an environment" >&2
+    fail=1
+  fi
+  if [ "$(echo "$g_nc" | grep -c 'run:')" -ne 1 ] \
+     || ! echo "$g_nc" | grep -qxF '        run: bash ops/check-stoktok-workflow.sh pr/.github/workflows/deploy-stoktok.yml'; then
+    echo "FAIL: stoktok-guards.yml must have exactly one run: bash ops/check-stoktok-workflow.sh pr/.github/workflows/deploy-stoktok.yml" >&2
+    fail=1
+  fi
+fi
+
 if [ "$fail" -ne 0 ]; then exit 1; fi
 echo "OK: deploy env lists consistent"

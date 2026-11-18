@@ -2,7 +2,8 @@ name: deploy-stoktok
 
 # Same flow as deploy-recordin.yml. A merge to main that touches apps/stoktok/ deploys stoktok, and
 # only stoktok, on the Mac's self-hosted runner (macbook-runner): pull the images pinned in
-# release.env, start the web service, wait for its health check (/healthz). If it is not healthy,
+# release.env, start the web service, wait for its health check (/healthz on the expand compose, /readyz from the cutover
+# compose, STK-094). If it is not healthy,
 # restore apps/stoktok/ as it was before the push, redeploy that, and push the revert. A restored
 # deploy is still a red run. After a healthy deploy, compose.yml, release.env and the job scripts
 # are copied to a stable directory that the launchd jobs read, never the runner's _work checkout.
@@ -25,6 +26,9 @@ name: deploy-stoktok
 # SUPABASE_SERVICE_ROLE_KEY / AUTHEN_SUPABASE_URL / AUTHEN_SUPABASE_ANON_KEY, the names the app reads,
 # on every run. Optional STOKTOK_ANTHROPIC_API_KEY and STOKTOK_GOOGLE_AI_API_KEY (STK-072) are written as
 # ANTHROPIC_API_KEY / GOOGLE_AI_API_KEY; unset means empty (provider off). Values are never printed.
+#
+# STK-097: the `pull` step fails closed (a compose config error stops the run; it never reads as "no migrate service"),
+# and the `stoktok-guards` job in this repo runs ops/check-stoktok-workflow.sh on this file in every pull request.
 #
 # A restore never touches the database, so every migration must stay compatible with the previous
 # release's images (expand, then contract).
@@ -175,6 +179,9 @@ jobs:
         run: |
           umask 077
           [[ "$ENV_FILE" == "$HOME/"* ]] || { echo "::error::ENV_FILE $ENV_FILE is not under the runner user's home $HOME ($(id -un)). Nothing was started; $ENV_FILE was not changed."; exit 1; }
+          # STK-097: a hard-killed run skips the EXIT trap; runs never overlap (concurrency group), so any temp file here is stale.
+          dir="$(dirname "$ENV_FILE")"
+          rm -f "$dir"/.stoktok.env.??????
           missing=""
           [ -n "$SUPABASE_URL" ] || missing="$missing STOKTOK_SUPABASE_URL"
           [ -n "$SUPABASE_SERVICE_ROLE_KEY" ] || missing="$missing STOKTOK_SUPABASE_SERVICE_ROLE_KEY"
@@ -223,7 +230,6 @@ jobs:
             exit 1
           fi
           STOKTOK_DATABASE_URL="postgres://$DB_APP:$pw@postgres:5432/$DB_APP"
-          dir="$(dirname "$ENV_FILE")"
           mkdir -p "$dir"
           chmod 700 "$dir"
           tmp="$(mktemp "$dir/.stoktok.env.XXXXXX")"
@@ -249,7 +255,13 @@ jobs:
           compose=(docker compose -p "$PROJECT" -f "$APP_DIR/compose.yml" --env-file "$APP_DIR/release.env")
           "${compose[@]}" --profile jobs --profile migrate config --quiet
           "${compose[@]}" --profile jobs --profile migrate pull
-          if "${compose[@]}" --profile migrate config --services | grep -qx migrate; then
+          # STK-097: fail closed: a config error stops the run instead of reading as "no migrate service".
+          services="$("${compose[@]}" --profile migrate config --services)"
+          if ! printf '%s\n' "$services" | grep -qx stoktok-web; then
+            echo "::error::compose config --services did not list stoktok-web; cannot tell whether $APP_DIR/compose.yml has a migrate service. Nothing was started."
+            exit 1
+          fi
+          if printf '%s\n' "$services" | grep -qx migrate; then
             echo "migrate=true" >> "$GITHUB_OUTPUT"
           else
             echo "migrate=false" >> "$GITHUB_OUTPUT"
