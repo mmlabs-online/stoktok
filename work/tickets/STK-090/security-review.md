@@ -73,3 +73,62 @@ Files reviewed:
 - /home/user/stoktok/scripts/db-check.sh
 - /home/user/stoktok/db/migrations/README.md
 - /home/user/stoktok/docs/adr/0010-self-hosted-postgres-data-layer.md
+
+## Attempt 2
+
+**Verdict: 🟡1 is closed, and attempt 2 adds no new 🔴 or 🟡 findings.** I only read the code. I did not run any checks, so the green results (test:db 154/154, db:check OK, typecheck, lint, test) come from impl-log "Attempt 2".
+
+### Findings
+
+**🟡1 (settings stored on the role): closed**
+- **The fix:** `packages/db/test-db/owner.ts:42` runs `alter role stoktok_test_owner reset all`.
+  - It runs on both the create and the alter path.
+  - It sits inside the same `begin` … `commit` after the advisory lock (`owner.ts:36-48`).
+  - If the membership check refuses the role, the reset is rolled back along with the `alter`. That is still safe: setup exits 1 and nothing runs as the role.
+  - The statement contains no interpolated input. `TEST_OWNER_ROLE` is a module constant (`owner.ts:10`).
+- **Real-Postgres proof:** `packages/db/test-db/owner.test.ts:106-109`.
+  - It stores `work_mem` on the role, runs `ensureOwnerRole`, and asserts `pg_roles.rolconfig` is null.
+  - The `finally` at `owner.test.ts:117-119` repairs the role even if an assertion fails part-way. A failed run cannot leave `createdb` or a stored setting behind.
+- **Fake-client proof:** `packages/db/src/test-db-guard.test.ts:115` checks the exact statement order on the create path (reset after create, before the membership check, before commit). `:125` checks the reset is present on the alter path. The rejects-bad-password test (`:98-104`) still shows that no query runs for an invalid password.
+
+**The admin-database connection is gone (reviewer blocker; checked here for security)**
+- `asOwner(ADMIN)` is no longer used in `owner.test.ts`. The password check now connects as the owner only to a `freshDb()` clone (`owner.test.ts:110-116`).
+- That clone runs as the owner (proved at `owner.test.ts:31-45`) and is dropped in its own `finally`. The owner role never logs in to `postgres`.
+
+**No new issues**
+- No new SQL takes input from outside.
+- Nothing new is logged. No error message contains a URL or a password.
+- No `drop role` was added.
+- R3 is unaffected: no new env reads, and `STOKTOK_DATABASE_URL` is not touched.
+- The fake client's `startsWith('create role')` branch does not match `alter role … reset all`, so the 42710/23505 retry tests still exercise the intended path (`test-db-guard.test.ts:130-146`).
+
+**Residual note (informational, not a finding)**
+- `reset all` without `in database` clears only the role's own settings (the ones `rolconfig` shows).
+- Two kinds of setting still apply to the owner:
+  - `alter role all set …`, which applies to every role.
+  - `alter role stoktok_test_owner in database <db> set …`.
+- The per-database kind cannot reach test databases in practice. They are created fresh with names built from the process ID, and Postgres deletes a database's role settings when the database is dropped.
+- Neither path gives the owner more rights; at worst it affects how reliable the tests are. If you want to close it fully, check `pg_db_role_setting` for `setrole in (0, owner oid)` in the fail-closed check, or document it. Follow-up only (R7).
+
+**Still open (deferred by the orchestrator, unchanged by this attempt)**
+- 🟡2: the derived password appears in plaintext SQL and can land in the server log (`owner.ts:40-41`).
+- 🟡3: a permanent login role is left on any cluster reachable at localhost (`global-setup.ts:67`).
+- 🟡4: the membership test can leak a role (`owner.test.ts:125-128`; `create role` still runs outside the `try`), and direct function grants to the owner are not detected.
+
+### Recommendations
+- **Ticket "tampered role" criterion and plan criterion 4:** met for stored role settings. No further change needed in this diff.
+- **R7:** add the residual note above to the follow-ups list next to 🟡2–🟡4. It should not go into this diff.
+- **R8:** the negative proof planned in step 6 is still listed as not done in attempt 1. Attempt 2 does not mention it, so the reviewer should either have it run or accept the gap explicitly.
+
+### Risks
+- Unchanged from attempt 1: running against a non-test cluster depends only on the localhost check (🟡3), and the derived password can show up in server logs when a statement errors (🟡2, accepted in plan A4).
+
+### Open questions
+- None new. Still open from attempt 1: when the admin URL has no password, refuse it or give the owner a random password?
+
+Files reviewed:
+- /home/user/stoktok/packages/db/test-db/owner.ts
+- /home/user/stoktok/packages/db/test-db/owner.test.ts
+- /home/user/stoktok/packages/db/src/test-db-guard.test.ts
+- /home/user/stoktok/work/tickets/STK-090/impl-log.md
+- /home/user/stoktok/work/tickets/STK-090/security-review.md
