@@ -15,7 +15,7 @@ stoktok repo, commit 1 `8ed5663` (pure move, `pnpm check:deploy-env` OK before a
 | `docs/deploy.md` | guards subsection; 🟡7 / fail-closed note; step 6 "repeat steps 2-5"; stage 0.3 `gh pr ready --undo` |
 | `work/ming-todo.md` | line 39 wording; STK-097 Ming items |
 
-deployment repo (`/home/user/deployment`), branch `stoktok/stk-097-workflow-guards` from fetched origin/main `563d1e2`, commit `0428c97`, NOT pushed, no PR opened (no push allowed in this run). Exactly 3 files, each `cmp`-equal to the stoktok draft: `.github/workflows/deploy-stoktok.yml`, `.github/workflows/stoktok-guards.yml`, `ops/check-stoktok-workflow.sh`. Nothing under `apps/`. Created through a temporary worktree (removed), so the checked-out branch `stoktok/expand-shared-postgres` was not touched.
+deployment repo (`/home/user/deployment`), branch `stoktok/stk-097-workflow-guards` from fetched origin/main `563d1e2`, commit `0428c97`, branch pushed at 0428c97; PR not yet opened. Exactly 3 files, each `cmp`-equal to the stoktok draft: `.github/workflows/deploy-stoktok.yml`, `.github/workflows/stoktok-guards.yml`, `ops/check-stoktok-workflow.sh`. Nothing under `apps/`. Created through a temporary worktree (removed), so the checked-out branch `stoktok/expand-shared-postgres` was not touched.
 
 Pre-edit parity: `git fetch --depth=50 origin main`, then `git show origin/main:.github/workflows/deploy-stoktok.yml | cmp - <stoktok draft at 233b075>` was silent (byte-equal). No drift.
 
@@ -42,7 +42,7 @@ None.
 - The cross-file part of `check-deploy-env.sh` still uses `\s` and GNU-isms, so G0-G4 are Linux-only.
 - Deny-list is a tripwire; `xargs cat`, `eval`, SHELLOPTS/BASH_ENV are not covered (as in the plan).
 - Optional worker-image `/app/migrations` refusal and runtime self-check step (plan follow-ups).
-- A deployment PR could not be opened (no push); push the branch and open it with the body below.
+- The deployment PR is opened by the orchestrator with the body below.
 
 ### Deployment PR body (title: `stoktok: workflow guards and fail-closed migrate detection (STK-097)`)
 > Part of STK-097 (stoktok repo). Three files, nothing under `apps/`, so merging deploys nothing; all three are byte-equal to the drafts in `deploy/deployment-repo/` of mmlabs-online/stoktok.
@@ -58,3 +58,35 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No; the 330 moved lines are mechanical, and the plan itself noted the size.
 - Diff size (stoktok, 233b075..HEAD before this log): +617 / -173 across 10 files; deployment: +314 / -3 across 3 files.
+
+## Attempt 2 — 2026-11-18 (REWORK: review Issues 1-2, security 🟡1, 🟡2, 🟡4)
+
+### Files touched
+| File | Required because |
+|---|---|
+| `deploy/deployment-repo/ops/check-stoktok-workflow.sh` | Issue 1 / 🟡2: reject CR, NEL, U+2028, U+2029 up front (byte sequences, `LC_ALL=C grep -F`, nothing printed from the file); `show()` strips CR; all output sits between `::stop-commands::<per-run token>` and `::<token>::` (stderr, same pipe as FAIL lines; token from `od` on /dev/urandom) |
+| `deploy/deployment-repo/.github/workflows/stoktok-guards.yml` | 🟡1: `check` step gets `HEAD_SHA` env and fails unless `git -C pr cat-file -p HEAD` has `parent $HEAD_SHA` |
+| `scripts/check-deploy-env.sh` | Issue 2 pins: one `ref:`, one top-level `permissions:`, no github.token/GITHUB_TOKEN, sparse-checkout + cone-mode once each, only env is step-level HEAD_SHA, run block exact (parent check + checker) |
+| `scripts/test-deploy-guards.sh` | cases M40-M43, P2, P3, G5-G10; `check_rc` now splits on CR and allows only the stop-commands pair as `::` lines |
+| `deploy/deployment-repo/README.md` | 🟡4: checker protected only by CODEOWNERS / code-owner review on deployment main; stale-merge-ref and CR notes |
+| `work/tickets/STK-097/impl-log.md` | this log |
+
+Deployment branch `stoktok/stk-097-workflow-guards`: checker, `stoktok-guards.yml` re-copied byte for byte (README is stoktok-side only), new commit via temporary worktree (hash in the final report; push status: not pushed, branch on origin still 0428c97).
+
+### Tests added
+M40 (CR hides bare `set`), P2 (CR-forged `::error::`), M41-M43 (NEL, U+2028, U+2029), P3 (rejected line not printed), G5 (second `ref:`), G6 (job permissions), G7 (job env/token), G8 (sparse-checkout removed), G9 (HEAD_SHA env removed), G10 (parent check removed). 78 `ok` lines in total.
+
+### Checks
+- typecheck, lint, test (web 360, worker 310, db 169, ai 184 passed), `pnpm check:deploy-env` (`OK: deploy env lists consistent`, `OK: deploy guard mutation proofs`): all exit 0.
+- `bash -n` on scripts and ops: clean. No `pnpm format` script exists. Portability: no `grep -P`, GNU sed flags; CR/NEL/LS/PS via `printf` octal + `LC_ALL=C grep -F`. bash 3.2 not run locally (CI job `deploy-guards-macos` is the proof).
+- No secret printed or committed.
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+- Security 🟡3: SHA-pin `actions/checkout` repo-wide (pin regex then accepts `@<40-hex>`).
+- Deployment PR still to open (Issue 3, orchestrator).
+
+### Scope self-check
+Only the listed review/security items were changed.

@@ -4,8 +4,8 @@
 # Usage: bash ops/check-stoktok-workflow.sh <workflow-file>      exit 0 = OK, 1 = FAIL, 2 = usage.
 # Source of truth: stoktok repo, deploy/deployment-repo/ops/check-stoktok-workflow.sh (STK-097). Copy it verbatim; do not edit here.
 # Portable: runs on macOS /bin/bash 3.2 with BSD grep, sed and awk (the self-hosted macbook-runner). No \s \w \b, no grep -P,
-# no sed -i, no mapfile, no awk intervals {n}. Workflow text that is printed goes through show(), so no printed line can
-# start with `::` and be read as a workflow command.
+# no sed -i, no mapfile, no awk intervals {n}. Workflow text that is printed goes through show() (CR stripped, prefixed) and
+# between ::stop-commands:: and its per-run token, so it cannot become a workflow command.
 set -euo pipefail
 
 if [ "$#" -ne 1 ]; then
@@ -20,7 +20,22 @@ if [ ! -f "$WF" ] || [ -L "$WF" ] || [ -L "$wf_dir" ] || [ -L "$(dirname "$wf_di
 fi
 fail=0
 
-show() { sed 's/^/  | /'; }
+# YAML parsers (and bash for CR) treat CR, NEL, U+2028 and U+2029 as line breaks, grep does not: such a file could hide a line
+# from every line-based check below, and a CR in printed text would start a new line in the runner's log. Reject up front,
+# printing nothing from the file.
+for lb in '\r' '\302\205' '\342\200\250' '\342\200\251'; do
+  if LC_ALL=C grep -qF "$(printf "$lb")" "$WF"; then
+    echo "FAIL: workflow contains a carriage return or a Unicode line break" >&2
+    exit 1
+  fi
+done
+
+# Text from the PR's file is printed only between stop-commands and its per-run token (unknowable to the PR author).
+tok="stk$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
+echo "::stop-commands::$tok" >&2
+trap 'echo "::$tok::" >&2' EXIT
+
+show() { tr -d '\r' | sed 's/^/  | /'; }
 # flag <message>: stdin is the offending lines; prints them (prefixed) under the message and returns 1 if there are any.
 flag() {
   local out

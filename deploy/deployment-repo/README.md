@@ -46,5 +46,11 @@ edit could print them. The control:
   `cmp` of the cutover runbook. Deleting `deploy-stoktok.yml` makes the check fail.
 - **Tripwire, not a complete control:** the deny list catches accidental leaks, not a determined edit. The password
   file is readable by everyone with read access to the deployment repo.
+- **The checker itself** is judged by `main`'s copy (`pull_request_target`), so a pull request that weakens
+  `ops/check-stoktok-workflow.sh` passes its own check. It is protected only by CODEOWNERS (`/ops/`, `/.github/`)
+  and code-owner review on deployment `main`; that needs branch protection with "Require review from Code Owners".
+  The job also refuses a stale merge ref (the merge commit's second parent must be the PR head it ran for), and the
+  file is rejected up front if it holds a CR or a Unicode line break; printed text sits between `::stop-commands::`
+  and a per-run token.
 - **Updating it:** edit the drafts in the stoktok repo (checker and workflow together), then copy them verbatim in
   a setup PR. The check is advisory until Ming makes `stoktok-guards / check` a required status check.

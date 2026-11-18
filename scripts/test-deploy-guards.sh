@@ -52,8 +52,9 @@ check_rc() { # <want> <id> <rc> <out-file>
   if [ "$rc" -ne "$want" ]; then
     echo "FAILED $id: exit $rc, wanted $want"; sed 's/^/    /' "$out" | head -n 8
     failures=$((failures + 1))
-  elif grep -q '^::' "$out"; then
-    echo "FAILED $id: output has a line starting with ::"
+  elif tr '\r' '\n' < "$out" | sed 's/^[[:space:]]*//' | grep '^::' \
+       | grep -vE '^::stop-commands::stk[0-9a-f]+$|^::stk[0-9a-f]+::$' | grep -q .; then
+    echo "FAILED $id: output has a workflow command line (only the stop-commands pair is allowed)"
     failures=$((failures + 1))
   else
     echo "ok $id"
@@ -147,6 +148,15 @@ fresh; ins_end deploy 'set -euo pipefail'; expect 0 C3-set-with-options
 # output: workflow text is never printed at the start of a line
 fresh; ins_end secrets 'echo "::warning::x"; set'; expect 1 P1-no-line-starts-with-colons
 
+# CR / Unicode line breaks: rejected up front (they hide lines from grep but not from YAML or bash), nothing printed from the file
+fresh; ins_end deploy "$(printf 'echo hi\r          set')"; expect 1 M40-cr-hides-bare-set
+fresh; ins_end deploy "$(printf 'set | true\r::error::x')"; expect 1 P2-cr-forged-command
+fresh; ins_end deploy "$(printf 'echo hi\302\205          set')"; expect 1 M41-nel
+fresh; ins_end deploy "$(printf 'echo hi\342\200\250          set')"; expect 1 M42-u2028
+fresh; ins_end deploy "$(printf 'echo hi\342\200\251          set')"; expect 1 M43-u2029
+fresh; ins_end deploy "$(printf 'set | true\r::error::x')"; bash "$CHK" "$cur" > "$W/out" 2>&1
+if grep -q 'error::x' "$W/out"; then echo "FAILED P3: the rejected line was printed"; failures=$((failures + 1)); else echo "ok P3-nothing-printed-from-the-file"; fi
+
 # the stoktok-guards.yml pins (run through scripts/check-deploy-env.sh; needs GNU grep, so not in the macOS job)
 if [ "${STK097_SKIP_CROSSFILE:-0}" != 1 ]; then
   gcur="$W/g.yml"
@@ -160,6 +170,12 @@ if [ "${STK097_SKIP_CROSSFILE:-0}" != 1 ]; then
   cp "$GUARDS" "$cur"; del 'persist-credentials: false'; gcase 1 G2-persist-credentials-removed
   cp "$GUARDS" "$cur"; ins_after 'path: pr' 'X: ${{ secrets.X }}'; gcase 1 G3-secret-added
   cp "$GUARDS" "$cur"; printf '      - name: x\n        run: bash pr/x.sh\n' >> "$cur"; gcase 1 G4-extra-run
+  cp "$GUARDS" "$cur"; ins_after 'persist-credentials: false' 'ref: ${{ github.event.pull_request.head.sha }}'; gcase 1 G5-second-ref
+  cp "$GUARDS" "$cur"; ins_after 'timeout-minutes: 5' 'permissions: { contents: write }'; gcase 1 G6-job-permissions
+  cp "$GUARDS" "$cur"; ins_after 'timeout-minutes: 5' 'env: { GH_TOKEN: "${{ github.token }}" }'; gcase 1 G7-job-env-token
+  cp "$GUARDS" "$cur"; del 'sparse-checkout: .github/workflows/deploy-stoktok.yml' 2; gcase 1 G8-sparse-checkout-removed
+  cp "$GUARDS" "$cur"; del 'HEAD_SHA: ${{ github.event.pull_request.head.sha }}'; gcase 1 G9-head-sha-env-removed
+  cp "$GUARDS" "$cur"; del 'git -C pr cat-file -p HEAD | grep -qxF "parent $HEAD_SHA" || { echo "merge ref is not current for head $HEAD_SHA; re-run" >&2; exit 1; }'; gcase 1 G10-parent-check-removed
   cur="$W/c/.github/workflows/deploy-stoktok.yml"
 fi
 

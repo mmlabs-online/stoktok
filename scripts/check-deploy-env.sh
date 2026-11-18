@@ -378,9 +378,29 @@ else
     echo "FAIL: stoktok-guards.yml must not use secrets or an environment" >&2
     fail=1
   fi
-  if [ "$(echo "$g_nc" | grep -c 'run:')" -ne 1 ] \
-     || ! echo "$g_nc" | grep -qxF '        run: bash ops/check-stoktok-workflow.sh pr/.github/workflows/deploy-stoktok.yml'; then
-    echo "FAIL: stoktok-guards.yml must have exactly one run: bash ops/check-stoktok-workflow.sh pr/.github/workflows/deploy-stoktok.yml" >&2
+  # The checker must come from main: the only ref: is the merge ref; no job-level permissions or env; no token; sparse checkout kept.
+  if [ "$(echo "$g_nc" | grep -cE '^[[:space:]]+ref:')" -ne 1 ] || [ "$(echo "$g_nc" | grep -c 'permissions:')" -ne 1 ] \
+     || [ "$(echo "$g_nc" | grep -c '^permissions:')" -ne 1 ] || echo "$g_nc" | grep -qiE 'github\.token|GITHUB_TOKEN' \
+     || [ "$(echo "$g_nc" | grep -cxF '          sparse-checkout: .github/workflows/deploy-stoktok.yml')" -ne 1 ] \
+     || [ "$(echo "$g_nc" | grep -c 'sparse-checkout:')" -ne 1 ] \
+     || [ "$(echo "$g_nc" | grep -cxF '          sparse-checkout-cone-mode: false')" -ne 1 ] \
+     || [ "$(echo "$g_nc" | grep -c 'sparse-checkout-cone-mode:')" -ne 1 ]; then
+    echo "FAIL: stoktok-guards.yml: one ref (the merge ref), one top-level permissions, no token, sparse-checkout and cone-mode false once each" >&2
+    fail=1
+  fi
+  # The only env: is the HEAD_SHA mapping of the check step (the merge commit is verified against it).
+  if [ "$(echo "$g_nc" | grep -c 'env:')" -ne 1 ] || [ "$(echo "$g_nc" | grep -cxF '        env:')" -ne 1 ] \
+     || [ "$(echo "$g_nc" | grep -cE '^ +[A-Z_]+: ')" -ne 1 ] \
+     || [ "$(echo "$g_nc" | grep -cxF '          HEAD_SHA: ${{ github.event.pull_request.head.sha }}')" -ne 1 ]; then
+    echo "FAIL: stoktok-guards.yml must have exactly one env: (step level, HEAD_SHA from the pull request head)" >&2
+    fail=1
+  fi
+  g_run="$(echo "$g_nc" | awk '$0 == "        run: |" { o = 1; print; next } o && /^          / { print; next } { o = 0 }')"
+  g_want="$(printf '%s\n' '        run: |' \
+    '          git -C pr cat-file -p HEAD | grep -qxF "parent $HEAD_SHA" || { echo "merge ref is not current for head $HEAD_SHA; re-run" >&2; exit 1; }' \
+    '          bash ops/check-stoktok-workflow.sh pr/.github/workflows/deploy-stoktok.yml')"
+  if [ "$(echo "$g_nc" | grep -c 'run:')" -ne 1 ] || [ "$g_run" != "$g_want" ]; then
+    echo "FAIL: stoktok-guards.yml must have exactly one run: (verify the merge commit parent, then the checker on pr/.github/workflows/deploy-stoktok.yml)" >&2
     fail=1
   fi
 fi
