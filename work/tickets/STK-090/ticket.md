@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | DONE |
 | Priority | P2 |
 | Areas | db, security |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-11-17 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/75 |
 
 ## Goal
 Split from STK-089 (see work/tickets/STK-089/plan.md "Split proposal"; consult in work/tickets/STK-083/consult-database-optimizer.md §6). Run test:db as a non-superuser owner role so tests prove migrations and repos work without superuser. Scope:
@@ -54,3 +54,6 @@ CLAUDE.md R3, R7, R8; ADR 0010 §12. Depends on STK-089. Does not block STK-084 
 
 ## Notes / answers from Ming
 - 2026-11-17 (orchestrator): split from STK-089 per its plan.md; no manual step for Ming. Test-harness hardening only, so P2 and not a prerequisite for the STK-084 cutover.
+- 2026-11-18 (Ming): run STK-090 before the cutover (ADR 0010 order kept, not waived).
+- 2026-11-18 (orchestrator): consult skipped — the scope above is already a reviewed design (STK-089 plan split + STK-083 database-optimizer consult §6).
+- 2026-11-18 (orchestrator): attempt 1 = REWORK (owner.test.ts connects the owner to the admin DB `postgres`, which fails after URL-mode db:check revokes PUBLIC CONNECT). Rework scope: that blocker, plus security 🟡1 (one line: `alter role … reset all` in the same transaction, with a fake-client assertion). Security 🟡2 (SCRAM verifier instead of plaintext hex), 🟡3 (pre-flight refusal on non-test clusters; document `drop role stoktok_test_owner`), 🟡4 (membership test role leak) and the review's db:check-side-effect doc note → follow-ups in the PR.

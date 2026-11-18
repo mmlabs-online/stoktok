@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import pg from 'pg';
 import { runMigrations } from '../src/pg/migrate';
+import { asOwner, ensureOwnerRole, ownerPassword, ownPublicSchema, TEST_OWNER_ROLE } from './owner';
 
 const ROOT = join(__dirname, '..', '..', '..');
 const SUFFIX = String(process.pid);
@@ -50,9 +51,6 @@ export default async function setup() {
   // Test workers are separate processes: hand them this run's suffix.
   process.env.DB_TEST_SUFFIX = SUFFIX;
   const adminDb = admin.toString();
-  await withClient(adminDb, async (c) => {
-    await c.query(`create database ${TEMPLATE}`);
-  });
   const tplUrl = withDb(admin, TEMPLATE);
   const cleanup = async () => {
     await withClient(adminDb, async (c) => {
@@ -65,7 +63,12 @@ export default async function setup() {
     });
   };
   try {
-    await migrate(tplUrl);
+    await withClient(adminDb, async (c) => {
+      await ensureOwnerRole(c, ownerPassword(adminDb));
+      await c.query(`create database ${TEMPLATE} owner ${TEST_OWNER_ROLE}`);
+    });
+    await withClient(tplUrl, ownPublicSchema);
+    await migrate(asOwner(tplUrl));
   } catch (e) {
     console.error(`pnpm test:db setup failed: ${(e as Error).message}`);
     await cleanup().catch(() => undefined);
