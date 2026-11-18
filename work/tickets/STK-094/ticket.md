@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | REWORK |
+| State | REVIEW |
 | Priority | P1 |
 | Areas | db, data, security |
 | Attempts | 1 |
@@ -27,3 +27,4 @@ CLAUDE.md Stack, R3, R5; ADR 0010; work/tickets/STK-084/ticket.md (shared-Postgr
 - 2026-11-18 (orchestrator): all dependencies merged (STK-091 #71, STK-096 #74, STK-093 #73 + deployment#90, STK-090 #75; STK-092 deployment#88). The self-hosted runner is back: deploy-postgres #9 was in progress, deploy-stoktok #10 still queued, when this run started. Consult skipped — STK-084's consults and STK-096's runbook cover this slice. There are 333 commits in v0.2.1..main: the release review is part of this ticket. Cutting the release (pushing `release/vX.Y.Z`) and merging the release PR are outward actions: the orchestrator asks Ming before cutting, and Ming merges.
 - 2026-11-18 (orchestrator): R-9 checked via GitHub: no PR (open or closed) exists for deployment branch release/stoktok-v0.2.2, so nothing to close. deploy-postgres #9 (STK-092) ran when the runner came back and FAILED after 10 min (logs not downloadable via API; Ming to check) — the `stoktok` role/DB may not exist yet; runbook stage 0 must see it green before the dry run.
 - 2026-11-18 (Ming, after attempt 1 PASS): fix security 🟡1 (step C converts the deployment release PR to draft after the compose commit; Ming marks it ready at runbook stage 4.1; stage 0.3 and ming-todo check "PR is a draft"), 🟡3 (allow-list of keys on the `migrate` block in check-deploy-env.sh + `privileged: true` mutation; anchor the migrate image check — review nit 1), 🟡4 (S6 pins the repository `mingming21400/stoktok-worker:vX.Y.Z@sha256:…` like deploy-stoktok.yml:105; the script's `docker run … migrate` gets `--cap-drop ALL --security-opt no-new-privileges:true`; header comment on the source-local exemption), 🟡5 (assert the S6 message). Also drop the stale ming-todo item about closing a release/stoktok-v0.2.2 PR (none exists — review nit 4). 🟡2 and 🟡6 → STK-097.
+- 2026-11-18 (orchestrator): plan.md step C is not edited after the fact; the draft-PR step for step C comes from docs/deploy.md "Cutover release (STK-094)" step 5 and Ming's 🟡1 decision above.
