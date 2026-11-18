@@ -226,3 +226,55 @@ The real control over `deploy-stoktok.yml`, the checker and `stoktok-guards.yml`
 - /home/user/stoktok/deploy/deployment-repo/.github/workflows/deploy-stoktok.yml
 - /home/user/stoktok/deploy/deployment-repo/README.md
 - /home/user/stoktok/scripts/test-deploy-guards.sh
+
+## Post-escalation fix
+
+I reviewed stoktok commit 3cb57e5 read-only and ran nothing. I read `/home/user/stoktok/deploy/deployment-repo/ops/check-stoktok-workflow.sh`, `/home/user/stoktok/scripts/test-deploy-guards.sh` and the draft `/home/user/stoktok/deploy/deployment-repo/.github/workflows/deploy-stoktok.yml`.
+
+**Bottom line:** 🟡6 is closed for the shapes I reported. A low-severity 🟡7 of the same class remains: a few other YAML spellings still get a `run` key past both rules. It needs the same deliberate, code-owner-reviewed edit as 🟡6, so I would not block on it. It is better fixed now as an allowlist than with more deny cases later.
+
+### 🟡6: closed for the reported shapes
+- The new awk pass (`check-stoktok-workflow.sh:224-239`) catches every shape I listed: `"run":`, `'run':`, a flow item `- {…}` and an explicit `? run`.
+- **M46–M49 each test the new pass and nothing else** (`test-deploy-guards.sh:154-157`). I traced each mutated line against every other check:
+  - the old `run:` rule (`:222`) misses `"run"`, `'run'`, `{name: zz, "run"` and `? run`;
+  - the bare-`set` rule misses `"set"`, `"set"}` and `: set`.
+- **It prints no PR bytes.** The awk only writes the literal `x` into `$quoted_keys`. The failure goes through `bad` with a fixed message (`:237-239`).
+- **The draft still passes (B0).** The draft has no tabs, no quoted, flow or `?` keys outside block scalars, and all 12 `run: |` headers are tracked.
+
+### 🟡7 (low, same class): spellings that still get past both rules
+The `run:` rule needs whitespace or `-` before `run`. The new pass only looks at the first character after the indent and any `- `. These spellings slip between the two:
+
+1. **A flow collection as a value**, for example a new job line `  zz: {runs-on: [self-hosted, macbook-runner], steps: [{"run": "…"}]}`, or `steps: [run: "…"]`, which is a one-pair mapping inside a flow sequence.
+   - The line starts with `zz:` or `steps:`, so the new pass ignores it, and `{"run"` / `[run` misses `:222`.
+   - No check limits the number of jobs, and a second job on the same runner can read `$ENV_FILE` from disk.
+   - Confidence: high that the YAML is valid and Actions accepts flow mappings. Medium for the `[run: x]` form.
+2. **An anchor or tag before a quoted key**: `&a "run": "true\nset"` or `!!str "run": …`. The line starts with `&` or `!`.
+   - Medium confidence: it depends on GitHub's parser accepting properties on keys. Actions has supported anchors since 2025.
+3. **An alias used as a key**: put `&r run` on any plain value (for example `name: &r run`), then write `*r : "true\nset"`. The text `run:` never appears, so neither rule can see it. Medium confidence.
+4. **A tab after a dash**: `-<TAB>{run: "…"}`. The pass only strips `- ` followed by a space, and YAML 1.2 allows a tab there. Low confidence, parser-dependent. The draft has zero tabs, so rejecting tabs outright costs nothing.
+5. **Escaping the block tracking** (`:231`, `:235`), the item you asked about. A multi-line double-quoted value whose next line is under-indented and reads `  y: |` makes the awk set `blk=2`. It then skips every later line indented more than 2, including real keys such as `"run": "true\nset"` at column 8.
+   - This only works if GitHub's parser (YamlDotNet, libyaml-style) does not enforce indentation on quoted continuation lines. I think libyaml does not. Low to medium confidence; please verify against actionlint or a test push on a scratch repo.
+   - Apart from this, I found no way for valid YAML to hide a real key inside the skipped region. YAML key lines after a block scalar always sit at or left of the column the awk records as `blk`.
+   - The mis-detections I found all fail closed: they only cause false positives. Examples are `key: | # comment`, `key: &a |` and `key: !!str |`, whose content then gets judged as keys.
+
+**Fix (one commit, closes 1–5):** outside block scalars, replace the deny list with an allowlist.
+- After the indent and `- ` markers, a line must be a plain key, `^[A-Za-z_][A-Za-z0-9_-]*[[:space:]]*:([[:space:]]|$)`, or a plain scalar list item.
+- A value may not start with `{`, `[`, `&`, `*`, `!` or `?`.
+- A quoted value must close on the same line.
+- The only `[` values allowed are the exact `branches: [main]`, `paths: ['apps/stoktok/**']` and `runs-on: [self-hosted, macbook-runner]` lines. `${{ }}` stays allowed.
+- Reject any tab anywhere in the file.
+- Add mutation cases for items 1–5 and re-check B0.
+- Ties to AC3 (no secret printed) and R3.
+
+### Test gap (nit)
+- `expect`/`check_rc` (`test-deploy-guards.sh:50-70`) checks only the exit code.
+- M46–M49 test the new pass correctly today. But a later edit that breaks the pass would go unnoticed if some other check happened to fail on the same mutation.
+- Fix: also assert the message, e.g. `grep -qF 'quoted, flow' "$W/out"`.
+- N7 still applies: M44–M49 sit under the "CR / Unicode" comment (`:151`).
+
+### Risks
+- Same threat model as 🟡6: an edit to `deploy-stoktok.yml` has to get past code-owner review on deployment `main`.
+- Every line-based checker of YAML can be beaten this way. The allowlist narrows that a lot, but the real controls are still review and the environment protections. The README already calls the checker a tripwire.
+
+### Open questions
+- Does GitHub's workflow parser accept anchors or tags on keys, alias keys, a tab after `-`, and under-indented continuation lines in quoted scalars? The answer decides whether items 2–5 are live or theoretical. The allowlist fix closes them either way.
