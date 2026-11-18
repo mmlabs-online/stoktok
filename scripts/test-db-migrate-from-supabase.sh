@@ -117,6 +117,22 @@ assert_no_leak() {
   assert "pgpass dir removed" dir_empty "$TMP/sd"
 }
 
+# Rename the last column of public.watchlist on the drift DB (the one added at setup) to $1; $1 may hold | or a newline.
+drift_set_last_col() {
+  su_db "$DRIFT_DB" -v newname="$1" >/dev/null <<'SQL'
+set default_transaction_read_only = off;
+select set_config('mv.newname', :'newname', false);
+do $$
+declare old text;
+begin
+  select attname into old from pg_attribute where attrelid = 'public.watchlist'::regclass and attnum > 0 and not attisdropped order by attnum desc limit 1;
+  if old <> current_setting('mv.newname') then
+    execute format('alter table public.watchlist rename column %I to %I', old, current_setting('mv.newname'));
+  end if;
+end $$;
+SQL
+}
+
 # Per-table count and ordered md5 on a database, computed independently of the script.
 oracle() { # db role pw
   local t
@@ -159,6 +175,21 @@ t_usage_guards() {
   assert "malformed password file (exit 1)" rc_is 1
   assert "the file is named" out_has "$TMP/badpwfile"
   assert "its content is not printed" out_lacks shortpwXYZ
+  XENV="MOVE_SRC_HOST=db.example.invalid MOVE_SRC_SSLMODE=require PG_CLIENT_IMAGE=postgres:17"
+  run_move --target "$DST_DB" --skip-migrate; assert "an unpinned client image with a remote source (exit 2)" rc_is 2
+  assert "says pinned by digest" out_has "pinned by digest"
+  printf '%s\n%s\n%s\n' '-----BEGIN CERTIFICATE-----' 'ZmlsbGVy' '-----END CERTIFICATE-----' > "$TMP/ca.pem"
+  printf '%s\n' 'not a certificate' > "$TMP/bad.pem"
+  XENV="MOVE_SRC_SSLROOTCERT=$TMP/ca.pem MOVE_SRC_SSLMODE=disable"
+  run_move --target "$DST_DB" --skip-migrate; assert "a root cert with sslmode disable (exit 2)" rc_is 2
+  XENV="MOVE_SRC_SSLMODE=verify-full"
+  run_move --target "$DST_DB" --skip-migrate; assert "verify-full without a root cert (exit 2)" rc_is 2
+  XENV="MOVE_SRC_SSLROOTCERT=$TMP/none.pem MOVE_SRC_SSLMODE=verify-full"
+  run_move --target "$DST_DB" --skip-migrate; assert "a missing root cert file (exit 2)" rc_is 2
+  XENV="MOVE_SRC_SSLROOTCERT=relative/ca.pem MOVE_SRC_SSLMODE=verify-full"
+  run_move --target "$DST_DB" --skip-migrate; assert "a relative root cert path (exit 2)" rc_is 2
+  XENV="MOVE_SRC_SSLROOTCERT=$TMP/bad.pem MOVE_SRC_SSLMODE=verify-full"
+  run_move --target "$DST_DB" --skip-migrate; assert "a file without a PEM certificate (exit 2)" rc_is 2
   assert "no docker call for any guard" bash -c "[ ! -s '$LOG' ]"
 }
 
@@ -288,7 +319,7 @@ t_schema_drift() {
 
 t_column_pipe() {
   echo "t_column_pipe"
-  su_db "$DRIFT_DB" -c "set default_transaction_read_only = off" -c 'alter table public.watchlist rename column note to "n|ote"' >/dev/null
+  drift_set_last_col 'n|ote'
   XENV="MOVE_SRC_DB=$DRIFT_DB"
   run_move --target "$DST_DB" --skip-migrate --verify-only
   assert "a source column name with | is refused (exit 1)" rc_is 1
@@ -298,9 +329,8 @@ t_column_pipe() {
 
 t_column_pipe_newline() {
   echo "t_column_pipe_newline"
-  su_db "$DRIFT_DB" -c "set default_transaction_read_only = off" -c 'alter table public.watchlist rename column "n|ote" to note' >/dev/null
-  su_db "$DRIFT_DB" -c "set default_transaction_read_only = off" -c "alter table public.watchlist rename column note to \"n|o
-te\"" >/dev/null
+  drift_set_last_col "a|b
+c|d"
   XENV="MOVE_SRC_DB=$DRIFT_DB"
   run_move --target "$DST_DB" --skip-migrate --verify-only
   assert "a source column name with | and a newline is refused (exit 1)" rc_is 1
@@ -308,7 +338,47 @@ te\"" >/dev/null
   assert_no_leak
 }
 
-ALL="t_usage_guards t_static t_schema_migrations_mismatch t_dry_run_happy t_verify_only t_refuse_non_empty t_force t_freeze t_schema_drift t_column_pipe t_column_pipe_newline"
+t_extra_source_table() {
+  echo "t_extra_source_table"
+  drift_set_last_col note
+  su_db "$DRIFT_DB" -c "set default_transaction_read_only = off" -c "create table public.zzz (id int primary key)" >/dev/null
+  XENV="MOVE_SRC_DB=$DRIFT_DB"
+  run_move --target "$DST_DB" --skip-migrate --verify-only
+  assert "an extra source table is refused (exit 1)" rc_is 1
+  assert "says it is not a target data table" out_has "not a target data table"
+  su_db "$DRIFT_DB" -c "set default_transaction_read_only = off" -c "drop table public.zzz" >/dev/null
+  assert_no_leak
+}
+
+t_client_image_pin() {
+  echo "t_client_image_pin"
+  local digest
+  digest="$("$REAL_DOCKER" image inspect -f '{{index .RepoDigests 0}}' postgres:17 2>/dev/null || true)"
+  if [ -z "$digest" ]; then echo "  skip: no repo digest for postgres:17"; return; fi
+  : > "$LOG"
+  XENV="PG_CLIENT_IMAGE=$digest MOVE_SRC_HOST=db.example.invalid MOVE_SRC_SSLMODE=require"
+  run_move --target "$DST3_DB" --skip-migrate --dry-run
+  assert "a digest-pinned image passes the guard (exit 1, not 2)" rc_is 1
+  assert "no pin complaint" out_lacks "pinned by digest"
+  assert "fails at preflight (the source host does not resolve)" out_has "FAILED at step: preflight"
+  assert "the docker run used the digest image" bash -c "grep '^run ' '$LOG' | grep -qF '$digest'"
+  assert_no_leak
+}
+
+t_sslrootcert() {
+  echo "t_sslrootcert"
+  : > "$LOG"
+  printf '%s\n%s\n%s\n' '-----BEGIN CERTIFICATE-----' 'ZmlsbGVy' '-----END CERTIFICATE-----' > "$TMP/ca.pem"
+  XENV="MOVE_SRC_SSLMODE=verify-full MOVE_SRC_SSLROOTCERT=$TMP/ca.pem"
+  run_move --target "$DST3_DB" --skip-migrate --dry-run
+  assert "fails at preflight (the local server has no valid TLS) (exit 1)" rc_is 1
+  assert "the cert is mounted into a source leg" bash -c "grep -F -- '-U $SRC_ROLE' '$LOG' | grep -F ':/certs/root.crt:ro' | grep -qF 'PGSSLROOTCERT=/certs/root.crt'"
+  assert "every cert mount is on a source leg" bash -c "! grep -F '/certs/root.crt' '$LOG' | grep -vqF -- '-U $SRC_ROLE'"
+  assert "no target leg has the cert or PGSSLROOTCERT" bash -c "! grep -F -- '-U $DST_ROLE' '$LOG' | grep -qE '/certs/root.crt|PGSSLROOTCERT'"
+  assert_no_leak
+}
+
+ALL="t_usage_guards t_static t_schema_migrations_mismatch t_dry_run_happy t_verify_only t_refuse_non_empty t_force t_freeze t_schema_drift t_column_pipe t_column_pipe_newline t_extra_source_table t_client_image_pin t_sslrootcert"
 for t in ${*:-$ALL}; do "$t"; done
 
 if [ "$FAILS" -ne 0 ]; then echo "test:move: $FAILS assertion(s) FAILED" >&2; exit 1; fi

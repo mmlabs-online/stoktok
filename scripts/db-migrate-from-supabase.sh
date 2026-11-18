@@ -3,6 +3,8 @@
 # READ-ONLY on Supabase: every source connection goes through src_dump (pg_dump) or src_ro (psql in a READ ONLY
 # transaction that is rolled back). Nothing here applies a migration to, or writes to, the source.
 # Reference: docs/deploy.md "Data move script (STK-091)". Bash 3.2 compatible (macOS /bin/bash).
+# STK-096: a remote source needs PG_CLIENT_IMAGE pinned by digest (F4); MOVE_SRC_SSLROOTCERT (optional, F7) is
+# mounted read-only into the source legs only. Runbook: docs/deploy.md "Cutover runbook (STK-096)".
 set -euo pipefail
 unset PGHOST PGHOSTADDR PGPORT PGSERVICE PGSERVICEFILE PGDATABASE PGUSER PGOPTIONS PGPASSWORD PGPASSFILE PGSSLMODE
 umask 077
@@ -97,6 +99,19 @@ case "$SRC_SSL" in
     esac ;;
   *) usage_err "bad MOVE_SRC_SSLMODE" ;;
 esac
+SRC_LOCAL=0; case "$SRC_HOST" in localhost|127.0.0.1) SRC_LOCAL=1 ;; esac
+if [ "$SRC_LOCAL" = 0 ] && ! [[ "$PG_CLIENT_IMAGE" =~ ^[A-Za-z0-9._/:-]+@sha256:[0-9a-f]{64}$ ]]; then
+  usage_err "PG_CLIENT_IMAGE must be pinned by digest (<repo>@sha256:<64 hex>) for a remote source; see docs/deploy.md Cutover runbook"
+fi
+SRC_CERT="${MOVE_SRC_SSLROOTCERT:-}"
+if [ -n "$SRC_CERT" ]; then
+  [[ "$SRC_CERT" =~ ^/[A-Za-z0-9._/-]+$ ]] || usage_err "MOVE_SRC_SSLROOTCERT must be an absolute path (A-Za-z0-9._/-)"
+  { [ -f "$SRC_CERT" ] && [ -r "$SRC_CERT" ]; } || usage_err "MOVE_SRC_SSLROOTCERT $SRC_CERT is missing or unreadable"
+  grep -q -- '-----BEGIN CERTIFICATE-----' "$SRC_CERT" || usage_err "MOVE_SRC_SSLROOTCERT $SRC_CERT is not a PEM certificate"
+  case "$SRC_SSL" in verify-ca|verify-full) ;; *) usage_err "MOVE_SRC_SSLROOTCERT needs MOVE_SRC_SSLMODE verify-ca or verify-full" ;; esac
+else
+  case "$SRC_SSL" in verify-ca|verify-full) usage_err "MOVE_SRC_SSLMODE=$SRC_SSL needs MOVE_SRC_SSLROOTCERT (the Supabase root certificate)" ;; esac
+fi
 
 # Target password: one line, same guard as the deploy. Name the file on error, never its content.
 [ -r "$DST_PWFILE" ] || fail "target password file $DST_PWFILE is missing or unreadable"
@@ -128,7 +143,7 @@ cleanup() {
   trap - EXIT
   if [ -n "$SECRETS" ]; then rm -rf "$SECRETS"; fi
   if [ "$rc" -ne 0 ] && [ "$DRY" = 1 ] && [ "$KEEP_DUMP" = 0 ] && [ -n "$DUMP" ]; then rm -f "$WORK/$DUMP"; fi
-  if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
+  if [ "$rc" -ne 0 ]; then
     echo "db-migrate-from-supabase: FAILED at step: $STEP" >&2
     rc=1
   fi
@@ -165,27 +180,34 @@ mkdir -p "$WORK"
 # One pg client container. First arg: network; second: the tool; stdin is passed through (-i).
 pg_run() {
   local net="$1" tool="$2"; shift 2
-  docker run --rm -i --network "$net" --user "$UIDGID" \
-    -e PGPASSFILE=/secrets/pgpass -e "PGSSLMODE=$PG_SSL_CUR" \
-    -v "$SECRETS:/secrets:ro" -v "$WORK:/work" --entrypoint "$tool" "$PG_CLIENT_IMAGE" "$@"
+  if [ -n "$PG_CERT_CUR" ]; then
+    docker run --rm -i --network "$net" --user "$UIDGID" \
+      -e PGPASSFILE=/secrets/pgpass -e "PGSSLMODE=$PG_SSL_CUR" -e PGSSLROOTCERT=/certs/root.crt \
+      -v "$SECRETS:/secrets:ro" -v "$WORK:/work" -v "$PG_CERT_CUR:/certs/root.crt:ro" --entrypoint "$tool" "$PG_CLIENT_IMAGE" "$@"
+  else
+    docker run --rm -i --network "$net" --user "$UIDGID" \
+      -e PGPASSFILE=/secrets/pgpass -e "PGSSLMODE=$PG_SSL_CUR" \
+      -v "$SECRETS:/secrets:ro" -v "$WORK:/work" --entrypoint "$tool" "$PG_CLIENT_IMAGE" "$@"
+  fi
 }
+PG_CERT_CUR=""
 PSQL_FLAGS="-X -q -A -t -v ON_ERROR_STOP=1"
 
 # The ONLY functions that name the source host (read-only access).
-src_dump() { PG_SSL_CUR="$SRC_SSL"; pg_run "$SRC_NET" pg_dump -h "$SRC_HOST" -p "$SRC_PORT" -U "$SRC_USER" -d "$SRC_DB" "$@" < /dev/null; }
+src_dump() { PG_SSL_CUR="$SRC_SSL"; PG_CERT_CUR="$SRC_CERT"; pg_run "$SRC_NET" pg_dump -h "$SRC_HOST" -p "$SRC_PORT" -U "$SRC_USER" -d "$SRC_DB" "$@" < /dev/null; }
 src_ro() {
-  PG_SSL_CUR="$SRC_SSL"
+  PG_SSL_CUR="$SRC_SSL"; PG_CERT_CUR="$SRC_CERT"
   { printf '%s\n' 'set default_transaction_read_only = on; begin transaction isolation level repeatable read read only;'; cat; printf '%s\n' ';' 'rollback;'; } \
     | pg_run "$SRC_NET" psql $PSQL_FLAGS -h "$SRC_HOST" -p "$SRC_PORT" -U "$SRC_USER" -d "$SRC_DB"
 }
 # Target legs.
 dst_ro() {
-  PG_SSL_CUR="prefer"
+  PG_SSL_CUR="prefer"; PG_CERT_CUR=""
   { printf '%s\n' 'set default_transaction_read_only = on; begin transaction isolation level repeatable read read only;'; cat; printf '%s\n' ';' 'rollback;'; } \
     | pg_run "$DST_NET" psql $PSQL_FLAGS -h "$DST_HOST" -p "$DST_PORT" -U "$DST_USER" -d "$TARGET"
 }
-dst_psql() { PG_SSL_CUR="prefer"; pg_run "$DST_NET" psql $PSQL_FLAGS -h "$DST_HOST" -p "$DST_PORT" -U "$DST_USER" -d "$TARGET"; }
-dst_dump() { PG_SSL_CUR="prefer"; pg_run "$DST_NET" pg_dump -h "$DST_HOST" -p "$DST_PORT" -U "$DST_USER" -d "$TARGET" "$@" < /dev/null; }
+dst_psql() { PG_SSL_CUR="prefer"; PG_CERT_CUR=""; pg_run "$DST_NET" psql $PSQL_FLAGS -h "$DST_HOST" -p "$DST_PORT" -U "$DST_USER" -d "$TARGET"; }
+dst_dump() { PG_SSL_CUR="prefer"; PG_CERT_CUR=""; pg_run "$DST_NET" pg_dump -h "$DST_HOST" -p "$DST_PORT" -U "$DST_USER" -d "$TARGET" "$@" < /dev/null; }
 q_src() { printf '%s\n' "$1" | src_ro; }
 q_dst() { printf '%s\n' "$1" | dst_psql; }
 
@@ -204,7 +226,7 @@ echo "target: current_database=$pf_db current_user=$pf_user server_version_num=$
 src_ver="$(q_src "show server_version_num")"
 [[ "$src_ver" =~ ^[0-9]+$ ]] || fail "could not read the source server version"
 echo "source: server_version_num=$src_ver"
-PG_SSL_CUR="prefer"
+PG_SSL_CUR="prefer"; PG_CERT_CUR=""
 client_major="$(pg_run none pg_dump --version < /dev/null | sed -E 's/[^0-9]*([0-9]+).*/\1/')"
 [ "$client_major" = 17 ] || fail "pg client major is $client_major, expected 17 (PG_CLIENT_IMAGE)"
 [ "$client_major" -ge $((src_ver / 10000)) ] || fail "pg client 17 is older than the source server"
@@ -341,7 +363,7 @@ fi
 
 # ---- 9. Restore ----
 step "restore (single transaction)"
-PG_SSL_CUR="prefer"
+PG_SSL_CUR="prefer"; PG_CERT_CUR=""
 pg_run "$DST_NET" pg_restore --data-only --single-transaction --no-owner --no-privileges -h "$DST_HOST" -p "$DST_PORT" -U "$DST_USER" -d "$TARGET" "/work/$DUMP" < /dev/null
 step "analyze"
 list=""; sep=""

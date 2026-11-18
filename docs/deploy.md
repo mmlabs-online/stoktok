@@ -92,7 +92,7 @@ If no auth image has been released yet, skip the allowlist secret entirely and s
 5. After any later key change or rotation, run `workflow_dispatch` on `main` again.
 
 ## Shared Postgres (STK-084)
-App data moves from Supabase to the shared mmlabs Postgres 17 (`postgres:5432` on the Docker network `db`, database and role `stoktok`). **Production stays on the Supabase-backed release (v0.2.1) until the cutover; cut no release before the cutover runbook exists (STK-091, STK-094).** Order:
+App data moves from Supabase to the shared mmlabs Postgres 17 (`postgres:5432` on the Docker network `db`, database and role `stoktok`). **Production stays on the Supabase-backed release (v0.2.1) until the cutover; cut the release only as part of the cutover runbook below (STK-096; the release itself is STK-094).** Order:
 1. B (STK-092): in the deployment repo run `bash postgres/scripts/add-app-db.sh stoktok`, merge, wait for `deploy-postgres` green, then run one backup so the offsite sync does not report a false failure (`docker compose -p postgres -f ~/srv/postgres/compose.yml exec pg-backup /backup.sh`) and `bash ~/srv/ops/backup/restore-test.sh stoktok` once (must exit 0).
 2. C (STK-093): the deployment PR copies `apps/stoktok/compose.yml` and `.github/workflows/deploy-stoktok.yml` from the drafts. It touches `apps/stoktok/`, so merging it starts `deploy-stoktok` by itself (no `workflow_dispatch`).
    - **Before merging:** the `stoktok` environment lists `STOKTOK_AI_KEYS_MASTER_KEY` (required). Check whether `STOKTOK_ANTHROPIC_API_KEY` / `STOKTOK_GOOGLE_AI_API_KEY` exist, because they reach the containers for the first time. Preferably B's `deploy-postgres` run is green. Merge outside 18:30-19:30 and 21:00-22:00 Mon-Fri (job slots).
@@ -100,30 +100,136 @@ App data moves from Supabase to the shared mmlabs Postgres 17 (`postgres:5432` o
    - **Checks (Ming, never print the env file; `docker inspect` only with `-f`):** `ls -l ~/.config/stoktok/stoktok.env` shows `-rw-------`; `cut -d= -f1` of it lists the 8 names; `docker compose -p stoktok ps` shows web healthy with a new start time; the networks come from `docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' $(docker compose -p stoktok ps -q stoktok-web)` and must list `db` and `web`; the site still shows the same data; `/Users/mingming/stoktok/current/run-job.sh eod-prices --dry-run` exits 0; after `pg-backup /backup.sh`, report the size of `~/srv/backups/postgres/daily/stoktok-*.dump`.
    - **Rollback:** the workflow restores the previous `apps/stoktok/` if web is not healthy within 120 s, but its revert push is refused on a protected `main` (`restore-unpushed`), so then revert the PR's merge commit in a PR. The Supabase project and the empty `stoktok` database are not affected.
    - **Rotating `stoktok.password`:** `deploy-stoktok` does not run when only `postgres/secrets/apps/stoktok.password` changes (its paths filter is `apps/stoktok/**`), so web and worker would keep the old password. Once `deploy-postgres` is green, run `deploy-stoktok` via `workflow_dispatch` on `main`; it rewrites the env file and recreates web.
-3. Cutover (STK-094): the data move (`scripts/db-migrate-from-supabase.sh`, next section) and the first Postgres release; the step-by-step cutover runbook arrives with STK-096.
+3. Cutover (STK-094): the data move (`scripts/db-migrate-from-supabase.sh`, next section) and the first Postgres release, run by the step-by-step "Cutover runbook (STK-096)" below.
 
 The expanded compose puts web on `tunnel` and `db`, and the worker on `default` and `db` (`db` is internal, so the worker keeps `default` for market-data egress). The compose health check stays on `/healthz` until the cutover release switches it to `/readyz`, which pings the database. `/healthz` does not test the DB. `/readyz` is public like `/healthz` and memoises its DB ping for 3 s; like `/healthz` it must never get a Cloudflare Access bypass (a bypass would let anyone reach it; the memo only caps the DB load).
 
 ## Data move script (STK-091)
-`scripts/db-migrate-from-supabase.sh` is the one-time move of the Supabase `public` data into the shared Postgres. It runs on the Mac from a checkout of the release tag. This section is the reference; the ordered runbook (dry run, freeze, move, release, verification, rollback, day +14) is STK-096.
+`scripts/db-migrate-from-supabase.sh` is the one-time move of the Supabase `public` data into the shared Postgres. It runs on the Mac from a checkout of the release tag. This section is the reference; the ordered runbook (dry run, freeze, move, release, verification, rollback, day +14) is "Cutover runbook (STK-096)" below.
 
 ```
 scripts/db-migrate-from-supabase.sh --target <db> (--worker-image <ref> | --skip-migrate)
     [--dry-run] [--schema-check] [--force --confirm <db>] [--keep-dump] [--verify-only] [--work-dir <dir>]
 ```
 - Inputs are environment variables (names only; none of them is app env, none goes in the env table above):
-  - Source: `MOVE_SRC_HOST`, `MOVE_SRC_PORT` (5432), `MOVE_SRC_USER`, `MOVE_SRC_DB` (postgres), `MOVE_SRC_SSLMODE` (require), `MOVE_SRC_PGPASSWORD` (optional; without it the script prompts on the terminal and exits 2 if there is none). Use the Supabase session pooler or the direct host on port 5432.
+  - Source: `MOVE_SRC_HOST`, `MOVE_SRC_PORT` (5432), `MOVE_SRC_USER`, `MOVE_SRC_DB` (postgres), `MOVE_SRC_SSLMODE` (require), `MOVE_SRC_PGPASSWORD` (optional; without it the script prompts on the terminal and exits 2 if there is none). Use the Supabase session pooler or the direct host on port 5432. `MOVE_SRC_SSLROOTCERT` (optional, absolute path of the Supabase root certificate) is mounted read-only into the source legs only; it needs `MOVE_SRC_SSLMODE` `verify-ca` or `verify-full`, and those modes need it (exit 2 otherwise, also for a missing file or one without a PEM certificate).
   - Target: `MOVE_DST_HOST` (postgres), `MOVE_DST_PORT` (5432), `MOVE_DST_USER` (stoktok), `MOVE_DST_PWFILE` (default `~/srv/postgres/secrets/apps/stoktok.password`).
-  - Containers and freeze checks: `PG_CLIENT_IMAGE` (default `pgvector/pgvector:pg17-trixie`), `MOVE_SRC_NETWORK` (bridge), `MOVE_DST_NETWORK` (db), `MOVE_JOB_LOCK` (`/tmp/stoktok-jobs.lock`), `MOVE_FREEZE_PROJECT` (stoktok).
+  - Containers and freeze checks: `PG_CLIENT_IMAGE` (default `pgvector/pgvector:pg17-trixie`; a source host other than `localhost`/`127.0.0.1` needs it pinned as `<repo>@sha256:<64 hex>`, else exit 2), `MOVE_SRC_NETWORK` (bridge), `MOVE_DST_NETWORK` (db), `MOVE_JOB_LOCK` (`/tmp/stoktok-jobs.lock`), `MOVE_FREEZE_PROJECT` (stoktok).
 - Passwords never appear on a command line: pg clients read a private pgpass file (mode 600, in a mode 700 temp dir) that is deleted on exit, including on INT, TERM and HUP. The migrate container gets the target database URL, password included, in its environment (`-e STOKTOK_DATABASE_URL`), so `docker inspect` shows it for the container's lifetime, like the long-running worker's. After a killed run (SIGKILL, power loss) check `$TMPDIR` (on macOS usually `/var/folders/.../T/`; `/tmp` only if it is unset; run `echo $TMPDIR` in the session that ran the script) for a leftover `tmp.*/pgpass` and delete it; it holds both passwords.
 - `--dry-run` needs a scratch target (`stoktok_scratch...`), always runs the schema check (differences make the verdict FAIL, exit 1; a difference in columns can make the restore itself fail first, which also exits 1), only warns on freeze problems and deletes the dump unless `--keep-dump`, also when the dry run fails after the dump. A real run targets `stoktok` (or a scratch name), blocks on freeze problems, runs the schema check only with `--schema-check` (informational, never changes the exit code) and keeps the dump.
 - Steps: freeze checks (job lock dir, running containers of the compose project), preflight (prints `current_database`, `current_user`, `server_version_num`; refuses a superuser or Postgres below 17), assert `schema_migrations` equals `db/migrations` (after `migrate` from `--worker-image`, or as is with `--skip-migrate`), refuse a non-empty target (unless `--force --confirm <db>`, which truncates every public table except `schema_migrations`), `pg_dump` (data only, no `ai_keys`, no `schema_migrations`) and a table-of-contents check, `pg_restore --single-transaction`, `ANALYZE`, sequence check (dump state kept, bumped only when behind `max(id)`; exactly 6 identity sequences expected), then a count and ordered md5 comparison per table between source and target. `ai_keys` must be empty on the target.
 - `--verify-only` re-runs only the schema assertion and the comparison, without writes.
 - Outputs in the work dir (default `~/srv/backups/stoktok-cutover`, mode 700): `verify-source.txt`, `verify-target.txt` (names, counts, hashes), `schema-check.diff` (DDL only) and, in a real run, the dump. The dump (mode 600) is unencrypted financial data and is not offsite-synced: delete it when the 14-day rollback window closes (STK-095).
 - Exit codes: 0 success, 1 failure (the failing step is printed), 2 usage error (nothing was contacted).
-- The script refuses a target host:port equal to the source host:port, and a source database name equal to the target database name. These are two string comparisons only: they do not detect aliases (another hostname, an IP or a proxy for the same server). Check `MOVE_SRC_HOST` yourself. The target-side comparison also runs in a read-only transaction.
+- The script refuses a target host:port equal to the source host:port, and a source database name equal to the target database name. These are two string comparisons only: they do not detect aliases (another hostname, an IP or a proxy for the same server). Check `MOVE_SRC_HOST` yourself. The verify step reads the target in a read-only transaction too.
 - It never writes to Supabase and never applies a migration there: the source is reached only by `pg_dump` and by `SELECT`s in a read-only transaction that is rolled back.
 - Tests: `pnpm test:move` (needs docker and `MOVE_TEST_URL`, a throwaway local Postgres); CI runs it.
+
+## Cutover runbook (STK-096)
+One-time. Production runs v0.2.1 on Supabase until stage 4. Rollback window: 14 days; data written after the cutover is re-entered by hand, so prefer fixing forward (Ming, 2026-11-17). Supabase is only read, by the script; its `public` tables stay as a read-only archive. Run docker as `mingming`; `docker inspect` only with `-f`; never print the env file or a password.
+
+For read-only checks on the **shared Postgres** (the `stoktok` DB, superuser over the container's local socket, read-only transaction), define once in the session:
+```
+pgro() { printf '%s\n' 'begin transaction read only;' "$1;" 'rollback;' | docker compose -p postgres -f ~/srv/postgres/compose.yml exec -T postgres psql -U postgres -d stoktok -X -q -A -t -v ON_ERROR_STOP=1; }
+```
+
+### 0. Preconditions
+Tick each in `work/ming-todo.md`.
+1. `macbook-runner` online; `deploy-postgres` #9 (STK-092) and `deploy-stoktok` #10 (STK-093, expand) green, and their checks in the to-do ticked (first backup, restore-test, 8 env names, web on `db web`, `eod-prices --dry-run`).
+2. STK-090 merged, or waived by Ming (ADR 0010).
+3. STK-094 done: the release `vX.Y.Z` is cut and its deployment PR `release/stoktok-vX.Y.Z` is **open, not merged**. The PR changes `apps/stoktok/release.env` plus the STK-094 commit to `apps/stoktok/compose.yml` (`migrate` service, `/readyz` health check). `git log v0.2.1..vX.Y.Z` has been skimmed, and no unrelated merges went in after it.
+4. Worker image: `STOKTOK_WORKER_IMAGE` from that PR's `release.env` (digest-pinned), exported as `WORKER_IMAGE`. `docker pull "$WORKER_IMAGE"` succeeds on the Mac.
+5. Checkout of the tag outside the runner's work dir: `git clone --branch vX.Y.Z --depth 1 <stoktok repo> ~/stoktok-cutover-src` (or `git checkout vX.Y.Z` in an existing clone). `git describe --tags --exact-match` prints `vX.Y.Z`. The script compares the image's migrations with this checkout and stops with "the worker image migrations differ from this checkout" otherwise.
+6. Client image pinned by digest (a remote source without it exits 2 with "PG_CLIENT_IMAGE must be pinned by digest"):
+   - `docker image inspect -f '{{join .RepoDigests "\n"}}' pgvector/pgvector:pg17-trixie` shows the `pgvector/pgvector@sha256:<digest>` line.
+   - It is the image the shared Postgres runs when `docker inspect -f '{{.Image}}' $(docker compose -p postgres -f ~/srv/postgres/compose.yml ps -q postgres)` equals `docker image inspect -f '{{.Id}}' pgvector/pgvector:pg17-trixie`.
+   - `export PG_CLIENT_IMAGE=pgvector/pgvector@sha256:<digest>`.
+7. Supabase source details, kept in the password manager and never in a file: session pooler host `aws-0-<region>.pooler.supabase.com`, port 5432, user `postgres.<ref>`, database `postgres`, and the DB password (reset it in the dashboard if unknown; that does not affect the API keys). Export only `MOVE_SRC_HOST` and `MOVE_SRC_USER`. Let the script prompt for the password; do not export `MOVE_SRC_PGPASSWORD`, which lands in shell history.
+8. Optional TLS verification (F7). Download the Supabase root certificate (Project Settings, Database, SSL configuration) to an absolute path without spaces, e.g. `~/srv/backups/stoktok-cutover/supabase-ca.crt`, then `export MOVE_SRC_SSLROOTCERT=<that path> MOVE_SRC_SSLMODE=verify-full`. The script mounts it read-only into the source legs only. If the dry run fails on the certificate, try `verify-ca` with the same file; if that fails too, unset both (default `require`) and note it.
+9. Work dir: `mkdir -p -m 700 ~/srv/backups/stoktok-cutover`, then `tmutil addexclusion ~/srv/backups/stoktok-cutover` and `tmutil isexcluded ~/srv/backups/stoktok-cutover` (must say excluded). The offsite sync covers only `~/srv/backups/postgres/{daily,weekly,monthly}` (deployment `ops/backup/RESTORE.md`); never add `~/srv/backups` to a sync.
+10. Session: run every script call inside `tmux new -s cutover` (or `screen`), so an SSH drop cannot HUP a real run halfway, and call it as `/bin/bash scripts/db-migrate-from-supabase.sh ...` from the tag checkout (macOS bash 3.2).
+
+### 1. Dry run
+Any day before the cutover, ideally the same week; production keeps running.
+1. `docker compose -p postgres -f ~/srv/postgres/compose.yml exec -T postgres psql -U postgres -c "create database stoktok_scratch owner stoktok"` (shared Postgres only).
+2. `/bin/bash scripts/db-migrate-from-supabase.sh --dry-run --target stoktok_scratch --worker-image "$WORKER_IMAGE"`. This also tests the `--worker-image` leg. Freeze problems only warn here.
+3. Expected: `schema_migrations matches db/migrations`, `schema check: no unexpected differences`, `sequences: 6 identity sequences, N bumped`, `verified N tables, M rows; ai_keys is empty on the target`, `dry run OK`. Note N, M and the bumped sequences.
+4. `dry run FAIL: schema check found differences`: read `~/srv/backups/stoktok-cutover/schema-check.diff` (DDL only) and send it to the agent. The schema check is mandatory in the dry run (D4); do not cut over.
+5. Any other `FAILED at step: <step>`: send the output (it holds no passwords) to the agent.
+6. Drop it: `docker compose -p postgres -f ~/srv/postgres/compose.yml exec -T postgres psql -U postgres -c "drop database stoktok_scratch with (force)"`.
+7. Leftovers: a dry run deletes its dump, also on failure, unless `--keep-dump` (then `dump kept:` names it). After `--keep-dump` or a killed run delete `~/srv/backups/stoktok-cutover/stoktok-supabase-*.dump`. After a killed run also delete any `tmp.*/pgpass` under `$TMPDIR` of that shell (see "Data move script").
+
+### 2. Freeze
+Cutover day.
+1. Window: Saturday or Sunday daytime, or Friday after the 21:00 run has finished (`tail /Users/mingming/stoktok/logs/schedule.log`). Never 18:30-19:30 or 21:00-22:00 Mon-Fri; stay away from 02:00 (pg-backup) and 03:30 (offsite sync).
+2. Before stopping anything, note 3-4 dashboard totals (holdings value, P&L, number of transactions), the fee rate on Settings and the AI spend if Settings shows it. A screenshot is fine.
+3. Scheduler: `launchctl bootout gui/$(id -u)/online.mmlabs.stoktok.jobs`; then `launchctl print gui/$(id -u)/online.mmlabs.stoktok.jobs` must fail.
+4. No job running: `test ! -d /tmp/stoktok-jobs.lock`, and `docker ps --filter label=com.docker.compose.project=stoktok` lists only `stoktok-web`. If a job runs, wait for it; do not kill it.
+5. Web: `docker compose -p stoktok stop stoktok-web` (fallback: `docker stop <container name from docker ps>`). `docker ps --filter label=com.docker.compose.project=stoktok` then prints no container. The site shows a Cloudflare 502, which is expected.
+6. Until stage 4 is finished: no reboot, no OrbStack restart, no deployment-repo merge. Any merge under `apps/stoktok/` runs `deploy-stoktok`, which restarts web and reloads the scheduler.
+
+### 3. Move
+1. `/bin/bash scripts/db-migrate-from-supabase.sh --target stoktok --worker-image "$WORKER_IMAGE" --schema-check`. The schema check is informational at the cutover (D4). "freeze the apps first" means go back to stage 2.
+2. Expected: `current_database=stoktok current_user=stoktok`, `schema_migrations matches db/migrations`, `sequences: 6 identity sequences, ...`, `verified N tables, M rows; ai_keys is empty on the target` (N as in the dry run, M at least as large), `dump kept: ...` and `move OK`. Note the dump path.
+3. Ledger baseline: `pgro "select coalesce(max(id),0) || '|' || count(*) from ai_usage"`. Note it.
+4. On failure:
+   - `verification failed; writers may be running`: check the freeze, then `/bin/bash scripts/db-migrate-from-supabase.sh --target stoktok --verify-only`.
+   - A failure after the restore leaves `stoktok` non-empty ("is not empty"). A retry needs `--force --confirm stoktok` (truncates every table except `schema_migrations`).
+   - Not solvable now: see rollback "Move failed".
+
+### 4. Release
+1. Merge the STK-094 release PR `release/stoktok-vX.Y.Z` and watch `deploy-stoktok`: `pull` (migrate service found); `backup` (pre-migration dump of every DB); `migrate` printing `up to date` (the move already applied the schema; anything else, e.g. "applied ...", is unexpected: report it); `deploy` healthy on `/readyz` within 120 s; `publish`; `agent` reinstalls the scheduler, which ends the freeze. The PR comment says `deployed: ... vX.Y.Z ... healthy`, with no "Scheduler NOT installed" and no "Database is ahead".
+2. Copy the pre-migration dump out of the 24 h `last/` retention: `cp "$(ls -t ~/srv/backups/postgres/last/stoktok-*.dump | head -n 1)" ~/srv/backups/stoktok-cutover/ && chmod 600 ~/srv/backups/stoktok-cutover/stoktok-*.dump`.
+3. Failure: see rollback "Release".
+
+### 5. Verify and smoke
+Before the next job slot. The script already compared every table's count and ordered md5 with Supabase, `ai_usage` and `ai_summaries` included, so no manual Supabase query is needed.
+1. `docker compose -p stoktok ps`: web healthy, new start time.
+2. `docker compose -p stoktok exec stoktok-web node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>r.text()).then(console.log)"` shows `vX.Y.Z`; the same with `/readyz` shows `{"status":"ok"}`.
+3. `curl -sI https://<APP_HOSTNAME>/readyz` without a session gets the Access redirect (302/403), not 200.
+4. Log in at `https://<APP_HOSTNAME>/login` (Auth is still Supabase). The dashboard totals, the transaction count and the fee rate equal the stage 2 notes.
+5. One write: add a test transaction (or change and restore a setting), check it shows, then delete it.
+6. `launchctl print gui/$(id -u)/online.mmlabs.stoktok.jobs` succeeds.
+7. Jobs:
+   - `/Users/mingming/stoktok/current/run-job.sh eod-prices --dry-run` exits 0.
+   - Note `pgro "select (select count(*) from prices_daily) || '|' || (select count(*) from financials) || '|' || (select count(*) from signals) || '|' || (select count(*) from data_gaps) || '|' || (select count(*) from news)"` and `pgro "select data_type || '|' || count(*) from data_gaps where resolved_at is null group by data_type order by 1"`.
+   - Run `run-job.sh eod-prices`, `financials`, `signals`; then `eod-prices` and `signals` again. The counts after the second run equal those after the first. New open gaps appear only for days the source really lacks; downtime does not create gaps.
+   - `tail /Users/mingming/stoktok/logs/eod-prices.log` shows `exit=0` and `vX.Y.Z`. `news` is not scheduled; run `run-job.sh news` only to check it.
+8. Logs: `docker compose -p stoktok logs stoktok-web 2>&1 | grep -c ai_keyring_invalid` prints 0, and `grep -l 'ai_keyring_invalid\|lock timeout' /Users/mingming/stoktok/logs/*.log` prints nothing.
+9. Next morning: `ls -l ~/srv/backups/postgres/daily/stoktok-*.dump` shows today's dump, larger than the empty-DB one; the 03:30 offsite sync is healthy.
+
+### 6. AI keys
+1. Issue new keys at Anthropic and Google AI Studio and enter them on Settings.
+2. Trigger one AI action. `pgro "select max(id) from ai_usage"` is above the stage 3 baseline, and the Settings spend equals the old spend plus the new row.
+3. If the `stoktok` environment has `STOKTOK_ANTHROPIC_API_KEY` or `STOKTOK_GOOGLE_AI_API_KEY` holding an old key (env fallback, ADR 0011), replace or delete it, then run `deploy-stoktok` via `workflow_dispatch` on `main` (the environment allows `main` only).
+4. Revoke the old keys at both providers.
+5. Repeat the `ai_keyring_invalid` greps of stage 5.8 now and the next day: 0 and nothing.
+
+### 7. After a successful cutover
+1. Reset the Supabase database password (dashboard, Project Settings, Database) and store it in the password manager. Nothing deployed uses it (v0.2.1 and Auth use the API keys); a script re-run after a rollback needs the new one.
+2. `ls -d $TMPDIR/tmp.*` shows no leftover `pgpass` dir.
+3. If `MOVE_SRC_PGPASSWORD` was exported despite stage 0, remove it from the shell history. Exit the `tmux` session.
+
+### 8. Rollback per stage
+| Stage | Do | What is lost |
+|---|---|---|
+| Dry run | Drop `stoktok_scratch` (stage 1.6). | Nothing; production is unchanged. |
+| Freeze | `docker compose -p stoktok start stoktok-web` (fallback `docker start`); `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/online.mmlabs.stoktok.jobs.plist`, then `launchctl print` to check; leave the release PR unmerged. Before the next attempt `stoktok` must be empty: use `--force --confirm stoktok`. | Nothing. |
+| Move failed | As Freeze. Supabase is untouched (read-only). | Nothing. |
+| Release, `migrate` failed | Web stays stopped (deploy skipped) and the scheduler stays unloaded: start web and bootstrap the agent as in Freeze; v0.2.1 runs on Supabase. Do not merge again; report. | Nothing. |
+| Release, web unhealthy | The workflow restores v0.2.1 (`SUPABASE_*` are still in the env file) and reinstalls the agent. If the result is `restore-unpushed`, revert the release PR's merge commit in a deployment PR and merge it. | Nothing (no writes reached Postgres). |
+| Inside the 14 days | Prefer fixing forward with a new release. Only if that is impossible, revert the release PR's merge commit in a deployment PR; v0.2.1 comes back on the Supabase data as of the freeze. A later re-cutover repeats stages 2-4 with `--force --confirm stoktok`. | Everything written after the cutover, re-entered by hand: transactions, settings, Settings AI keys (AI stays off on v0.2.1, the Vault keys are revoked). Market data refetches within 20 trading days. |
+| After day +14 | No data-store rollback; restore only from pg-backup dumps (deployment `ops/backup/RESTORE.md`). | Everything since the dump. |
+
+### 9. Day +14 (STK-095)
+In this order (STK-095 has the details):
+1. Merge the contract PR; it stops writing `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+2. Delete `STOKTOK_SUPABASE_URL` and `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` from the environment. The `STOKTOK_AUTHEN_*` keys stay.
+3. Delete only the Vault `stoktok_ai_key_%` rows.
+4. Keep the Supabase `public` tables as a read-only archive.
+5. `rm -rf ~/srv/backups/stoktok-cutover` (move dump, pre-migration copy, verify files, the optional CA file).
+
+From then on a rollback to v0.2.1 is impossible.
 
 ## Rotate the Supabase key
 1. Create the new key in Supabase. For an `sb_secret_...` key, create it next to the old one. For the legacy JWT `service_role` key, rotating means rotating the JWT secret: the old key dies at once and the anon key and all sessions are invalidated too. That includes web's Authen anon key (`STOKTOK_AUTHEN_SUPABASE_ANON_KEY`) and Ming's login session, so web cannot sign anyone in until the anon key is replaced. Then do steps 2 and 3 right away. Verify which applies in the Supabase dashboard.
@@ -151,6 +257,7 @@ scripts/db-migrate-from-supabase.sh --target <db> (--worker-image <ref> | --skip
 13. To take it offline again: delete the public hostname first, then the Access application if wanted. Never the reverse.
 
 ## Roll back
+- During the 14-day window after the Postgres cutover, follow "Cutover runbook (STK-096)", stage 8: data written after the cutover is lost on v0.2.1 and re-entered by hand.
 - Automatic: if the new web image is not healthy within 120 s, `deploy-stoktok` restores the previous `apps/stoktok/`, redeploys it, republishes the scheduler directory and pushes the revert to deployment `main`. The run stays red.
 - Manual: revert the release PR's merge commit on deployment `main`. That re-triggers `deploy-stoktok`. `workflow_dispatch` from `main` only (other branches are skipped) redeploys what main pins and rewrites the env file.
 - **Migrations are not undone, and a restore never migrates.** Roll back across a migration only when the old code works with the new schema. After a revert, the deploy run shows the warning "Database is ahead of this image: nothing was migrated" and the PR comment gets the same suffix; that is expected and does not block the deploy.
