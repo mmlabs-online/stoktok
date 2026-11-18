@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P1 |
 | Areas | db, data, security |
 | Attempts | 2 |
 | Created | 2026-11-17 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/74 |
 
 ## Goal
 Split from STK-091 (see work/tickets/STK-091/plan.md split proposal). Write the full cutover runbook in `docs/deploy.md`, using `scripts/db-migrate-from-supabase.sh` from STK-091: dry run on `stoktok_scratch` (schema check mandatory, D4), freeze web and scheduler on a weekend or outside the 18:30/21:00 Mon–Fri job slots, move, release, verification and smoke list, AI ledger checks and new provider keys (revoke the old ones), rollback per stage, day +14 contract (STK-095).

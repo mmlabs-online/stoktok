@@ -253,3 +253,66 @@ I compared against `/home/user/deployment/.github/workflows/deploy-stoktok.yml` 
 ### Follow-ups (out of scope)
 - These carry over from Attempt 1 and stay as they were: S6 (digest-pin `--worker-image`), nits N1, N2, N4, N6 → STK-094 notes; Ming's post-merge verification list.
 - The PR needs a green CI run on its final head before DONE. The run for 6a5f969 was cancelled; 44220032081 on c33fc24 is pending.
+
+## Attempt 3 — 2026-11-18
+Verdict: PASS
+
+I reviewed rework commit a19114f. It changes only `docs/deploy.md` (+6/-6) and adds impl-log "Attempt 3". After it come cc2f108 (`work/backlog.md` and `ticket.md`) and b4a6f86 (`security-review.md` Attempt 3); neither has code in it. `git diff --name-only 5fb472e..HEAD` lists only `docs/deploy.md` and `work/**`. 5fb472e is the last commit whose CI ran in full and was green. No script, migration or package changed.
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exited 0.
+- lint: `pnpm lint` exited 0.
+- test: `pnpm test` exited 0. Counts: core 834, sources 35, ai 184, db 158, worker 310, web 360. They match the impl-log.
+- check:deploy-env: `OK: deploy env lists consistent`, exit 0.
+- `bash -n` passes on every file in `scripts/*.sh`.
+- test:db, db:check and test:move: I did not re-run them. The code is unchanged since 5fb472e, and CI run 44218849058 on that commit passed every step, including test:db, check:service-key, check:deploy-env, db:check and test:move.
+- CI on PR #74 (read through the REST API):
+  - The PR head moved from cc2f108 to b4a6f86 (security review Attempt 3, work file only) while I reviewed.
+  - Run 44220451788 on cc2f108 was cancelled because that push superseded it. Before the cancel, typecheck, lint and test had passed; test:db was cancelled mid-run.
+  - Run 44220630627 on b4a6f86 was `in_progress` when I wrote this.
+  - This review commit will supersede it again. **The orchestrator must see a green run on the final head before DONE.**
+
+### Verification of the rework against the real workflow
+I compared against `/home/user/deployment/.github/workflows/deploy-stoktok.yml` (deployment HEAD da06996), notify step lines 406-457.
+
+- **Issue 1 / security N1, fixed.** All three rows now carry the check: `docs/deploy.md:219` (migrate failed), `:220` (web unhealthy, which goes further than I asked) and `:221` (14 days). Each says the revert run's PR comment "must read `deployed: ... v0.2.1 ... is running and healthy.`", and that on `restored`, `restore-unpushed` or anything else, Ming freezes again (stage 2.3-2.5), stops, reports and does not use the site.
+  - `deployed:` matches yml:439 `success:) msg="deployed: \`$IMAGE\` is running and healthy."`. `$IMAGE` is `STOKTOK_WEB_IMAGE` from the reverted `release.env` (yml:106, 131), so the tag reads `mingming21400/stoktok-web:v0.2.1@sha256:…`.
+  - `restored` matches yml:440. That message names `$PREVIOUS`, which on a revert run is vX.Y.Z (yml:123-128), so "(vX.Y.Z is back)" is correct.
+  - `restore-unpushed` is the result code (yml:351, case at :441). Its message text begins "restored, revert NOT pushed: …", so it matches the `restored` wording too, and "anything else" covers it as well. Safe.
+  - `did-not-complete` matches the default case at yml:444. "Only if that run ends without starting any web (e.g. `did-not-complete`)" replaces "Only if that run does not start web", as I asked.
+- **Issue 2 / security N2, fixed.**
+  - `:148` now says "rotate it as in stage 7.1 after the last script run, whatever the outcome (also after an aborted cutover or a rollback)".
+  - The Freeze row (`:217`) says "If stage 0.8 fell back to `require`, do stage 7.1 now", and the Move failed row (`:218`) says "including stage 7.1 if …". That also does the optional part of my fix.
+  - The stage 7.1 text itself (`:209`) is unchanged and still correct: "a script re-run after a rollback needs the new one".
+- **No regressions.** The diff touches only lines 148 and 217-221. Stage numbers, headings and every other row are unchanged. "stage 2.3-2.5" points to the right steps (scheduler bootout, no job running, stop web; `:166-168`).
+- **ming-todo still agrees.** `work/ming-todo.md:40` (stage 0, "optional root cert") and `:47` (stage 7, "After a successful cutover: rotate the Supabase database password") match the runbook's stage names and order. The new fallback rotation is runbook detail inside stages 0.8 and 8, and the checklist does not contradict it. See nit N2.
+- **No secrets.** I grepped the added lines of `git diff 1d7304b..a19114f -- docs/deploy.md` for `sb_secret_`+chars, JWT prefixes, 64-hex digests, credential URLs and `PGPASSWORD=`+value: no hits. The security review Attempt 3 grep agrees.
+- **Quoted messages exist.** The only new quoted strings are the notify texts above, and all are at yml:439-444. Earlier quoted script and workflow strings did not change.
+
+### Acceptance criteria
+- [x] 1. Every stage, with real flags and messages. Evidence: Attempt 2 verification, plus the rollback rows now complete (`:217-221`) against yml:123-128, 313-356 and 439-444.
+- [x] 2. No Supabase migration or write, and no secret. Evidence: Supabase is only read, stage 9.3 is labelled as Ming's dashboard step, and the secret grep is clean.
+- [x] 3. Checks green. Evidence: local typecheck, lint, test, check:deploy-env and `bash -n` all exit 0. The last full CI run (44218849058) is green on code identical to the head; only docs and work files changed since. Green CI on the final head is still required before DONE (see Checks).
+
+Ming verification after merge (not mine to verify; carry into the PR): the live dry run, the `--worker-image` leg, bash 3.2, and `docker compose -p stoktok stop|start stoktok-web` by project name (plan and `work/ming-todo.md`).
+
+### Issues
+None.
+
+### Rules R1–R10
+- No violations found.
+- R7: the rework touched only `docs/deploy.md` and the impl-log.
+- R3: no credential appears.
+- R10: Supabase is only read.
+- R8: no code changed.
+
+### Nits (do not block)
+- N1 (security Attempt 3 N3): `:219-221` say "freeze again (stage 2.3-2.5)". After a `restored` revert, main pins vX.Y.Z again, so 2.6 ("no deployment-repo merge") matters too. "Stop and report" already implies no merges. Change it to "2.3-2.6".
+- N2 (security Attempt 3 N4): `:219`: `did-not-complete` belongs both to "anything else → freeze and stop" and to "start by hand". A run cancelled inside `rollback` after `git restore` and `up -d` (yml:331-333) may leave a vX.Y.Z web up. Before starting by hand, check `docker inspect -f '{{.Config.Image}}'` on the web container names v0.2.1. This is unlikely: in the migrate-failed case `deploy` never ran, so the stopped container is still v0.2.1.
+- N3: if `agent` fails, the success message gets the suffix " Scheduler NOT installed: see the run." (yml:447), and the "must read" text no longer matches exactly. Freezing again in that case is safe (v0.2.1 on Supabase), only over-cautious.
+- N4: `work/ming-todo.md:47` ties the rotation to "After a successful cutover" only. Adding "(or after any outcome if the root cert fell back to `require`)" would mirror `:148`.
+- These carry over: Attempt 2 N1 (`:182` `stoktok-*.dump` glob can match the `stoktok-latest.dump` symlink), N2 (make the 14-day dump mandatory) and N3 (a fix-forward release merged after vX.Y.Z).
+
+### Follow-ups (out of scope)
+- Nits N1-N4 above, and the Attempt 2 nits still open → STK-094 notes, together with S6 (digest-pin `--worker-image`) and the earlier nits.
+- Ming's post-merge verification list as above.
