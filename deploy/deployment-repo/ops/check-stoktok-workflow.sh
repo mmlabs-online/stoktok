@@ -221,6 +221,22 @@ fi
 # STK-097: every `run:` is a plain `|` block scalar: a quoted or one-line run (`run: "true\nset"`) hides code from the line checks.
 { echo "$wf_nc" | grep -E '(^|[[:space:]-])run[[:space:]]*:' | grep -vE '^[[:space:]]+run: \|[[:space:]]*$' || true; } \
   | flag "every run: must be a '|' block scalar (no quoted or one-line run:)" || fail=1
+# STK-097: no mapping key in quoted, flow or explicit form (`"run": ...`, `'"'"'run'"'"': ...`, `{name: x, "run": ...}`, `? run`), which would
+# hide a key from the line checks. Block-scalar content (lines more indented than the key that opened a `|` / `>` block) is
+# skipped. A line is judged after its leading indent and any `- ` markers are removed. Fixed message: no PR bytes printed.
+quoted_keys="$(echo "$wf_nc" | awk '
+  { if ($0 ~ /^[[:space:]]*$/) next
+    line = $0; col = 0
+    while (substr(line, 1, 1) == " ") { col++; line = substr(line, 2) }
+    if (inblk) { if (col > blk) next; inblk = 0 }
+    while (substr(line, 1, 2) == "- ") { col += 2; line = substr(line, 3); while (substr(line, 1, 1) == " ") { col++; line = substr(line, 2) } }
+    if (line ~ /^[{]/ || line ~ /^[?]([[:space:]]|$)/) { print "x"; next }
+    if (line ~ /^["'"'"']/ && line ~ /["'"'"'][[:space:]]*:([[:space:]]|$)/) { print "x"; next }
+    if (line ~ /(^|:[[:space:]]+)[|>][-+0-9]*[[:space:]]*$/) { inblk = 1; blk = col }
+  }')"
+if [ -n "$quoted_keys" ]; then
+  bad "workflow has a quoted, flow ({...}) or explicit (?) mapping key: write plain keys"
+fi
 # STK-097: every printf key except the derived database URL has a format guard, a whole line
 # `if ! [[ "$KEY" =~ ... ]]; then` with `exit 1` within 4 lines, before mktemp (name-independent: no key list here).
 for k in $(echo "$printf_line" | grep -oE '[A-Z][A-Z0-9_]*=%s' | sed 's/=%s//' | grep -vx STOKTOK_DATABASE_URL || true); do

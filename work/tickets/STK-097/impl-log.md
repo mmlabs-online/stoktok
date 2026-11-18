@@ -116,3 +116,26 @@ Hash-pinning means any edit to `stoktok-guards.yml` needs the hash updated in th
 
 ### Scope self-check
 Only Ming's three items.
+
+## Post-escalation fix - 2026-11-18 (option 2, one targeted fix outside the loop)
+
+Push status: deployment branch pushed at 2c52ee5 (before this fix); PR not yet opened. This fix is committed on the deployment branch but not pushed.
+
+### Files touched
+| File | Required because |
+|---|---|
+| `deploy/deployment-repo/ops/check-stoktok-workflow.sh` | New awk pass: outside block-scalar content (lines more indented than the key that opened a `\|` / `>` block), any mapping-key line (after indent and `- ` markers) starting with `{`, `? ` or a quote followed by `":` is rejected with a fixed message that prints no PR bytes. BSD awk compatible (no intervals, no gawk features). Live deploy workflow still passes. |
+| `scripts/test-deploy-guards.sh` | Cases M46 `"run": "true\nset"`, M47 `'run': ...`, M48 `- {name: zz, "run": ...}`, M49 `? run` / `: set`: each exits 1 |
+| `work/tickets/STK-097/impl-log.md` | this section |
+
+### Checks
+See the final report: typecheck, lint, test, `pnpm check:deploy-env`, `bash -n`.
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+Quoted scalars in list items (`- "main"`) are allowed on purpose: only quote-then-colon lines are treated as keys. A multi-line quoted scalar containing a fake `key: |` line is not modelled.
+
+### Scope self-check
+Only the checker pass, M46-M49 and the log.

@@ -151,6 +151,10 @@ fresh; ins_end secrets 'echo "::warning::x"; set'; expect 1 P1-no-line-starts-wi
 # CR / Unicode line breaks: rejected up front (they hide lines from grep but not from YAML or bash), nothing printed from the file
 fresh; ins_end deploy 'run: "true\nset"'; expect 1 M44-quoted-run
 fresh; ins_end deploy 'run: true'; expect 1 M45-plain-oneline-run
+fresh; ins_after '- name: pull' '  "run": "true\nset"'; expect 1 M46-quoted-key
+fresh; ins_after '- name: pull' "  ${q}run${q}: ${q}true${q}"; expect 1 M47-single-quoted-key
+fresh; ins_after '- name: pull' '- {name: zz, "run": "set"}'; expect 1 M48-flow-mapping-item
+fresh; ins_after '- name: pull' '  : set'; ins_after '- name: pull' '  ? run'; expect 1 M49-explicit-key
 fresh; ins_end deploy "$(printf 'echo hi\r          set')"; expect 1 M40-cr-hides-bare-set
 fresh; ins_end deploy "$(printf 'set | true\r::error::x')"; expect 1 P2-cr-forged-command
 fresh; ins_end deploy "$(printf 'echo hi\302\205          set')"; expect 1 M41-nel
