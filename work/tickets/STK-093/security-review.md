@@ -97,3 +97,77 @@ Paths are `/home/user/deployment/.github/workflows/deploy-stoktok.yml` (WF) and 
 - /home/user/stoktok/apps/web/app/readyz/route.ts
 - /home/user/stoktok/apps/web/test/readyz.test.ts
 - Context: /home/user/deployment/postgres/compose.yml, /home/user/deployment/postgres/init/00-lockdown.sql, /home/user/deployment/apps/stoktok/run-job.sh, /home/user/deployment/.github/CODEOWNERS
+
+## Attempt 2
+
+**Verdict: no 🔴.** Attempt 2 closes 🟡1, 🟡3, 🟡4, 🟡5 and 🟡6 as Ming scoped them. 🟡2 and 🟡7 stay deferred to the follow-up ticket. I found 3 new low 🟡 items: ways around the new pins that a careless edit could hit. None blocks PASS. Fix them in the 🟡2 follow-up or as small additions now.
+
+**Limits:** I had read-only access (Read, Grep, Glob) and could not run anything. So the mutation proofs and the green `check:deploy-env` come from impl-log Attempt 2 (`/home/user/stoktok/work/tickets/STK-093/impl-log.md:76-85`). I checked the new pins by hand against the draft workflow `/home/user/stoktok/deploy/deployment-repo/.github/workflows/deploy-stoktok.yml` (WF), which is unchanged. I did not read the deployment branch again; impl-log says it was not touched.
+
+### Closure of the attempt-1 findings
+- **🟡1 closed.** `scripts/check-deploy-env.sh:295-313` pins this order using the first exact occurrence of each line:
+  - `umask 077` (WF:176) < `pwfile=` (217) < `chmod 700 "$dir"` (228) < `tmp="$(mktemp "$dir/.stoktok.env.XXXXXX")"` (229) < `trap 'rm -f "$tmp"' EXIT` (230) < printf (231) < `chmod 600 "$tmp"` (232) < `mv -f "$tmp" "$ENV_FILE"` (234) < the `stat -f '%Su %Lp'` check (236) + `exit 1` within 4 lines (238).
+  - The three attempt-1 mutations (delete umask, bare mktemp, delete stat) all fail now.
+  - The `IFS= read -r pw` pin from Ming's note is in place at :245 and :260.
+- **🟡3 closed** for every pattern Ming listed (bare `set`, `declare -p`, `typeset -p`, `export -p`, `printenv`, `cat` of the env file, `$tmp` or `secrets/`, `docker inspect` without `-f`), at :314-324.
+  - The current workflow has no false positives: `git cat-file` (WF:126) is not matched because the regex needs whitespace after `cat`, and `set +e`/`set -e` are not bare.
+- **🟡4 closed.** The `on:` block is compared exactly at :327-332, plus a forbidden-trigger grep at :333-336. I tried these bypasses and all are caught:
+  - flow-style `on: [push, pull_request_target]` or `on: {…}`: the block becomes empty, so it fails;
+  - a quoted `'on':`: the block is empty, so it fails;
+  - a second `on:` block: the concatenation differs, so it fails;
+  - extra `branches`, `tags` or `inputs`: not an exact match, so it fails.
+  - This is the strongest of the three new checks.
+- **🟡5 closed (docs).** `/home/user/stoktok/docs/deploy.md:102` says what Ming chose: no `paths:` change; once `deploy-postgres` is green, run `deploy-stoktok` via `workflow_dispatch` on `main`.
+- **🟡6 closed.** `docs/deploy.md:100` now gives the exact `docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}…'` command. It explicitly says "never print the env file; `docker inspect` only with `-f`", and the expected names `db` and `web` are right (`web` is the actual name of the `tunnel` network).
+
+### New findings
+- 🟡8 (low) **The `docker inspect` check can be met by a `-f` that dumps the env anyway.**
+  - Where: `scripts/check-deploy-env.sh:321`.
+  - The check only asks that `-f` or `--format` appears somewhere on the line. `docker inspect -f '{{json .Config.Env}}' …` or `-f '{{json .}}'` passes the check and prints the env into the log. That includes `STOKTOK_DATABASE_URL`, which GitHub does not mask.
+  - The same command typed at the Mac from docs line 100's advice would do the same, so the doc pattern is safe but the guard is not.
+  - Fix: also deny `Config\.Env` and `\{\{ *json +\. *\}\}` / `\{\{ *\. *\}\}` in `wf_nc`.
+- 🟡9 (low) **The deny list is a fixed list of commands, so other ways to print the same data get through.** These pass `:315-317` and `:111`:
+  - `set | grep …`, `set > "$GITHUB_STEP_SUMMARY"`, or `{ set; }`. The bare-`set` pattern requires `set` alone on its line; only `env` has a pipe variant.
+  - Reading the files with tools outside the list, or without `cat`: `echo "$(<"$pwfile")"`, `grep . "$ENV_FILE"`, `sed -n p`, `base64`, `tac`, `cp "$ENV_FILE" <elsewhere>`.
+  - `docker compose … convert`, which is an alias of `config` and prints the interpolated env.
+  - `"${compose[@]}" exec -T stoktok-web env`, `… run --rm stoktok-web env`, or `cat /proc/1/environ`.
+  - Impact stays as in attempt 1: the password is already readable by everyone with deployment-repo read access, which is the same audience as the logs. These are accidental-leak tripwires, not an adversarial control.
+  - Fix (one regex each):
+    - `(^|[;{(]\s*)set\s*([|>;]|$)`;
+    - `\$\(<`;
+    - `(grep|sed|awk|base64|tac|cp|rev|dd)\s+.*(ENV_FILE|\$pwfile|secrets/)`;
+    - `compose.*\sconvert(\s|$)`;
+    - `\s(exec|run)\s.*\s(env|printenv)(\s|$)`;
+    - `/proc/[^ ]*/environ`.
+  - Add a comment at :314 saying the list is a tripwire, so a later reviewer does not read it as complete.
+- 🟡10 (low) **The order pin checks only the first occurrence of each line, so lines added later can undo it.**
+  - Where: `scripts/check-deploy-env.sh:297-309`.
+  - Two edits pass the pin and undo what it protects:
+    - A second `tmp="$(mktemp)"` between `trap` and the printf. The temp file then lands in `$TMPDIR`, and the `mv` is no longer an atomic rename. The other awks also use `/mktemp/ && !m`, so they would not catch it.
+    - A `chmod 644 "$ENV_FILE"` (or a `cp "$ENV_FILE" …`) after the stat check, or in a later step. The stat check only proves the mode at that one moment.
+  - A later `umask 022` is harmless, because `mktemp` creates the file 0600 and the stat check covers anything before it.
+  - Fix:
+    - require exactly one `mktemp` and one `tmp=` assignment in `secrets_step`;
+    - outside the secrets step, allow `$ENV_FILE` only on the envdir `dirname`/home-prefix lines, the rollback stat line, and the notify message;
+    - deny any `chmod` that targets `$ENV_FILE`, except `chmod 600 "$tmp"`.
+  - A step-level `env: ENV_FILE:` override inside `secrets` would also escape the `sed 's/^  ENV_FILE: //p'` pin (:119). The home-prefix check and the stat check limit the damage, but a one-line "no indented `ENV_FILE:`" grep closes it.
+
+### Recommendations
+- **R3 / AC 9:** 🟡8 is the only one that weakens a pin Ming asked for (attempt-1 🟡3, the `docker inspect` part). It is cheap to add to this attempt with one mutation proof.
+- Put 🟡9 and 🟡10 into the 🟡2 follow-up ticket, because the deployment-side copy of the guards needs the same patterns anyway.
+
+### Risks (unchanged from attempt 1)
+- The checks only see the stoktok draft (🟡2, deferred). Edits made directly in `mmlabs-online/deployment` bypass all of these pins until the follow-up lands.
+- Docs gap, not a finding: after the cutover, between `deploy-postgres` changing the role password and the manual dispatch, web and worker cannot authenticate. Line 102 implies this but does not call it downtime. Consider "rotate outside job slots".
+
+### Open questions
+1. Is 🟡8 fixed in this attempt or carried with 🟡2, 🟡7, 🟡9 and 🟡10 into the follow-up?
+2. Still open from attempt 1: does the `stoktok` GitHub environment have a deployment-branch rule of "main only"? The trigger pin now covers the workflow side, but the environment rule is the server-side backstop.
+
+### Files reviewed
+- /home/user/stoktok/scripts/check-deploy-env.sh
+- /home/user/stoktok/docs/deploy.md
+- /home/user/stoktok/deploy/deployment-repo/.github/workflows/deploy-stoktok.yml
+- /home/user/stoktok/work/tickets/STK-093/impl-log.md
+- /home/user/stoktok/work/tickets/STK-093/security-review.md
+- /home/user/stoktok/work/tickets/STK-093/ticket.md
