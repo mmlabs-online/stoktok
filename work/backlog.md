@@ -86,7 +86,7 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks a BACKLOG S1 bug (`BUG-xx
 | STK-090 | Owner-role test:db (STK-089 split) | BACKLOG | P2 | db, security | 0 | 2026-11-17 |
 | STK-091 | Data-move script (STK-084 slice A2a; runbook split to STK-096) | DONE | P1 | db, data, security | 2 | 2026-11-17 |
 | STK-092 | Deployment repo: register stoktok on the shared Postgres (STK-084 slice B) | DONE | P1 | db, security | 0 | 2026-11-17 |
-| STK-093 | Deployment repo: expand step for stoktok (STK-084 slice C) | REWORK | P1 | db, security, architecture | 1 | 2026-11-18 |
+| STK-093 | Deployment repo: expand step for stoktok (STK-084 slice C) | REVIEW | P1 | db, security, architecture | 1 | 2026-11-18 |
 | STK-094 | Cutover to the shared Postgres (STK-084 slice D) | BACKLOG | P1 | db, data, security | 0 | 2026-11-17 |
 | STK-095 | Contract after the 14-day rollback window (STK-084 slice E) | BACKLOG | P2 | security | 0 | 2026-11-17 |
 | STK-096 | Cutover runbook in docs/deploy.md (STK-091 split A2b) | BACKLOG | P1 | db, data, security | 0 | 2026-11-17 |
