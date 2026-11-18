@@ -157,3 +157,99 @@ Reviewed commit 5e8f370 (implementation). The branch head is 5fb472e, which adds
 
 ### Security blockers (orchestrator, from security-review.md Attempt 1)
 - 🔴 S1 (`docs/deploy.md:219`): same as Issue 1 — revert the release PR's merge commit before starting v0.2.1 by hand; "the old release is still running" is false during the freeze.
+
+## Attempt 2 — 2026-11-18
+Verdict: REWORK
+
+I reviewed rework commit 1d7304b, which changes only `docs/deploy.md`; its impl-log is "Attempt 2". The local branch head is c33fc24, which adds only `security-review.md` Attempt 2 on top of 6a5f969 (`work/backlog.md` and `ticket.md`). `git diff --name-only 09c0ee4..HEAD` lists `docs/deploy.md`, `work/backlog.md`, `work/tickets/STK-096/impl-log.md`, `work/tickets/STK-096/ticket.md` and, through c33fc24, `security-review.md`. No script and no code changed.
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exited 0.
+- lint: `pnpm lint` exited 0.
+- test: `pnpm test` exited 0. Counts: core 834, sources 35, ai 184, db 158, worker 310, web 360. They match the impl-log, except that the impl-log does not list the core and sources counts.
+- check:deploy-env: `OK: deploy env lists consistent`, exit 0.
+- `bash -n` passes on every file in `scripts/*.sh`, including `db-migrate-from-supabase.sh` and `test-db-migrate-from-supabase.sh`.
+- test:db, db:check and test:move: I did not re-run them, because no script, migration or package changed since Attempt 1 (5e8f370). The Attempt 1 evidence still applies: CI run 44218849058 was green.
+- CI on PR #74:
+  - The PR head is no longer 6a5f969. It is now c33fc24 (`security review attempt 2`, which changes only `security-review.md`).
+  - Run 44219855477 on 6a5f969 was **cancelled** after typecheck and lint succeeded; `test` was cancelled and later steps were skipped. A newer push superseded it.
+  - Run 44220032081 on c33fc24 was `in_progress` (typecheck running) when I wrote this review.
+  - **So there is no green CI result for the current head yet.** The only code-relevant CI evidence is 44218849058 on 5fb472e, and the diff since then is docs and work files only.
+
+### Verification of the rework against the real workflow
+I compared against `/home/user/deployment/.github/workflows/deploy-stoktok.yml` and `apps/stoktok/*`. The drafts in `deploy/deployment-repo/apps/stoktok/` (`compose.yml`, `run-job.sh`, `run-schedule.sh`) are byte-identical to them (`cmp`).
+
+- **Issue 1 / S1, fixed.** `docs/deploy.md:219` now reverts the release PR's merge commit first. I traced the revert run:
+  - Its push touches `apps/stoktok/`, so the workflow is triggered (yml:33-36).
+  - The reverted compose is the current deployment compose. It has no `migrate` service (compose.yml:21-22, services `stoktok-web` and `stoktok-worker` [profile jobs]). So `pull` sets `migrate=false` (yml:252-257), and `backup` and `migrate` are skipped (`if: steps.pull.outputs.migrate == 'true'`). Nothing is migrated.
+  - `deploy` runs, because its condition is `migrate != 'true'` (yml:291-300). `up -d --wait --wait-timeout 120` starts the stopped `stoktok-web` with the v0.2.1 image from `release.env` (v0.2.1, digest-pinned).
+  - `publish` copies the v0.2.1 job files to `SCHED_DIR` (yml:302-311).
+  - `agent` (yml:359-404) runs because publish succeeded. It finds the label not loaded, since it was booted out at freeze, and bootstraps it. So web and the scheduler restart, on Supabase.
+  - The claim "deploy, publish and rollback are skipped" on the failed run is correct:
+    - `deploy` is skipped because migrate failed.
+    - `publish` has no status function, so `success()` is implied and it is skipped.
+    - `rollback` needs `steps.deploy.outcome == 'failure'`, and deploy was skipped.
+    - `agent` needs `publish == success`, so it is skipped too.
+  - The stage 4.1 sentence about "the old release is still running" is right. That string is in the backup error, the migrate error and the notify `migrate-failed` text (3 hits in the yml).
+  - Remaining gap: see Issue 1 below.
+- **Issue 2, fixed.** Stage 2.1 now says `tail -n 2 /Users/mingming/stoktok/logs/signals.log`.
+  - `run-job.sh` writes `LOG="$LOG_DIR/$JOB.log"`, and its last line is `end job=$JOB exit=$code version=…` (run-job.sh:16,44).
+  - The 21:00 run is `eod-prices signals`, in sequence (run-schedule.sh:15-20). So signals ending means the run has finished.
+  - `now()` is `date -u`, so "UTC, so 14:00Z" is correct for 21:00 +07.
+  - `schedule.log` no longer appears in the runbook.
+- **Issue 3 / S2, fixed.** `docs/deploy.md:221` now orders the steps as freeze, then copy a dump, then revert, and allows `--force` only after the re-entry is confirmed.
+  - The glob `stoktok-[0-9]*.dump` matches `<app>-YYYYMMDD-HHMMSS.dump` in `last/`. It excludes `stoktok-latest.dump` and `stoktok_scratch-*` (RESTORE.md:18-19).
+  - The `:217` Freeze row's `--force` is now scoped to "no post-cutover data exists yet".
+- **S3, fixed.** `:148` now says to re-download the cert and re-check `MOVE_SRC_HOST`, and to treat the password as exposed if falling back. Remaining gap: see Issue 2 below.
+- **S4, fixed.** `:228` is labelled as Ming's Supabase-dashboard step.
+- **S5, fixed.** `:181` says "Do not use the site until that deploy comment arrives".
+- **Quoted messages.** Every script message the runbook quotes is still in `scripts/db-migrate-from-supabase.sh` (`grep -cF` ≥ 1 for all 17). The workflow strings are in deploy-stoktok.yml: "the old release is still running", "Scheduler NOT installed", "Database is ahead", "deployed: ", `restore-unpushed` and `wait-timeout 120`. `up to date` is at migrate.ts:181, and `end job=` at run-job.sh:44.
+- **No secrets.** `git show 1d7304b` adds placeholders only. It adds no `sb_secret_` value, no JWT, no 64-hex digest, no credential URL and no `MOVE_SRC_PGPASSWORD=` value. The security review Attempt 2 grep agrees.
+- **ming-todo.** It agrees with the runbook. "Move to the shared Postgres" stages 0-7 and Day +14 have the same names and order as runbook stages 0-7 and 9. The rework changed nothing that the checklist states: the cert fallback, the rollback rows and the signals check are not in it, and "optional root cert" still holds. Stage 9.3 is a Supabase-dashboard step in both.
+
+### Acceptance criteria
+- [ ] 1. Every stage, with real flags and messages. The flags and messages are verified above. But the rollback rows are not complete; see Issues 1 and 2.
+- [x] 2. No Supabase migration or write, and no secret. Stage 9.3 is now labelled as Ming's dashboard step. The secret grep is clean.
+- [ ] 3. Checks green. Local typecheck, lint, test, check:deploy-env and `bash -n` are green. CI for the current PR head (c33fc24) has not finished. The run for 6a5f969 was cancelled.
+
+### Issues
+#### Issue 1 — 🟡 should-fix — rollback: the revert run can bring back vX.Y.Z, and the runbook does not check for that (security Attempt 2 N1)
+- **Where**: `docs/deploy.md:219` (row "Release, `migrate` failed") and `:221` (row "Inside the 14 days").
+- **Expected**: after the revert, Ming checks that v0.2.1 is the release running before production is called rolled back.
+- **Actual**:
+  - In the revert run, `github.event.before` is the release merge commit, so `previous` is the vX.Y.Z web image (yml:123-128).
+  - If v0.2.1 fails its 120 s `--wait`, `rollback` restores `apps/stoktok/` from that commit. It starts vX.Y.Z on Postgres without `migrate` (in the migrate-failed case, Postgres may be half-migrated), republishes the vX.Y.Z scheduler, reinstalls the agent and pushes "Restore stoktok vX.Y.Z" (yml:313-356, 359).
+  - Row `:219` only says "Only if that run does not start web …". In this case web did start, but on the release Ming meant to back out of. That is the S1 split-database harm again, through an unlikely route.
+- **Fix instruction**: in both rows (`:219` after "restarts web and the scheduler", and `:221` after step (3)), add one sentence:
+
+  > The revert run's PR comment must read `deployed: ...v0.2.1... healthy`; on `restored` or `restore-unpushed` (vX.Y.Z is back), or anything else, freeze again (stage 2.3-2.5) and report; do not use the site.
+
+  Change "Only if that run does not start web" to "Only if that run ends without starting any web (e.g. `did-not-complete`)".
+#### Issue 2 — 🟡 should-fix — the S3 fallback relies on a rotation that only runs after a successful cutover (security Attempt 2 N2)
+- **Where**: `docs/deploy.md:148` (stage 0.8) and `:209` (stage 7.1).
+- **Expected**: if the dry run falls back to `require`, the Supabase DB password is rotated whatever the cutover outcome.
+- **Actual**:
+  - `:148` says "treat the Supabase DB password as exposed: the rotation in stage 7.1 covers it".
+  - Stage 7 is "After a successful cutover". After a Freeze, Move failed or Release rollback, 7.1 never happens, so the possibly exposed password stays valid.
+- **Fix instruction**: in `:148`, replace "the rotation in stage 7.1 covers it" with:
+
+  > rotate it as in stage 7.1 after the last script run, whatever the outcome (also after a rollback)
+
+  Optionally add "do 7.1 if stage 0.8 fell back" to the Freeze and Move failed rows.
+
+### Rules R1–R10
+- No violations found.
+- R7: the rework touched only `docs/deploy.md` plus work files, all within the plan.
+- R3: no credential appears.
+- R10: Supabase is only read. Stage 9.3 is marked as a dashboard step.
+- R8: no code changed.
+
+### Nits (do not block)
+- N1 (from Attempt 1 N3, still open): stage 4.2 `:182` still uses `ls -t …/last/stoktok-*.dump`. It can pick the `stoktok-latest.dump` symlink. Use `stoktok-[0-9]*.dump`, as `:221` now does.
+- N2: `:221` step (2) makes the fresh `pg-backup /backup.sh` optional. After the freeze it is the only dump that holds the writes made since 02:00. Make it "take one with `docker compose -p postgres -f ~/srv/postgres/compose.yml exec -T pg-backup /backup.sh`, then copy the newest". Postgres itself is not wiped before `--force`, so this is not a blocker.
+- N3: `:221`: if a fix-forward release was merged after vX.Y.Z, reverting the release PR no longer gets back to v0.2.1. With Issue 1's check in place, this would be caught.
+- N4: the impl-log check results omit the core and sources test counts. They are correct (834 and 35).
+
+### Follow-ups (out of scope)
+- These carry over from Attempt 1 and stay as they were: S6 (digest-pin `--worker-image`), nits N1, N2, N4, N6 → STK-094 notes; Ming's post-merge verification list.
+- The PR needs a green CI run on its final head before DONE. The run for 6a5f969 was cancelled; 44220032081 on c33fc24 is pending.

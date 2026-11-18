@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P1 |
 | Areas | db, data, security |
-| Attempts | 1 |
+| Attempts | 2 |
 | Created | 2026-11-17 |
 | PR | — |
 
@@ -26,3 +26,4 @@ CLAUDE.md Stack, R3; ADR 0010; consults in work/tickets/STK-084/ (data-engineer 
 - 2026-11-17 (orchestrator, from STK-091 review attempt 3 and security review attempt 3; no rework left on STK-091): make `t_column_pipe_newline` a real regression test (rename to `"a|b<LF>c|d"`, which the attempt-2 code let through; add a case with an extra source table `zzz`; make it self-contained instead of depending on `t_column_pipe`); reword docs/deploy.md:118 so "read-only transaction" clearly refers to the verify step; runbook: run the script inside `tmux`/`screen`; keep `~/srv/backups/stoktok-cutover` out of any offsite/Time Machine sync.
 - 2026-11-18 (orchestrator): consult skipped — the runbook content comes from STK-084's consults (data-engineer runbook/freeze/smoke/AI-ledger, database-optimizer §1–§11, software-architect R2/R3/R7/R8), written for this. STK-091, STK-092 and STK-093 are merged (deployment#88, #90); their deploy runs were queued on the offline self-hosted runner — the runbook states them as preconditions. Ming's manual checklist is in work/ming-todo.md "Move to the shared Postgres"; the runbook must match it.
 - 2026-11-18 (orchestrator): attempt 1 = REWORK (review Issue 1 = security 🔴 S1). Rework scope: review Issues 1–3 plus the docs-only security 🟡 S3 (cert-failure fallback: re-check cert and host first; if falling back, treat the password as exposed — covered by 7.1), S4 (label stage 9.3 as Ming's Supabase-dashboard step per STK-095), S5 (do not use the site until the deploy comment arrives). Security 🟡 S6 (digest-pin `--worker-image`) and the review nits not fixed here → follow-up in STK-094's notes.
+- 2026-11-18 (orchestrator): attempt 2 = REWORK (two 🟡, = security N1, N2). Last allowed rework (attempt 3).
