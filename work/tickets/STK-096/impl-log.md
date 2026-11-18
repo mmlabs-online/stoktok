@@ -29,3 +29,29 @@ None.
 
 ### Scope self-check
 Only the listed files, plus the one-line `cleanup()` change above.
+
+## Attempt 2 (REWORK)
+
+### Files touched
+- `docs/deploy.md` only. Required because: review Issues 1-3 and security S1, S3, S4, S5.
+  - Issue 1/S1: rollback row "Release, `migrate` failed" now reverts the release PR's merge commit first (deploy/publish/rollback are skipped on a failed migrate, deployment `main` still pins vX.Y.Z; checked against deploy-stoktok.yml:270-315), by-hand start only if that run does not start web. Stage 4.1 notes to ignore "the old release is still running" during the freeze.
+  - Issue 2: stage 2.1 uses `tail -n 2 .../logs/signals.log` (`end job=signals exit=...`; run-job.sh writes `$LOG_DIR/$JOB.log`, schedule.log only on a wrong time zone).
+  - Issue 3: "Inside the 14 days" row: freeze first, copy newest `last/stoktok-[0-9]*.dump` (or `pg-backup /backup.sh` first) to `stoktok-cutover/` mode 600, then revert; `--force --confirm stoktok` only after the hand re-entry is confirmed. Freeze row's `--force` note scoped to "no post-cutover data yet".
+  - S3: stage 0.8 re-downloads the cert and re-checks `MOVE_SRC_HOST` before falling back; fallback means the password is treated as exposed (stage 7.1).
+  - S4: stage 9.3 labelled "Ming, Supabase dashboard, per STK-095; not run from this runbook".
+  - S5: stage 4.1 "do not use the site until the deploy comment arrives".
+
+### Tests added
+None (docs only).
+
+### Check results
+typecheck, lint, test (ai 184, db 158, worker 310, web 360), check:deploy-env OK, `bash -n` on both scripts ok. test:db not run (nothing outside docs changed). Doc greps: no secrets (only the existing `sb_secret_...` prose); quoted script messages still present in the script. `work/ming-todo.md` needed no change (it has no rollback/stage 0.8 text affected).
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+Unchanged (S6 and review nits N1-N6 go to STK-094 notes, per the orchestrator).
+
+### Scope self-check
+Only docs/deploy.md plus this log; scripts untouched.
