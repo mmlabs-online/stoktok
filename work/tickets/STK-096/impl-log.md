@@ -55,3 +55,26 @@ Unchanged (S6 and review nits N1-N6 go to STK-094 notes, per the orchestrator).
 
 ### Scope self-check
 Only docs/deploy.md plus this log; scripts untouched.
+
+## Attempt 3 (REWORK)
+
+### Files touched
+- `docs/deploy.md` only. Required because: review Attempt 2 Issues 1 and 2 (security N1, N2).
+  - N1: rollback rows "Release, `migrate` failed", "Release, web unhealthy" and "Inside the 14 days": the revert run's PR comment must read `deployed: ... v0.2.1 ... is running and healthy.` (notify text at deploy-stoktok.yml:439); on `restored` / `restore-unpushed` (vX.Y.Z back) or anything else, freeze again (stage 2.3-2.5), stop and report. By-hand start only if the run ends without starting any web.
+  - N2: stage 0.8 now rotates the Supabase DB password (stage 7.1) after the last script run whatever the outcome; pointer added in the Freeze and Move failed rows.
+- `work/ming-todo.md`: no change (no affected line).
+
+### Tests added
+None (docs only).
+
+### Check results
+typecheck, lint, test (core 834, sources 35, ai 184, db 158, worker 310, web 360) green; check:deploy-env OK; `bash -n scripts/*.sh` ok; secret grep on docs/deploy.md empty; quoted notify text exists in the workflow.
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+Unchanged.
+
+### Scope self-check
+Only docs/deploy.md plus this log; scripts untouched.
