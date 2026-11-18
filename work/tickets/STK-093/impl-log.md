@@ -66,3 +66,31 @@ Title: `stoktok: expand to the shared Postgres (STK-093)`
 ### Scope self-check
 - Could the diff be smaller? No.
 - Diff size (stoktok): about +120 / -15 lines over 6 files; deployment: +109 / -11 over 2 files.
+
+## Attempt 2 — 2026-11-18 (Ming's note after attempt 1 PASS: security 🟡1, 3, 4, 5, 6)
+
+### Files touched
+- `scripts/check-deploy-env.sh` — required because 🟡1, 🟡3, 🟡4 (and the review follow-up "fail on bare set/declare/typeset/export -p") live there. Added: (1) an awk order pin `umask 077 < pwfile < chmod 700 "$dir" < mktemp "$dir/.stoktok.env.XXXXXX" < trap rm < printf < chmod 600 "$tmp" < mv -f "$tmp" "$ENV_FILE" < stat owner+mode check + exit 1`; (2) a name-independent deny list on the comment-free workflow: bare `set|env|export|declare|typeset|readonly|printenv`, `declare/typeset/export/readonly -p`, `printenv`, `cat|head|tail|...` of ENV_FILE / `$tmp` / `$pwfile` / `secrets/` / `.env`, and `docker inspect` without `-f`/`--format`; (3) the `on:` block must equal exactly push (branches [main], paths apps/stoktok/**) + workflow_dispatch, and `pull_request`, `pull_request_target`, `workflow_run`, `schedule`, `workflow_call`, `issue_comment`, `repository_dispatch` are rejected.
+- `docs/deploy.md` — required because 🟡5 (new "Rotating `stoktok.password`" bullet: after `deploy-postgres` is green run `deploy-stoktok` via `workflow_dispatch` on `main`; docs only, no `paths:` change) and 🟡6 (the exact `docker inspect -f '{{range ...}}'` network command replaces "ps shows networks").
+
+### Mutation proofs (scratch copies; each exits 1 with exactly one FAIL, the unmodified tree exits 0)
+- delete `umask 077`, bare `mktemp`, `stat -f` -> `stat -x`, `mv -f` -> `cp`: "the secrets step must keep, in order ..." FAIL.
+- add `set`, `declare -p`, `export -p`, `cat "$ENV_FILE"`: "workflow dumps the shell or a secret file" FAIL.
+- add `docker inspect stoktok-web`: "docker inspect without -f" FAIL.
+- add `pull_request_target:` under `on:`: on-block FAIL plus forbidden-trigger FAIL; `branches: [main, dev]`: on-block FAIL.
+
+### Checks
+- typecheck, lint: green. test: web 360, worker 310, ai 184, db 158 (23 files), core/sources green.
+- test:db: throwaway local PG16 (`DB_TEST_URL`, data dir deleted afterwards): 26 files, 148 tests passed.
+- db:check: `db:check OK`. check:deploy-env: `OK: deploy env lists consistent`. `bash -n` on scripts/*.sh and the draft scripts: OK.
+- No `format` script exists (`pnpm format` fails, same as attempt 1).
+
+### Out-of-plan files
+None. The workflow and compose drafts are unchanged (no pin exposed a defect), so the deployment branch `stoktok/expand-shared-postgres` was not touched.
+
+### Follow-ups
+- 🟡2: deployment-side copy of the guards (the checks only see the stoktok draft).
+- 🟡7: delete stale `"$dir"/.stoktok.env.*` at the start of `secrets` and a docs note.
+
+### Scope self-check
+Only the two files above; nothing else changed.
