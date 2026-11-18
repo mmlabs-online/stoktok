@@ -76,3 +76,107 @@ None blocking.
 - `check-deploy-env.sh`: also fail on a bare `set`, `declare -p`, `typeset` or `export -p` line in the workflow (each dumps shell variables, including `pw` and `STOKTOK_DATABASE_URL`).
 - The `next build` `SecurityFatalError` upgrade stop makes `pnpm check:service-key` (and any `pnpm build`) flaky in this sandbox and possibly in CI. Ming should decide whether a Next.js patch upgrade ticket is wanted.
 - Carried from the plan: a per-query timeout on the `/readyz` ping (`packages/db`); a `backup:failed` notify message when STK-094 activates the step; the offsite-sync size floor, only if Ming reports the `stoktok` dump is ≤ 1 KiB.
+
+## Attempt 2 — 2026-11-18
+Verdict: PASS
+
+Scope: Ming's note of 2026-11-18, written after the attempt-1 PASS. It covers security 🟡1, 🟡3 and 🟡4 in `scripts/check-deploy-env.sh`, and docs 🟡5 and 🟡6. The rework commit is `d9e22ce`, recorded in impl-log "Attempt 2".
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exit 0.
+- lint: `pnpm lint` exit 0.
+- test: `pnpm test` exit 0. Results: core 834 (69 files), sources 35 (3 files + 1 skipped), ai 184 (10), db 158 (23), worker 310 (21 + 1 skipped), web 360 (46).
+- test:db: a throwaway PG 16 (initdb in a fresh `/tmp/rv093b.*`, trust auth, port 55494). `DB_TEST_URL=… pnpm test:db` passed 26 files and 148 tests. Afterwards the server was stopped and the data dir deleted (confirmed gone).
+- db:check: exit 0, `db:check OK`.
+- check:deploy-env: `OK: deploy env lists consistent`.
+- `bash -n` on `scripts/*.sh` and on `deploy/deployment-repo/apps/stoktok/*.sh`: all OK.
+- These results match impl-log Attempt 2.
+
+### Deployment branch unchanged
+- `git ls-remote` returns `stoktok/expand-shared-postgres` = `da06996…` and `main` = `24983f0…`.
+- `da06996` still has parent `24983f0`. `git diff --stat 24983f0 da06996` shows only the 2 files.
+- `git show da06996:<f> | cmp - deploy/deployment-repo/<f>` is identical for `.github/workflows/deploy-stoktok.yml` and `apps/stoktok/compose.yml`.
+- `git diff f0b27da HEAD -- deploy` is empty, so the drafts were not touched by the rework.
+- **The new pins pass on the exact branch files.** I made a scratch copy of HEAD, overwrote the two drafts with `git show da06996:<f>`, and ran `check-deploy-env.sh` on it: exit 0. This also shows the new pins give no false positive on the real workflow.
+
+### Acceptance criteria (rework scope)
+For every mutation below I used a scratch copy and changed one thing in the da06996 workflow.
+
+- [x] **🟡1 env-file mode and order pin** (`scripts/check-deploy-env.sh:295-312`). These mutations each exit 1 with the single "must keep, in order" FAIL:
+  - delete `umask 077`
+  - bare `mktemp`
+  - delete `chmod 600 "$tmp"`
+  - `mv -f` changed to `cp`
+  - delete the `trap`
+  - `chmod 600` moved after the `mv`
+  - delete the `exit 1` of the stat check (line 238)
+  - `exit 1` changed to `exit 0`
+  - `if false && [ "$(stat …`
+  - the stat check accepting `644`
+  - delete the whole stat block
+
+  The pin matches lines exactly, so it targets the secrets-step `stat` line (236), not the 700-dir `stat` at line 145.
+- [x] **🟡3 deny list** (`:313-322`). Everything Ming listed is caught: bare `set`, `declare -p`, `declare -p pw`, `typeset -p`, `export -p`, `printenv`, `env | sort`, `cat < "$ENV_FILE"`, `cat "$tmp"`, `cat postgres/secrets/apps/stoktok.password`, `docker inspect stoktok-web`, `docker container inspect …`. `set -o xtrace` is caught by the existing `set -x` check (`:105`). Each exits 1.
+- [x] **🟡4 trigger pin** (`:323-335`). These all exit 1 through the exact `on:` block comparison, and the block-style triggers are also caught by the forbidden-trigger grep:
+  - an added `pull_request_target:`, `pull_request:`, `schedule:` (with cron) or `workflow_run:`
+  - flow style `on: [push, workflow_dispatch, pull_request_target]`
+  - flow-map `on: {…, pull_request_target: {}}`
+  - `workflow_dispatch: {}`
+  - quoted `"on":`
+  - a second `on:` block at EOF
+  - `branches: [main, dev]`
+  - deleted `paths`
+  - a 4-space re-indent
+
+  A comment line inside the block still passes, because comments are stripped first.
+- [x] **🟡5 docs** (`docs/deploy.md:102`). It says that rotating `stoktok.password` does not trigger `deploy-stoktok` (`paths: apps/stoktok/**`), and that once `deploy-postgres` is green you run `deploy-stoktok` via `workflow_dispatch` on `main`. Docs only, as Ming chose.
+- [x] **🟡6 docs** (`docs/deploy.md:100`). It gives the exact command: `docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' $(docker compose -p stoktok ps -q stoktok-web)`, which must list `db` and `web`. This matches the compose file: service `stoktok-web`, network `tunnel` has `name: web`, network `db` has `name: db`. The `ps`-shows-networks wording is gone.
+- [x] **No secret committed.** I built a pattern from `origin/main:postgres/secrets/apps/stoktok.password` (never printed). It has 0 matches in the `d9e22ce` diff and 0 in its message.
+- [x] **Scope.** `f0b27da..HEAD` changes `scripts/check-deploy-env.sh`, `docs/deploy.md`, impl-log, ticket.md and backlog.md. Workflow and compose are unchanged, which is allowed because no pin exposed a defect.
+
+### Gaps found (honest report; none blocking)
+These mutations still pass the check (exit 0). All are outside Ming's explicit list, and some are inherent limits of a grep deny list on a draft that is reviewed anyway. I do not treat them as blockers. They are listed as follow-ups.
+- **Shell dumps not caught:**
+  - `set | grep DATABASE`. `env | …` is denied but `set | …` is not.
+  - `( set -o posix; set )`
+  - `for v in $(compgen -v); do echo "${!v}"; done`
+- **Env-file reads not caught:**
+  - `< "$ENV_FILE" cat` (redirect before the command)
+  - `sed -n p "$ENV_FILE"`, `grep . "$ENV_FILE"`
+  - `while IFS= read -r l; do echo "$l"; done < "$ENV_FILE"`
+
+  The deny regex only knows `cat|head|tail|less|more|xxd|od|strings` with the path after it.
+- **Xtrace bypasses of the older `set -x` check (`:105`):**
+  - a step-level `shell: bash -x {0}`
+  - `set -o  xtrace` with two spaces; the pattern is the literal `set -o xtrace`
+- **Container env dumps:**
+  - `docker inspect -f '{{json .Config.Env}}' stoktok-web` passes, because it has `-f`. Ming's rule is "without `-f`", so this meets the letter of the rule, but `-f` alone is not safe.
+  - `docker compose … exec stoktok-web env` is also not caught.
+- **Mode can be loosened after the check:** `chmod 644 "$ENV_FILE"` after the stat check is not caught. The `rollback` step re-checks mode 600 (`deploy-stoktok.yml:321`), but only on failure.
+  - `umask 022` after `umask 077` is not caught either, but has no effect: `mktemp` creates the file 0600 and it is then `chmod 600`.
+
+### Issues
+None blocking.
+
+### Rules R1–R10
+- No violations found.
+- R3: env file write path and no-dump pins are strengthened. No URL or password appears outside the secrets step.
+- R7: the diff matches Ming's rework note.
+- R8: green checks.
+
+### Nits (do not block)
+- The deny pattern `\.env` also matches non-secret `release.env` (for example a future `cat "$APP_DIR/release.env"` for debugging). If that ever happens, it would be a false positive needing a narrower pattern. It does not fire on today's workflow.
+- ticket.md still shows `Attempts | 1` while this is attempt 2 (orchestrator bookkeeping).
+
+### Follow-ups (out of scope)
+- Extend the deny list:
+  - `(^|[;(|&]\s*)set\s*(\||;|\)|$)`
+  - `compgen -v`
+  - `<\s*"?\$?\{?(ENV_FILE|tmp|pwfile)` anywhere on a line
+  - `sed|awk|grep|base64|cp` with `ENV_FILE|$tmp|secrets/`
+  - `docker inspect` whose `-f` template contains `Env`
+  - `exec … env`
+- Make the xtrace check whitespace-tolerant (`set\s+-o\s+xtrace`) and add `shell:\s*bash[^{]*-[a-z]*x`.
+- Fail on any `chmod` of `$ENV_FILE` after the stat check.
+- Carried from Ming's note: 🟡2 (deployment-side copy of the guards) and 🟡7 (cleanup of stale `.stoktok.env.*` temp files).
+- Ming verification after merge: unchanged from Attempt 1. The network check now uses the `docker inspect -f` command at `docs/deploy.md:100`.
