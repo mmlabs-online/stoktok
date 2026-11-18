@@ -76,3 +76,78 @@ The real control over `deploy-stoktok.yml` is still human review plus the `stokt
 - Is "require review from Code Owners" on for deployment `main`?
 - Is "Run workflows from fork pull requests" off?
 - Will `stoktok-guards / check` be a required check, with "require branches to be up to date"?
+
+## Attempt 2
+
+**Verdict: no 🔴.** Attempt 2 closes 🟡1, 🟡2 and 🟡4. 🟡3 (SHA-pinning the actions) is deferred as agreed. I found no new way to run code, no token exposure and no secret path. There is one new low 🟡 (pin gaps) and four nits. This was a read-only audit: I ran nothing and read or quoted no secret values.
+
+I read the stoktok drafts at commit 66bd190. **I could not see the deployment branch `stoktok/stk-097-workflow-guards` @ 02dec4d**: `/home/user/deployment` only has a README. So I have not verified that the deployment copy is byte-identical to the drafts. A `cmp` of the copied files on that branch should be done before the PR opens.
+
+### Closure of the attempt-1 findings
+- **🟡1 (stale merge ref): closed.** `deploy/deployment-repo/.github/workflows/stoktok-guards.yml:39-44`.
+  - `HEAD_SHA` is passed as step env (`:41`). It is not inlined into the script, so there is no expression injection.
+  - The check reads the commit it actually checked out (`git -C pr cat-file -p HEAD`), so there is no gap between what is verified and what is read.
+  - It fails closed in every case: empty `HEAD_SHA`, a missing object, or `cat-file` failing. The default shell has no pipefail, but `grep` then gets empty input and exits 1.
+  - Pins and mutation tests are in place: `scripts/check-deploy-env.sh:391-405` and `scripts/test-deploy-guards.sh:177-178` (G9, G10).
+- **🟡2 (forged workflow commands): closed.** `deploy/deployment-repo/ops/check-stoktok-workflow.sh:23-38`.
+  - CR, NEL, U+2028 and U+2029 are rejected before anything is printed, and the rejection message is fixed text.
+  - `show()` also strips CR.
+  - Stop-commands is printed on stderr, which is the same pipe as every FAIL and `show` line, so the ordering is preserved. The runner processes both stdout and stderr for commands, and while stop-commands is active it also suppresses the legacy `##[` form.
+  - Mutation tests cover it: M40-M43, P2 and P3 (`test-deploy-guards.sh:152-158`). The `^::` assertion now splits on CR (`:55-56`).
+- **🟡4 (nothing checks the checker): closed.** `deploy/deployment-repo/README.md:49-51` states that the checker is protected only by CODEOWNERS plus "Require review from Code Owners". Whether that setting is actually on is still Ming's open question.
+- **🟡3 (actions pinned by mutable tag): deferred** to a follow-up, as agreed. The pin at `check-deploy-env.sh:373` still requires `@v7`.
+
+### Answers to your specific questions
+- **How good is the token, and where is it printed?**
+  - `check-stoktok-workflow.sh:34` builds it from `od -An -N16 -tx1 /dev/urandom`, i.e. 128 bits of CSPRNG hex with an `stk` prefix. It cannot be guessed and it is never a runner command name.
+  - If `od` fails, `set -euo pipefail` aborts the assignment before anything is printed, so the script fails closed.
+  - The token is printed exactly twice, both on stderr: at `:35` (start) and in the EXIT trap at `:36` (end). Showing it in the log is inherent to the mechanism. It is harmless because the PR's content is fixed before the run starts.
+- **Is any PR-derived byte printed before stop-commands?** No. Before `:35` the only output is:
+  - the usage message with `$WF`, which is a path fixed by `main`'s workflow;
+  - the fixed CR-rejection message;
+  - in the workflow step, the fixed "merge ref is not current" message, which contains only `HEAD_SHA`.
+- **Can `HEAD_SHA` flow anywhere unsafe?** No. Its value comes from the event payload, and GitHub always sets it to 40 hex characters. It is used only as a `grep -F` pattern and in an `echo` to stderr.
+- **Can a crafted commit satisfy the parent check?** No.
+  - The commit object checked is GitHub's generated merge commit, not the author's. Its header holds only `tree`, `parent`, `author` and `committer` lines, and its message is GitHub's fixed "Merge … into …".
+  - `grep -x` needs a whole line equal to `parent <head sha>`. Indented `mergetag` or `gpgsig` continuation lines cannot match, and a commit cannot name its own future descendant.
+  - A fast-forward or missing merge ref fails closed.
+
+### New findings
+**🟡5 (low): the guard-job pins don't forbid step-level keys that turn the check green or move it.**
+- Where: `scripts/check-deploy-env.sh:345-405`.
+- What is missing: nothing rejects these on the check step or the checkouts:
+  - `continue-on-error: true` or an `if:` on the check step: the job passes even when the checker exits 1;
+  - `working-directory:` or `shell:` on the step;
+  - `repository:` on the second checkout.
+- Why it is low: each needs an edit to `stoktok-guards.yml` on deployment `main`, which is gated by code-owner review. The pins are a drift tripwire, not a control.
+- Fix (one commit): add a key allow-list for the job, or at least fail on `continue-on-error|if:|working-directory|shell:|repository:` in `g_nc`, with G11-G13 mutation cases. This ties to AC1.
+
+### Nits
+- **N1 (test gap):** `test-deploy-guards.sh:55-56` accepts the stop and end token lines anywhere and in any number.
+  - Assert that the first `::` line is `::stop-commands::<t>`, that the only other one is `::<t>::` with the same `<t>`, and that nothing follows it.
+  - This locks in that no subshell ever fires the EXIT trap early. It doesn't happen today: bash resets EXIT traps in `$(…)` and pipeline subshells, including bash 3.2. But it is what the invariant depends on.
+- **N2:** `show()` strips only CR. Other C0 characters and ESC (ANSI escape sequences) still reach the log. Up-front rejection already covers everything that breaks a line, so the remaining risk is cosmetic. `LC_ALL=C sed 's/[[:cntrl:]]/?/g'` would close it.
+- **N3:** `README.md:52` says "the merge commit's second parent", but the code accepts *any* `parent` line. It is safe: the head can only equal the first (base) parent if the PR has no commits. Align the wording, or match on the second parent line.
+- **N4 (residual):** the parent check pins the head but not the base. A run's merge result can be based on an older `main`, and `pull_request_target` does not re-run when `main` moves. This is closed only by "Require branches to be up to date" on the required `stoktok-guards / check`. Add it to the README control paragraph.
+
+### Recommendations
+1. Before opening the PR, `cmp` the deployment branch at 02dec4d against the drafts (AC2).
+2. Optional within this ticket: 🟡5 plus N1. Otherwise send them to the follow-ups along with 🟡3.
+3. N3 and N4 are a one-line README edit (AC2).
+
+### Risks
+The real control over `deploy-stoktok.yml` and over the checker itself is still human code-owner review on deployment `main` plus the `stoktok` environment's main-only rule. The guard job is a tripwire and is advisory until it is made a required check.
+
+### Open questions (still open from attempt 1)
+- Is "Require review from Code Owners" on for deployment `main`?
+- Is "Run workflows from fork pull requests" off?
+- Will `stoktok-guards / check` be required, with "require branches up to date"?
+
+### Files
+- /home/user/stoktok/deploy/deployment-repo/.github/workflows/stoktok-guards.yml
+- /home/user/stoktok/deploy/deployment-repo/ops/check-stoktok-workflow.sh
+- /home/user/stoktok/deploy/deployment-repo/README.md
+- /home/user/stoktok/scripts/check-deploy-env.sh
+- /home/user/stoktok/scripts/test-deploy-guards.sh
+
+> Orchestrator, 2026-11-18: verified with `cmp` that the three files on deployment branch stoktok/stk-097-workflow-guards @ 02dec4d are byte-identical to the stoktok drafts (the auditor could not see that checkout).
