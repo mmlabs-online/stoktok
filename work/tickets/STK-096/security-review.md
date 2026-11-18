@@ -123,3 +123,41 @@ Security review of STK-096, attempt 2. I only read files and changed nothing. I 
 
 ### Open questions
 - None. N1 and N2 are wording fixes inside `docs/deploy.md` stage 0.8 and stage 8, within the ticket's scope.
+
+## Attempt 3
+
+Security review of STK-096, attempt 3. I only read files and changed nothing. I read `docs/deploy.md` lines 120-239, impl-log "Attempt 3", and the live `/home/user/deployment/.github/workflows/deploy-stoktok.yml` (release/previous at :123-133, pull/backup/migrate/deploy/publish at :245-311, rollback at :313-356, notify at :406-457).
+
+**Verdict:** N1 and N2 are closed. There is no 🔴. I found two new low 🟡 items. Both are wording only, neither blocks, and either can go to follow-ups. I grepped `docs/deploy.md` for secret patterns (`sb_secret_`+chars, JWT prefix, 64-hex digests, URLs with credentials, `PGPASSWORD=`+value) and found nothing. No secret values appear in this report.
+
+### Status of the attempt-2 findings
+- **N1, closed.** `docs/deploy.md:219`, `:220` and `:221` now all say that the revert run's PR comment must read `deployed: ... v0.2.1 ... is running and healthy.`, and that on `restored` / `restore-unpushed` or anything else, Ming freezes again, stops and reports.
+  - The quoted text matches notify `success:` at `deploy-stoktok.yml:439`.
+  - On a revert run, `$IMAGE` is v0.2.1 and `$PREVIOUS` is vX.Y.Z (`:123-128`, BEFORE = the release merge commit). So the doc's "(vX.Y.Z is back)" correctly reads the `restored` (`:440`) and `restore-unpushed` (`:441`) messages.
+  - Notify comments on the PR of `GITHUB_SHA` (`:454-456`), which is the revert PR's merge commit. The comment lands where the runbook tells Ming to look.
+  - The freeze comes after the `agent` step has reinstalled the vX.Y.Z scheduler (`:361`). The comment is posted only after that, so freezing on the comment does stop that scheduler.
+- **N2, closed.** `docs/deploy.md:148` now says to rotate as in stage 7.1 "after the last script run, whatever the outcome (also after an aborted cutover or a rollback)". The Freeze row (`:217`) and the Move failed row (`:218`) point to 7.1 explicitly. The Release and 14-day rows rely on the general statement in 0.8, which covers them.
+
+### New findings
+🟡 **N3 (low). After a `restored` revert run, main pins vX.Y.Z again, but the re-freeze only cites stage 2.3-2.5. That leaves out 2.6, "no deployment-repo merge".** `docs/deploy.md:219`, `:220`, `:221`; mechanism at `deploy-stoktok.yml:348-354` (the bot pushes "Restore stoktok vX.Y.Z" to main).
+- In that state, the next `apps/stoktok/` merge or `workflow_dispatch` puts vX.Y.Z on Postgres while Ming is re-entering data on Supabase. That is the attempt-1 S1 split-writer hazard, reached by an unlikely route.
+- "Stop and report" implies no merges, but the runbook already has a rule for this: stage 2.6, which also forbids reboots and OrbStack restarts.
+- **Fix:** change "stage 2.3-2.5" to "stage 2.3-2.6" in all three rows.
+
+🟡 **N4 (low). In the `migrate` failed row, "freeze… stop" and "start by hand" contradict each other.** `docs/deploy.md:219`
+- The row says to freeze and stop on "anything else", and then "Only if that run ends without starting any web (e.g. `did-not-complete`), start it … by hand". But `did-not-complete` is one of the "anything else" results.
+- `did-not-complete` (`:444`) also covers a run cancelled or timed out (`timeout-minutes: 15`) inside `rollback`, after `git restore` and `up -d` of vX.Y.Z (`:331-333`). A vX.Y.Z web may then be running or starting on Postgres.
+- **Fix:** before starting web by hand, check that `docker ps --filter label=com.docker.compose.project=stoktok` lists no container and that `docker inspect -f '{{.Config.Image}}' stoktok-web` names v0.2.1. Otherwise, freeze and stop.
+- Low risk: in the usual migrate-failed case, `deploy` never ran, so the stopped container is still v0.2.1.
+
+### Minor (not security)
+- If the `agent` step fails, notify adds a suffix to the success message: "Scheduler NOT installed: see the run." (`:447`). In that case the text no longer strictly matches "must read …". Stage 4.1 already calls out that suffix; the revert-row text could do the same. Either reading is safe, because the release is v0.2.1 on Supabase.
+- The attempt-2 minor notes (make the 14-day dump mandatory; a fix-forward release merged after vX.Y.Z) are unchanged. N1's check catches the second one.
+
+### Risks
+- N3 and N4 are both small wording gaps that could lead back to the split-database harm (S1). Each needs an unlikely run result first: v0.2.1 failing its health check, or a run cancelled in the middle of a rollback.
+
+### Open questions
+- None. Given that attempt 3 is the last allowed rework, the orchestrator can send N3 and N4 to follow-ups (for example STK-094's notes), or fix them as wording-only edits to `docs/deploy.md`.
+
+Files: /home/user/stoktok/docs/deploy.md, /home/user/stoktok/work/tickets/STK-096/impl-log.md, /home/user/stoktok/work/tickets/STK-096/security-review.md, /home/user/deployment/.github/workflows/deploy-stoktok.yml
