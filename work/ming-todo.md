@@ -36,15 +36,17 @@ Order matters; never print the env file or a password (`docker inspect` only wit
 - [ ] STK-094 (cutover) waits for STK-090 (owner-role test:db) per ADR 0010 — run STK-090 first, or waive it.
 - [ ] Open a Next.js patch-upgrade ticket? `next build` intermittently aborts with a security advisory (makes `pnpm build` / `check:service-key` flaky).
 
+- [ ] **Approve the cutover release**: the orchestrator cuts `release/v0.3.0` from the STK-094 merge commit and adds the compose commit to deployment PR `release/stoktok-v0.3.0`. The orchestrator converts that PR to a draft; check it is still a draft before stage 0 and mark it ready only at stage 4.1. Do not merge that PR before stage 4.
+
 **Cutover (`docs/deploy.md` "Cutover runbook (STK-096)"; stage names as in the runbook)**
-- [ ] **0. Preconditions**: runner online and the two deploys above green; STK-090 merged or waived; STK-094 release PR open and not merged; worker image from its `release.env` pulled; tag checkout; `PG_CLIENT_IMAGE` pinned by digest; Supabase pooler details in the password manager; optional root cert (`MOVE_SRC_SSLROOTCERT`); `~/srv/backups/stoktok-cutover` mode 700 and `tmutil isexcluded` says excluded; work inside `tmux`.
+- [ ] **0. Preconditions**: runner online and the two deploys above green; STK-090 merged or waived; STK-094 release PR open, not merged, and a draft, and changing exactly `release.env` + `compose.yml` (`pr-scope` green); worker image from its `release.env` pulled; tag checkout; `PG_CLIENT_IMAGE` pinned by digest; Supabase pooler details in the password manager; optional root cert (`MOVE_SRC_SSLROOTCERT`); `~/srv/backups/stoktok-cutover` mode 700 and `tmutil isexcluded` says excluded; work inside `tmux`.
 - [ ] **1. Dry run**: `--dry-run --target stoktok_scratch --worker-image <release worker image>` against live Supabase under macOS `/bin/bash` 3.2: OrbStack reaches the session pooler, schema check result, bind-mount permissions, the `--worker-image` leg; drop `stoktok_scratch`; no dump or `pgpass` left.
 - [ ] **2. Freeze**: weekend or outside the 18:30/21:00 Mon-Fri slots; totals noted; scheduler booted out; no job running; `stoktok-web` stopped; no reboot or deployment merge until stage 4 is done.
 - [ ] **3. Move**: `--target stoktok --worker-image ... --schema-check`; `move OK`; numbers and dump path noted; `ai_usage` baseline noted.
-- [ ] **4. Release**: merge the STK-094 release PR; `migrate` prints `up to date`, web healthy on `/readyz`, scheduler reinstalled; pre-migration dump copied into `~/srv/backups/stoktok-cutover/`.
+- [ ] **4. Release**: mark the STK-094 release PR ready (`gh pr ready`), then merge it; `migrate` prints `up to date`, web healthy on `/readyz`, scheduler reinstalled; pre-migration dump copied into `~/srv/backups/stoktok-cutover/`.
 - [ ] **5. Verify and smoke**: `/healthz` version, `/readyz` (Access redirect from outside), login, totals, write and delete, job dry run then real runs twice with unchanged counts, logs clean, scheduler loaded, next-day pg-backup.
 - [ ] **6. AI keys**: enter NEW Anthropic/Google keys on Settings, one AI action raises the `ai_usage` id, replace old env-secret keys, revoke the old ones at the providers; `ai_keyring_invalid` never appears in the logs (cutover day and next day).
-- [ ] **7. After a successful cutover**: rotate the Supabase database password; no leftover `pgpass` dir; clear shell history if the password was exported.
+- [ ] **7. After the cutover**: rotate the Supabase database password (after a successful cutover, and after any outcome if stage 0.8 fell back to `require`); no leftover `pgpass` dir; clear shell history if the password was exported.
 
 **Day +14 (runbook stage 9, STK-095)**
 - [ ] Contract PR merged first; delete `STOKTOK_SUPABASE_URL` and `STOKTOK_SUPABASE_SERVICE_ROLE_KEY` from the environment (Authen keys stay); delete the `stoktok_ai_key_%` rows from Supabase Vault; keep the Supabase `public` tables as a read-only archive; delete `~/srv/backups/stoktok-cutover/`. After that a rollback to v0.2.1 is impossible.

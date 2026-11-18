@@ -11,10 +11,11 @@ on `mmlabs-online/deployment` (not a `release/*` branch, so `pr-scope` does not 
 | `.github/workflows/deploy-stoktok.yml` | `.github/workflows/deploy-stoktok.yml` |
 | `.github/workflows/runner-check.yml` | `.github/workflows/runner-check.yml` (shared by every app; STK-044 only changes the expected runner user to `mingming`) |
 
-STK-084 (shared Postgres; B / STK-092 is merged, C is the STK-093 deployment PR): copy `apps/stoktok/compose.yml` and `.github/workflows/deploy-stoktok.yml`
-only after `bash postgres/scripts/add-app-db.sh stoktok` has been merged (it creates
-`postgres/secrets/apps/stoktok.password`, which deploy-stoktok reads), and set the `stoktok` environment
-secret `STOKTOK_AI_KEYS_MASTER_KEY`. See `docs/deploy.md`, Shared Postgres.
+STK-084 (shared Postgres): STK-092 and STK-093 are merged, and the workflow draft equals the live file.
+`apps/stoktok/compose.yml` is in its cutover state (STK-094: `migrate` service, `/readyz` health check). It
+goes into the deployment repo **only** as a second commit on the release PR `release/stoktok-vX.Y.Z`,
+copied from the release tag. Never copy it in a setup PR while v0.2.1 is pinned: v0.2.1 has no `migrate`
+command and no `/readyz` (F3/F4). The workflow is not copied again. See `docs/deploy.md`, "Cutover release (STK-094)".
 
 The `/apps/stoktok/` line in the deployment repo's `.github/CODEOWNERS` already exists; nothing to add.
 
