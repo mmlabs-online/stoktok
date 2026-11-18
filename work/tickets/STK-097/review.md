@@ -220,3 +220,87 @@ None blocking.
 - Security 🟡3: SHA-pin the actions.
 - Security N2: strip other control characters in `show()`.
 - Security N4: "Require branches to be up to date" in the README.
+
+## Attempt 3 — 2026-11-18
+Verdict: REWORK
+
+Scope: Ming's note "after attempt 2 PASS" (last rework). Code commit 445b918 (later commits d530aca and a55b833 touch only `work/`). Deployment branch `stoktok/stk-097-workflow-guards` at 2c52ee5 (`git ls-remote` confirms).
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exit 0.
+- lint: `pnpm lint` exit 0.
+- test: `pnpm test` exit 0. core 834, sources 35, ai 184, db 169, worker 310, web 360 passed.
+- check:deploy-env: `pnpm check:deploy-env` exit 0. 87 `ok` lines, no `FAILED`, ends `OK: deploy guard mutation proofs`. G0 and G10-G17, M44 and M45 included.
+- `bash -n` on `scripts/check-deploy-env.sh`, `scripts/test-deploy-guards.sh` and `deploy/deployment-repo/ops/check-stoktok-workflow.sh`: exit 0.
+- CI on draft PR #77, head a55b833 (same code as 445b918), via the REST API:
+  - `deploy-guards-macos` (job 134736067498): success. It ran `/bin/bash scripts/test-deploy-guards.sh` with the macOS system PATH, and printed `ok M44-quoted-run`, `ok M45-plain-oneline-run` and `OK: deploy guard mutation proofs`.
+  - `ci` (job 134736067987): success. Its output includes `OK: deploy env lists consistent`, `ok G17-repository` and `OK: deploy guard mutation proofs`.
+  - The `images` jobs were still running. They are not part of this ticket.
+- Working trees: `git status` is clean in `/home/user/stoktok` and `/home/user/deployment`. All my reproductions ran in the scratchpad.
+
+### Acceptance criteria (Ming's items)
+- [x] **Item 1: `stoktok-guards.yml` is pinned as a whole.**
+  - Evidence: `scripts/check-deploy-env.sh:345-366` holds `GUARDS_SHA256=da5f97…dc08`. `shasum -a 256` and `sha256sum` of the draft both give this value.
+  - G11-G17 pass. Each one fails with "differs from the pinned copy", which is the only guards check left, while G0 passes.
+  - My own mutations of a copy also exit 1 with that message: a quoted `"persist-credentials":` key, one trailing space, one extra final newline, CRLF line endings, and an added comment line. The unchanged copy exits 0. So every byte is covered.
+  - Tool fallback, tested with PATH shims:
+    - only `sha256sum` available: exit 0;
+    - only `shasum` available: exit 0;
+    - neither available: exit 127 (`sha256sum: command not found`, aborted by `set -euo pipefail`). This fails closed.
+  - The update procedure is in the comment at `check-deploy-env.sh:345-349`, and the FAIL message points to it.
+- [ ] **Item 2: every `run:` in the deploy workflow is a `|` block.** FAILED, see Issue 1.
+  - What works: a copy of the draft with one appended step behaves as follows.
+    - exit 1: `run: "true\nset"` spread over two lines, a plain one-line `run:`, the flow mapping `- {name: zz, run: "…"}`, `run: >`, `run: |-`, `run: |+`, `run: |2` and `run: | # c`;
+    - exit 0: an added `run: |` step, and the live draft (12 of 12 `run: |`).
+  - What fails: the quoted-key spellings get through.
+  - On `|-` and `|+`: rejecting them is correct. The live file needs neither. They change only trailing newlines, so allowing them would gain nothing, and the strict rule is simpler.
+- [x] **Item 3: README wording.**
+  - `deploy/deployment-repo/README.md:52` now says "Require branches to be up to date before merging".
+  - `:53` says "the merge commit must have a `parent` line naming the PR head".
+  - The comment at `stoktok-guards.yml:37` matches.
+  - No "second parent" is left in `deploy/` or `scripts/`.
+- [ ] **impl-log push status.** Stale, see Issue 2.
+- [x] **Deployment parity.**
+  - The diff from `origin/main` to 2c52ee5 lists 3 files.
+  - `git show 2c52ee5:<f> | cmp - <draft>` is silent for `ops/check-stoktok-workflow.sh`, `.github/workflows/stoktok-guards.yml` and `.github/workflows/deploy-stoktok.yml`.
+  - The branch's `stoktok-guards.yml` hashes to the pinned value.
+- [x] **ming-todo has the repo-settings items** (`work/ming-todo.md:35-38`): code-owner review, fork PR workflows, and the required check with "up to date".
+
+### Issues
+#### Issue 1 — 🔴 blocker — the new `run:` rule misses quoted and complex keys, so `run: "true\nset"` is still open
+- **Where**: `deploy/deployment-repo/ops/check-stoktok-workflow.sh:221-223`. The selector `(^|[[:space:]-])run[[:space:]]*:` only sees an unquoted key that follows whitespace or `-`.
+- **Expected**: every `run` key in `deploy-stoktok.yml`, however it is spelled, is a plain `|` block. This is the exact payload Ming asked to close.
+- **Actual**: each of these, appended as a step to a copy of the draft, makes the checker exit 0 with no FAIL. In all of them YAML turns `\n` into a newline, so bash would run a bare `set`:
+  - `"run": "true\nset"` (double-quoted key);
+  - `'run': "true\nset"` (single-quoted key);
+  - `- {name: zz, "run": "true\nset"}` (flow mapping with a quoted key);
+  - `? run` followed by `: "true\nset"` (complex key).
+  - A double-quoted key can also use escapes (`"\x72un"`), so widening the regex to `["']?run["']?` alone would still leave a gap. This is the same class that made Ming switch `stoktok-guards.yml` to a whole-file pin. Security review attempt 3 reports it as 🟡6.
+- **Fix instruction**:
+  - In `check-stoktok-workflow.sh`, next to the `run:` rule, add a rule that rejects, outside block-scalar content, any line whose key position starts with a quote, `{` or `?`. In other words, any line matching `^[[:space:]]*(-[[:space:]]+)?(["'{]|\?([[:space:]]|$))`.
+  - Use an awk pass that skips lines inside a block scalar. Such a line is blank or more indented than a line ending in `: |` or `: >` (with optional chomping or indent indicators and an optional comment).
+  - Pass the text to awk via stdin or ENVIRON, so it stays bash 3.2 and BSD compatible. Do not use awk intervals.
+  - I checked this rule against the live draft and it flags nothing.
+  - Add mutation cases M46-M49 to `scripts/test-deploy-guards.sh` (double-quoted key, single-quoted key, flow mapping with a quoted key, `? run` complex key), each expecting 1.
+  - Keep the existing `run:` rule as it is. Re-copy the checker to the deployment branch byte for byte.
+
+#### Issue 2 — 🟡 should-fix — impl-log push status is stale (Ming asked for it explicitly)
+- **Where**: `work/tickets/STK-097/impl-log.md`, Attempt 3, the line "Deployment branch: … (hash in the final report; not pushed)".
+- **Expected**: the log names the pushed head of `stoktok/stk-097-workflow-guards` and states that the deployment PR is not yet open.
+- **Actual**: the log says "not pushed", but `git ls-remote` shows the branch at 2c52ee5.
+- **Fix instruction**: after re-pushing for Issue 1, replace that line with "Deployment branch pushed at <new sha> (parent 2c52ee5 …); deployment PR not yet opened".
+
+### Rules R1–R10
+- R7: changed files match Ming's three items plus the impl-log. No out-of-plan files.
+- R8: checks are green, and new mutation cases cover each new rule.
+- R3: no secret material in the diff.
+- No violations found, apart from Issue 1 against Ming's item 2.
+
+### Nits (do not block)
+- `deploy/deployment-repo/README.md` "Updating it" (around `:57`) does not mention that an edit to `stoktok-guards.yml` needs `GUARDS_SHA256` in `scripts/check-deploy-env.sh` updated in the same stoktok PR. Today this is only in the script comment.
+- If neither hash tool exists, the result is exit 127 with `command not found` rather than a `FAIL:` line. It fails closed, but an explicit `else echo "FAIL: need shasum or sha256sum"; fail=1` would be clearer.
+- The macOS job skips the cross-file cases (`STK097_SKIP_CROSSFILE=1`), so the `shasum` branch is exercised in CI only on Ubuntu. I tested the `sha256sum`-only path locally.
+
+### Follow-ups (out of scope)
+- `uses:` steps with inline code (for example `actions/github-script` `script:`) are not covered by the `run:` rule.
+- Security 🟡3: SHA-pin the actions (already deferred by Ming).
