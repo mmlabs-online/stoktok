@@ -170,3 +170,77 @@
 2. Is `docker compose` available in the CI job that runs `check-deploy-env.sh`? This decides whether the `config --format json` allow-list is an option.
 
 Files: /home/user/stoktok/scripts/check-deploy-env.sh, /home/user/stoktok/scripts/db-migrate-from-supabase.sh, /home/user/stoktok/scripts/test-db-migrate-from-supabase.sh, /home/user/stoktok/docs/deploy.md, /home/user/stoktok/work/ming-todo.md, /home/user/stoktok/work/tickets/STK-094/impl-log.md
+
+## Attempt 3
+
+**Verdict: no 🔴.** 🟡7, 🟡8 and the ming-todo nit are closed for every case I raised. I found one new way around the migrate check (🟡9, low) and one doc gap (🟡10, nit). Neither blocks PASS. 🟡2 and 🟡6 stay with STK-097. No secret values appear in changed lines or in this report.
+
+### What attempt 3 closed
+- **🟡7, closed for the attempt-2 cases.**
+  - `scripts/check-deploy-env.sh:113-115` now checks every line of the `migrate` block. A line must be one of: blank, a comment, an indent-4 allowed key followed by a space or end of line, or an indent-6 `- ` item.
+  - Fixed by this check: quoted keys, `key :` with a space before the colon, explicit `? key` keys, a 6-space re-indent, tab-indented lines, and stray indent-2 or indent-3 lines. Indent-2 lines matter because a quoted sibling service like `  "x":` does not end the block in `svc_block` (`:61`), so it is caught as a bad line.
+  - `:121` rejects `<<:` and `&`/`*` anchors and aliases anywhere in the compose, comments excluded.
+  - The impl-log (`impl-log.md:104`) records the mutation proofs: quoted keys, `privileged : true`, `<<: *priv` and the 6-space indent all FAIL, and the unchanged draft passes.
+- **The other variants you asked about** (none gets past the check inside the block):
+  - **Whole service as a flow mapping** (`  migrate: {…}`): `svc_block` needs the exact line `  migrate:`, so the block comes out empty and the check FAILs with "lacks migrate".
+  - **Flow or block values on allowed keys**: the required lines are exact flow forms, and a duplicate key is a YAML error in compose. That leaves `env_file:` as the only key that can take a block list, and a mapping item there fails compose's schema.
+  - **Block scalars on allowed keys**: their content is a string and cannot add keys, and `image:` stays anchored at `:101`.
+  - **Duplicate `migrate:` service keys**: compose rejects them as a duplicate mapping key.
+  - **`extends:` inside migrate**: not on the allow-list, so it FAILs.
+  - **Anchor names that start with a digit** (`&1`, `*1`): the regex at `:121` misses them. This does no harm: a merge still needs `<<`, which is caught; an alias on `image` fails `:101`; and an alias on `env_file` changes nothing.
+- **🟡8, closed.**
+  - `docs/deploy.md:110` (step 2) now converts the PR to a draft right after `release.yml` opens it, before the compose commit.
+  - It adds the fallback: if the orchestrator's token cannot do it, Ming does it at stage 0.3. This answers open question 1 from attempts 1 and 2.
+  - The `isDraft` check is still there at `:149` (stage 0.3), and `gh pr ready` at `:190` (stage 4.1) and `:113`.
+- **ming-todo nit, closed.** `work/ming-todo.md:42` says "open, not merged, and a draft", and `:46` says "mark … ready (`gh pr ready`), then merge it".
+- **Review nit, closed.** `scripts/test-db-migrate-from-supabase.sh:373` now assigns `wdigest` only once.
+
+### New findings
+
+**🟡9 (low): a decoy `migrate:` block placed earlier in the file gets checked instead of the real service.**
+- **Where:** `scripts/check-deploy-env.sh:58-62` (`svc_block`) and `:66`.
+- **Cause:** the awk script picks the first line in the file that equals `  migrate:`, wherever it is, and stops when that block ends. Nothing ties that line to `services:`, and nothing checks that it is the only one.
+- **Bypass (a):** put a top-level extension before `services:`. Compose ignores keys that start with `x-`.
+  ```
+  x-note:
+    migrate:
+      image: ${STOKTOK_WORKER_IMAGE:?…}
+      …the clean lines…
+  services:
+    …
+    migrate:
+      …
+      privileged: true
+  ```
+  This needs no anchors, and the variable, `env_file` count and `env_file` value checks (`:24,44,173`) all still pass.
+  - The decoy can also be the text of a block scalar (`x-doc: |` followed by indented lines). The same flaw affects the web and worker blocks.
+- **Bypass (b), unverified:** a `---` second YAML document holding another `services: migrate:` block. The line `---` ends the awk block, and recent compose-go merges multiple documents. I have not confirmed which compose version the runner uses.
+- **Likelihood:** low, the same threat model as 🟡7 (an accidental or AI edit, not a hostile committer). Bypass (a) is deliberate-looking but takes only a few lines.
+- **Fix (one commit, plus mutation proofs for both cases):**
+  - Require exactly one line matching `^[[:space:]]*["']?migrate["']?[[:space:]]*:`.
+  - Only start `svc_block` after the `^services:$` line.
+  - Fail on any `^---` or `^\.\.\.` line.
+  - Allow only `name`, `services` and `networks` as top-level keys (`^[^[:space:]#][^:]*:`). This also blocks `include:` and `x-*`.
+- **More robust option (repeated from attempt 2):** run `docker compose config --format json` with dummy env values and compare `.services.migrate | keys` with `jq`.
+
+**🟡10 (nit, doc): the retry path skips the draft step.**
+- **Where:** `docs/deploy.md:114` (step 6) says that after a failed dry run you "cut the next version and repeat step 3".
+- **Problem:** the new PR that `release.yml` opens would not be converted to a draft (that is step 2), and step 5 assumes "stays a draft (step 2)". The stage 0.3 `isDraft` check still catches it, but only if Ming goes back through stage 0 for the new PR.
+- **Fix:** change it to "repeat steps 2-5".
+
+**Minor wording at `work/ming-todo.md:39`:** the order "adds the compose commit … The orchestrator converts that PR to a draft" suggests the old order (draft after the commit). Line 42's draft check makes this harmless. Optionally reword to "converts it to a draft as soon as it opens, then adds the compose commit".
+
+### Recommendations
+- **AC "R8 mutation proof" / R3 hardening:** fix 🟡9 now, since this is the last rework. It is about four lines plus two mutation proofs: an `x-` decoy before `services:` and a `---` second document. Otherwise put it in STK-097.
+- Fix 🟡10 and the line-39 wording as doc-only edits.
+- **Carry to STK-097:** 🟡2 and 🟡6, plus allow-lists for the web and worker blocks. Those blocks still only use deny-lists, which was already the case before this ticket.
+
+### Risks
+- The compose check is still a text-based guard against mistakes, not a security boundary. The real protection is that only reviewed compose content reaches the deployment repo (`cmp` at stage 0.3, and Ming merging).
+- Keeping the release PR a draft still depends on the token's permission or Ming doing it at stage 0.3. The doc now says so.
+
+### Open questions
+1. Does the docker compose version on the runner merge multiple YAML documents? This decides whether bypass (b) of 🟡9 is real.
+2. Is `docker compose` available in the CI job that runs `check-deploy-env.sh`? This decides whether the `config --format json` check is an option.
+
+Files: /home/user/stoktok/scripts/check-deploy-env.sh, /home/user/stoktok/deploy/deployment-repo/apps/stoktok/compose.yml, /home/user/stoktok/docs/deploy.md, /home/user/stoktok/work/ming-todo.md, /home/user/stoktok/scripts/test-db-migrate-from-supabase.sh, /home/user/stoktok/work/tickets/STK-094/impl-log.md
