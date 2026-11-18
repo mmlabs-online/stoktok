@@ -90,5 +90,5 @@ Priority: P1 (next) > P2 > P3. `/run` with no ID picks a BACKLOG S1 bug (`BUG-xx
 | STK-094 | Cutover to the shared Postgres (STK-084 slice D) | DONE | P1 | db, data, security | 2 | 2026-11-18 |
 | STK-095 | Contract after the 14-day rollback window (STK-084 slice E) | BACKLOG | P2 | security | 0 | 2026-11-17 |
 | STK-096 | Cutover runbook in docs/deploy.md (STK-091 split A2b) | DONE | P1 | db, data, security | 2 | 2026-11-18 |
-| STK-097 | Deploy-env guards on the live workflow + close bypasses (STK-093 follow-ups) | BACKLOG | P2 | security | 0 | 2026-11-18 |
+| STK-097 | Deploy-env guards on the live workflow + close bypasses (STK-093 follow-ups) | PLANNING | P2 | security | 0 | 2026-11-18 |
 | STK-098 | Owner-role test:db hardening (STK-090 follow-ups) | BACKLOG | P3 | security, db | 0 | 2026-11-18 |
