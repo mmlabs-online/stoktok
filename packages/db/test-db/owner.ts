@@ -39,6 +39,7 @@ export async function ensureOwnerRole(c: QueryClient, password: string): Promise
       const { rows } = await c.query('select 1 from pg_roles where rolname = $1', [TEST_OWNER_ROLE]);
       if (rows.length === 0) await c.query(`create role ${TEST_OWNER_ROLE} ${ATTRS} password '${password}'`);
       else await c.query(`alter role ${TEST_OWNER_ROLE} with ${ATTRS} password '${password}'`);
+      await c.query(`alter role ${TEST_OWNER_ROLE} reset all`);
       const m = await c.query(
         'select count(*)::int as n from pg_auth_members m join pg_roles r on r.oid = m.member where r.rolname = $1',
         [TEST_OWNER_ROLE],

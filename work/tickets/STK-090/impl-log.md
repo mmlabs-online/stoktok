@@ -35,3 +35,31 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No.
 - Diff size: about +480 / -9 lines including new files (more than half tests).
+
+## Attempt 2 — 2026-11-18
+
+Fixes: review blocker (owner.test.ts connected the owner role to the admin database `postgres`) and security 🟡1 (stored role settings).
+
+### Files touched
+| File | Required because |
+|---|---|
+| packages/db/test-db/owner.test.ts | Dropped `asOwner(ADMIN)` connection; password check now connects as the owner to a `freshDb()` clone. Real-Postgres assertion: `alter role ... set work_mem`, then ensureOwnerRole, `rolconfig` is null |
+| packages/db/test-db/owner.ts | `alter role stoktok_test_owner reset all` inside the same transaction in ensureOwnerRole |
+| packages/db/src/test-db-guard.test.ts | Fake-client assertions for the reset on the create and alter paths |
+
+### Checks
+Throwaway local PG16 on 127.0.0.1:54390 (scram-sha-256, password superuser, data dir in /var/tmp, deleted afterwards).
+- test:db: 27 files, 154 tests passed
+- db:check (DB_CHECK_URL, same server): "db:check OK"
+- test:db again: 27 files, 154 tests passed
+- typecheck, lint: green; test: core 834, sources 35, ai 184, db 169, worker 310, web 360 passed
+- check:deploy-env OK; bash -n scripts/*.sh OK; `pnpm format` run
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+None new.
+
+### Scope self-check
+- Smaller diff possible? No (about +16 / -3).

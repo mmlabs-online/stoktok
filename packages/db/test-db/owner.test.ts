@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { describe, expect, test } from 'vitest';
 import { emptyDb, freshDb } from './harness';
-import { asOwner, ensureOwnerRole, ownerPassword, TEST_OWNER_ROLE } from './owner';
+import { ensureOwnerRole, ownerPassword, TEST_OWNER_ROLE } from './owner';
 
 const ADMIN = process.env.DB_TEST_URL as string;
 
@@ -103,7 +103,17 @@ describe('test:db owner role', () => {
       await Promise.all([withClient(ADMIN, (c) => ensureOwnerRole(c, pw)), withClient(ADMIN, (c) => ensureOwnerRole(c, pw))]);
       const r = await withClient(ADMIN, (c) => c.query('select rolcreatedb from pg_roles where rolname = $1', [TEST_OWNER_ROLE]));
       expect(r.rows[0].rolcreatedb).toBe(false);
-      await withClient(asOwner(ADMIN), (c) => c.query('select 1'));
+      await withClient(ADMIN, (c) => c.query(`alter role ${TEST_OWNER_ROLE} set work_mem = '64MB'`));
+      await withClient(ADMIN, (c) => ensureOwnerRole(c, pw));
+      const s = await withClient(ADMIN, (c) => c.query('select rolconfig from pg_roles where rolname = $1', [TEST_OWNER_ROLE]));
+      expect(s.rows[0].rolconfig).toBeNull();
+      // Password still works: connect as the owner to a clone, never to the admin database.
+      const t = await freshDb();
+      try {
+        await withClient(t.url, (c) => c.query('select 1'));
+      } finally {
+        await t.drop();
+      }
     } finally {
       await withClient(ADMIN, (c) => ensureOwnerRole(c, pw));
     }

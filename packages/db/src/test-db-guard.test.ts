@@ -112,8 +112,9 @@ describe('ensureOwnerRole', () => {
     expect(f.log[1]?.params).toEqual([OWNER_ROLE_LOCK_KEY]);
     expect(t[2]).toMatch(/^select 1 from pg_roles/);
     expect(t[3]).toBe(`create role ${TEST_OWNER_ROLE} ${ATTRS} password '${PW}'`);
-    expect(t[4]).toMatch(/pg_auth_members/);
-    expect(t[5]).toBe('commit');
+    expect(t[4]).toBe(`alter role ${TEST_OWNER_ROLE} reset all`);
+    expect(t[5]).toMatch(/pg_auth_members/);
+    expect(t[6]).toBe('commit');
   });
 
   test('alter path re-asserts the NO* flags', async () => {
@@ -121,6 +122,7 @@ describe('ensureOwnerRole', () => {
     await ensureOwnerRole(f.client, PW);
     const t = f.texts();
     expect(t).toContain(`alter role ${TEST_OWNER_ROLE} with ${ATTRS} password '${PW}'`);
+    expect(t).toContain(`alter role ${TEST_OWNER_ROLE} reset all`);
     expect(t.some((x) => x.startsWith('create role'))).toBe(false);
     expect(t.some((x) => x.includes('drop role'))).toBe(false);
   });
