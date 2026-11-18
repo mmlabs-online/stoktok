@@ -83,3 +83,43 @@ Security review of STK-096, attempt 1. I read the files only and changed nothing
 ### Open questions
 
 - S1: should the "migrate failed" row tell Ming to revert the release PR first, or does Ming prefer to leave main pinned and fix forward? Leaving it pinned is the split-database risk described in S1.
+
+## Attempt 2
+
+Security review of STK-096, attempt 2. I only read files and changed nothing. I read `docs/deploy.md` stages 0-9 (lines 128-232), impl-log Attempt 2 and the live `/home/user/deployment/.github/workflows/deploy-stoktok.yml`.
+
+**Verdict:** S1-S5 are closed and there is no 🔴. Two new 🟡 items are below; both are one-line doc fixes in the same section. S6 is deferred to STK-094, which I accept. A grep of `docs/deploy.md` for secret patterns (`sb_secret_`+chars, JWT prefix, 64-hex digests, URLs with credentials) has no hits.
+
+### Status of the attempt-1 findings
+- **S1, closed.** `docs/deploy.md:219` now reverts the release PR first, and `:181` says to ignore "the old release is still running". I traced the revert run against the workflow:
+  - The revert restores v0.2.1's `release.env` and compose, so the compose has no `migrate` service. `pull` sets `migrate=false` (`deploy-stoktok.yml:252-257`), so `backup` and `migrate` are skipped.
+  - `deploy` runs `up -d --wait` (`:300`), which starts the stopped v0.2.1 web. `publish` (`:302-311`) puts v0.2.1's job files in `SCHED_DIR`. Only after that does `agent` (`:359-404`) find the label not loaded and bootstrap it.
+  - So the scheduler restarts only after its directory holds v0.2.1 files, and it writes to Supabase. Nothing writes to Postgres at any point in this path, so there is no race with the scheduler and no second writer.
+- **S2, closed.** `:221` now says: freeze first, then copy a dump, then revert, and use `--force` only after the hand re-entry is confirmed. The Freeze row's `--force` advice (`:217`) is limited to "no post-cutover data exists yet". The revert run itself cannot write to Postgres (same trace as S1).
+- **S3, closed.** `:148` now says to re-download the cert, re-check `MOVE_SRC_HOST`, and treat the password as exposed if falling back. One gap is noted in N2 below.
+- **S4, closed.** `:228` is labelled as Ming's dashboard step. `work/ming-todo.md:50` is Ming's own checklist, so it needs no change.
+- **S5, closed.** `:181` now says not to use the site until the deploy comment arrives, which covers the `--wait` window.
+
+### New findings
+🟡 **N1. Every revert path (`:219`, `:220` manual revert, `:221`) can put vX.Y.Z back on Postgres instead of v0.2.1, and the runbook never says to check which release ended up running.** `docs/deploy.md:219`, `:221`; mechanism at `deploy-stoktok.yml:123-128` and `:313-356`.
+- In the revert run, `BEFORE` is the release merge commit, so `previous` is the vX.Y.Z web image.
+- If v0.2.1 fails its 120 s health check, `rollback` restores `apps/stoktok/` from that commit and starts vX.Y.Z. It does not run `migrate`, and the compose now points at Postgres again. It republishes the vX.Y.Z scheduler, installs the agent, and pushes "Restore stoktok vX.Y.Z" to main (or ends as `restore-unpushed`).
+- The `:219` row then only says "Only if that run does not start web …". Here web did start, but on the release Ming meant to back out of.
+- In the 14-day case this means two writers over time: Ming re-enters data into v0.2.1/Supabase while the scheduler, and anyone using the site, write to Postgres on vX.Y.Z.
+- This is unlikely, since v0.2.1 was healthy before.
+- **Fix (one sentence in `:219` and `:221`):** "The revert run's PR comment must read `deployed: …v0.2.1… healthy`. On `restored` / `restore-unpushed` naming vX.Y.Z, or anything else, freeze again (stage 2.3-2.5) and stop."
+
+🟡 **N2. The S3 fallback says "the rotation in stage 7.1 covers it", but 7.1 runs only after a *successful* cutover.** `docs/deploy.md:148`, `:209`
+- The fallback is decided at the dry run, which can be days earlier. If the cutover is then aborted or rolled back (Freeze, Move failed, or Release rows), a password sent under plain `require` is never rotated.
+- **Fix:** in `:148`, say "rotate it (stage 7.1) after the last script run, whatever the outcome". Alternatively, add "do 7.1 if stage 0.8 fell back" to the Freeze and Move failed rows.
+
+### Minor (not security-blocking)
+- `:221`, step (2): the newest `last/` dump can be up to about 24 h old. It is a safety net, because Postgres itself is not wiped until `--force`. Still, making "take one with `pg-backup /backup.sh` after the freeze" mandatory, not optional, would make the copy complete.
+- `:221`: if a fix-forward release was merged after vX.Y.Z, "revert the release PR's merge commit" no longer gets back to v0.2.1. The PR would need `release.env` and `compose.yml` set back to the v0.2.1 state. The same N1 check covers this.
+- `:220`, web unhealthy: a later re-attempt needs `--force` because `stoktok` is non-empty. That is safe only because S5 says the site was not used. A pointer to the Freeze row's `--force` note would make it explicit.
+
+### Risks
+- The N1 failure mode is silent apart from the PR comment and a red run. The data split it causes is the same harm as attempt-1 S1, though reached by a much less likely route.
+
+### Open questions
+- None. N1 and N2 are wording fixes inside `docs/deploy.md` stage 0.8 and stage 8, within the ticket's scope.
