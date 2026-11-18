@@ -96,3 +96,77 @@
 1. Can the orchestrator convert the deployment PR to draft (🟡1)? Does the token it pushes with have that right?
 2. Does the migrate runner write anything to the filesystem? This decides whether `read_only: true` is viable (🟡6).
 3. Should S6 pin the repository name (🟡4), or is a digest of any image acceptable to Ming?
+
+## Attempt 2
+
+**Verdict: no 🔴. 🟡1, 🟡4 and 🟡5 are closed. 🟡3 is closed for the attempt-1 cases, but the allow-list can still be bypassed in three ways (🟡7). I found two new low-severity items (🟡8, plus a nit).** None of these blocks PASS. 🟡2 and 🟡6 are deferred to STK-097 as agreed. No secret values appear in any changed line or in this report.
+
+### Closure of attempt-1 findings
+- **🟡1, closed.**
+  - `docs/deploy.md:113` adds the step `gh pr ready --undo` and says Ming marks the PR ready at stage 4.1.
+  - Stage 0.3 (`docs/deploy.md:149`) now requires "open, not merged, and a draft" and gives the check: `gh pr view … --json isDraft` must say `true`.
+  - Stage 4.1 (`docs/deploy.md:190`) starts with `gh pr ready`.
+  - `work/ming-todo.md:39` repeats the draft and the stage-4.1 hand-off.
+- **🟡3, closed for the cases I raised.**
+  - `scripts/check-deploy-env.sh:101` anchors the image check: `^image: \$\{STOKTOK_WORKER_IMAGE:\?[^}]*\}$`, applied after stripping whitespace.
+  - `scripts/check-deploy-env.sh:112-117` allow-lists the indent-4 keys.
+  - The impl-log (`impl-log.md:75`) records these mutation proofs: `privileged: true` FAILs, `volumes:` FAILs, and an image line with an added prefix or suffix FAILs.
+  - Bypasses remain; see 🟡7.
+- **🟡4, closed.**
+  - `scripts/db-migrate-from-supabase.sh:109` pins the repository with the same pattern as `deploy-stoktok.yml:105`. Because it is anchored, a registry-prefixed lookalike such as `evil.io/mingming21400/...` or `docker.io/...` is rejected.
+  - `:250` adds `--cap-drop ALL --security-opt no-new-privileges:true` to the script's own `docker run … migrate`.
+  - The header at `:8-10` explains why the exemption depends on the source.
+  - The target URL still reaches the container only through `-e STOKTOK_DATABASE_URL` (inherited from the environment, not on argv).
+  - I found no bypass of the S6 regex. Every character class is anchored, the digest must be exactly 64 lowercase hex, and the check at `:62` blocks shell metacharacters.
+  - The only way around it is the local-source exemption (`MOVE_SRC_HOST=localhost|127.0.0.1`, matched case-sensitively). Using it requires controlling the operator's environment, so it is accepted as documented.
+- **🟡5, closed.** `scripts/test-db-migrate-from-supabase.sh:186` asserts the message. A new case for another repository's digest (`:188-189`) also checks the message, and the positive case (`:383-385`) checks that no pin complaint is printed.
+
+### New findings
+
+**🟡7 (low): the migrate allow-list only sees unquoted keys indented by exactly 4 spaces.**
+- **Line:** `scripts/check-deploy-env.sh:113`, `sed -n -E 's/^    ([A-Za-z_]+):.*/\1/p'`.
+- **What still passes:**
+  - a. **Quoted keys**, e.g. `    "privileged": true` or `    'volumes': [...]`. YAML accepts them and the sed does not match them.
+  - b. **A YAML merge key**, e.g. `    <<: *hardening_off`, pointing at a top-level `x-…: &hardening_off {privileged: true, cap_add: [SYS_ADMIN]}`. `<<` is not in `[A-Za-z_]`, and the `x-` block is outside `svc_block`. Compose resolves merge keys.
+  - c. **The whole `migrate` block re-indented to 6 spaces.** No line matches `^    [A-Za-z_]+:`, so `bad_keys` is empty. The required-line checks strip whitespace (`:100`), so they still pass.
+- **Likelihood:** this targets accidental or AI edits rather than a hostile committer, so it is low.
+- **Fix (one commit):**
+  - Treat any line in the block that is not blank and not a comment, and is indented fewer than 6 spaces, as a top-level key. It must match `^    [a-z_]+:` exactly; anything else FAILs.
+  - Fail the whole compose on any `<<:` or YAML anchor or alias (`&name` or `*name` in key or value position).
+  - Add mutation proofs: a quoted `"privileged": true`, `<<: *x`, and a 6-space indent must each FAIL.
+- **Optional, more robust alternative:** run `docker compose config --format json` on the draft with dummy env values, then use `jq` to compare `.services.migrate | keys` with the allow-list. This only works if CI has docker compose.
+
+**🟡8 (low): the draft conversion comes after the compose commit, so a short window remains in which the PR can be merged.**
+- **Line:** `docs/deploy.md:110-113`.
+- **What happens:** `release.yml` opens `release/stoktok-vX.Y.Z` as a normal, mergeable PR at step 2. The PR becomes a draft only at step 5, after the compose commit and the check.
+  - A merge between steps 2 and 3 deploys v0.3.0 without the `migrate` service. That is the 🟡2 path, and `/healthz` passes on the expand compose.
+  - A merge between steps 3 and 5 is the original 🟡1 scenario.
+- **Likelihood:** low. The window is short and the orchestrator controls it.
+- **Fix (doc only):** move `gh pr ready --undo` to right after the PR appears in step 2, before the compose commit, and keep the `isDraft` check at step 4 and stage 0.3.
+- **Open question 1 from attempt 1 is still open:** does the orchestrator's token have the write access that `gh pr ready --undo` needs? If it does not, step 5 fails, and Ming must do it at stage 0.3. The doc should say so.
+
+**Nit: the stage rows in `work/ming-todo.md` do not mention the draft.**
+- **Line:** `work/ming-todo.md:42` (stage 0) says "open and not merged" but not "draft". `:46` (stage 4) says "merge" with no "mark ready" step.
+- **Why it matters little:** line 39 covers both, and the runbook is correct.
+- **Fix:** add "and a draft" to `:42`, and "mark ready (`gh pr ready`), then" to `:46`. This keeps the to-do list in step with stage 0.3 and stage 4.1.
+
+### Checked and OK
+- The workflow always passes `-f "$APP_DIR/compose.yml"` (`deploy-stoktok.yml:249,276,299,332`). A stray `compose.override.yml` is therefore not loaded automatically, and that route around the allow-list does not exist.
+- The `security_opt` and `cap_drop` checks are exact-line matches (`check-deploy-env.sh:105-111`). Adding a second item, e.g. `seccomp=unconfined`, FAILs.
+- `scripts/db-migrate-from-supabase.sh:245`: the migrations-list `docker run` has no cap flags, but it runs with `--network none` and no secrets. Not a finding.
+- Not mutation-tested: the new cap flags on the script's migrate `docker run` (`impl-log.md:77`). Stage 1 of the runbook (`docs/deploy.md:164`) is now the first real run of the hardened migrate, before production. This is acceptable for R8 because it is a shell-flag parity change, not core logic.
+
+### Recommendations
+- **AC "R8 mutation proof" / 🟡3:** fix 🟡7 in this ticket if a rework happens anyway; it is about five lines plus three mutations. If not, add it to STK-097.
+- **🟡1 hardening:** fix 🟡8 and the ming-todo nit in this ticket. Both are doc-only.
+- **Carry to STK-097:** 🟡2 (fail closed when detecting migrate, which also covers 🟡8's first window mechanically) and 🟡6.
+
+### Risks
+- An early merge is now blocked mechanically only after step 5. Before that it depends on ordering (🟡8).
+- The allow-list can be bypassed with valid YAML (🟡7), so it is a guard against mistakes, not a security boundary.
+
+### Open questions
+1. Can the orchestrator's push token convert the deployment PR to draft? If not, who does it, and when?
+2. Is `docker compose` available in the CI job that runs `check-deploy-env.sh`? This decides whether the `config --format json` allow-list is an option.
+
+Files: /home/user/stoktok/scripts/check-deploy-env.sh, /home/user/stoktok/scripts/db-migrate-from-supabase.sh, /home/user/stoktok/scripts/test-db-migrate-from-supabase.sh, /home/user/stoktok/docs/deploy.md, /home/user/stoktok/work/ming-todo.md, /home/user/stoktok/work/tickets/STK-094/impl-log.md
