@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P2 |
 | Areas | db, security |
 | Attempts | 1 |
 | Created | 2026-11-17 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/75 |
 
 ## Goal
 Split from STK-089 (see work/tickets/STK-089/plan.md "Split proposal"; consult in work/tickets/STK-083/consult-database-optimizer.md §6). Run test:db as a non-superuser owner role so tests prove migrations and repos work without superuser. Scope:

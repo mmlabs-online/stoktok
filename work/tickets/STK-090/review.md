@@ -89,3 +89,41 @@ Ming verification after merge: none (plan).
 
 ### Follow-ups (out of scope)
 - Consider documenting the order dependency in `scripts/db-check.sh` / ADR 0010 §12. URL-mode db:check permanently changes the server's PUBLIC ACLs on `postgres` and `template1`, which can affect any later non-superuser test.
+
+## Attempt 2 — 2026-11-18
+Verdict: PASS
+
+Scope (orchestrator note, ticket.md): the Attempt 1 blocker (owner.test.ts connected the owner to the admin DB `postgres`) and security 🟡1 (`alter role … reset all` plus a fake-client assertion). Rework commit 9435d74 (+16/-3 code; files: `packages/db/test-db/owner.ts`, `packages/db/test-db/owner.test.ts`, `packages/db/src/test-db-guard.test.ts`, impl-log).
+
+### Checks (run by reviewer)
+Reproduction on one throwaway PostgreSQL 16.15 cluster: `initdb --auth=scram-sha-256`, password superuser `postgres`, TCP on 127.0.0.1:54391, data dir under `/var/tmp` (owned by `postgres`), stopped and deleted afterwards.
+- `DB_TEST_URL=… pnpm test:db`: exit 0 — 27 files, 154 tests passed.
+- `DB_CHECK_URL=… pnpm db:check` (same server): exit 0, `db:check OK` (no refused role or database).
+- `pnpm test:db` again after db:check: exit 0 — 27 files, 154 tests passed. Cluster state afterwards: no `stoktok_test%` databases left; `stoktok_test_owner` has `rolsuper=f`, `rolconfig` null; `has_database_privilege('stoktok_test_owner','postgres','CONNECT') = f` — so the second run really did run with PUBLIC CONNECT revoked on `postgres` (the Attempt 1 failure condition) and passed.
+- Negative proof (temporary edit removing the `reset all` line in `owner.ts:42`, reverted with `git checkout`): `src/test-db-guard.test.ts` → 2 failed (`ensureOwnerRole > create path`, `> alter path re-asserts the NO* flags`); real-PG `test-db/owner.test.ts` → 1 failed (`ensureOwnerRole is idempotent, concurrent-safe and repairs flags`, at `expect(s.rows[0].rolconfig).toBeNull()`, owner.test.ts:109). After revert: owner.test.ts 6/6 passed and the leftover `work_mem` setting was cleared.
+- typecheck: exit 0.
+- lint: exit 0.
+- test: exit 0 — core 834, sources 35, ai 184, db 169, worker 310, web 360 passed (matches impl-log Attempt 2).
+- check:deploy-env: `OK: deploy env lists consistent`.
+- `bash -n scripts/*.sh`: all OK.
+- Working tree clean after all runs.
+
+CI (PR #75, REST API): the runs on 2b87abe (`ci`, `images`) concluded `cancelled` — superseded because the PR head moved to 4e8f563 (`STK-090: security review attempt 2`, touches only `work/tickets/STK-090/security-review.md`). On 4e8f563, run 44224519982 `ci` was `in_progress` at review time with typecheck, lint, test, **test:db**, check:service-key, check:deploy-env and **db:check** steps all `success`; `test:move` still running. Orchestrator: confirm the final conclusion before marking the PR ready.
+
+### Acceptance criteria
+- [x] Every item in the scope is done — Attempt 1 evidence stands; Attempt 2 adds `reset all` inside the same `begin`/advisory-lock transaction (`packages/db/test-db/owner.ts:42`), fake-client assertions on both paths (`packages/db/src/test-db-guard.test.ts:115,125`), real-PG assertion (`packages/db/test-db/owner.test.ts:106-109`; `set work_mem` then `rolconfig` null).
+- [x] CI's db:check after test:db still passes — reproduced locally (test:db → db:check → test:db, all green) and CI 4e8f563 step `pnpm db:check` = success after `pnpm test:db` = success.
+- [x] typecheck, lint, test, test:db, db:check green — see Checks.
+- [x] Attempt 1 blocker fixed: owner.test.ts no longer calls `asOwner(ADMIN)`; the password check now connects as the owner to a `freshDb()` clone (owner.test.ts:110-116, `freshDb()` at :111). Remaining `asOwner` callers target clones/template only (`harness.ts:20`, `global-setup.ts:71`).
+
+### Issues
+None.
+
+### Rules R1–R10
+No violations found. R3: admin URL stays in the test harness; the owner password is still validated as 64 hex before interpolation (owner.ts:34). R7: diff limited to the two rework items. R8: changed logic has unit + real-PG tests, and both were shown to fail without the fix.
+
+### Nits (do not block)
+- `alter role … reset all` clears role-wide settings only, not per-database ones (`alter role … in database … set`). Harmless here: the owner connects only to freshly created clone/template databases, whose settings disappear when they are dropped.
+
+### Follow-ups (out of scope)
+- Carried from the orchestrator note for the PR body: security 🟡2 (send a SCRAM-SHA-256 verifier instead of the plaintext hex), 🟡3 (pre-flight refusal on non-test clusters; document `drop role stoktok_test_owner` as manual cleanup), 🟡4 (membership test can leak `stoktok_test_m_<pid>` if the grant fails), and the Attempt 1 doc note on db:check's side effect (revoking PUBLIC CONNECT on `postgres`).
