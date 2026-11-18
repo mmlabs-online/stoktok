@@ -2,12 +2,12 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | DONE |
 | Priority | P1 |
 | Areas | db, data, security |
 | Attempts | 2 |
 | Created | 2026-11-17 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/stoktok/pull/76 |
 
 ## Goal
 Split from STK-084 (see work/tickets/STK-084/plan.md "Split proposal" and its consults). Scope: drafts updated to the cutover state; the release-PR commit adds the `migrate` service and switches the health check to `/readyz`; Ming runs the runbook; new AI provider keys entered on Settings, old ones revoked; confirm `ai_keyring_invalid` never appears in logs.
@@ -29,3 +29,4 @@ CLAUDE.md Stack, R3, R5; ADR 0010; work/tickets/STK-084/ticket.md (shared-Postgr
 - 2026-11-18 (Ming, after attempt 1 PASS): fix security 🟡1 (step C converts the deployment release PR to draft after the compose commit; Ming marks it ready at runbook stage 4.1; stage 0.3 and ming-todo check "PR is a draft"), 🟡3 (allow-list of keys on the `migrate` block in check-deploy-env.sh + `privileged: true` mutation; anchor the migrate image check — review nit 1), 🟡4 (S6 pins the repository `mingming21400/stoktok-worker:vX.Y.Z@sha256:…` like deploy-stoktok.yml:105; the script's `docker run … migrate` gets `--cap-drop ALL --security-opt no-new-privileges:true`; header comment on the source-local exemption), 🟡5 (assert the S6 message). Also drop the stale ming-todo item about closing a release/stoktok-v0.2.2 PR (none exists — review nit 4). 🟡2 and 🟡6 → STK-097.
 - 2026-11-18 (orchestrator): plan.md step C is not edited after the fact; the draft-PR step for step C comes from docs/deploy.md "Cutover release (STK-094)" step 5 and Ming's 🟡1 decision above.
 - 2026-11-18 (orchestrator): attempt 2 = REWORK (migrate allow-list bypassable: quoted keys, space before colon, `<<:` merge key, 6-space re-indent = security 🟡7; ming-todo stage rows lack draft/ready). Last allowed rework (attempt 3). Also include security 🟡8 (doc-only, strictly safer than Ming's wording and same intent): convert the release PR to draft as soon as release.yml opens it, before the compose commit; keep the isDraft checks. Remove the duplicate `wdigest` assignment (review nit).
+- 2026-11-18 (orchestrator): attempt 3 PASS; code slice DONE. The release cut and runbook (plan steps A–I) are not done yet — they follow Ming's go-ahead after the PR merges. Carried to STK-097: security 🟡9 (decoy `migrate:` under `x-…`/block scalar, `---` second document, `include:`; fix: one `migrate` key only after `services:`, no `---`/`...`, top-level keys limited to name/services/networks, or `docker compose config --format json | jq`), 🟡10 (runbook step 6 "repeat steps 2–5"), ming-todo line 39 order wording, stage 0.3 "if isDraft is false, run gh pr ready --undo", allow-lists for the web/worker blocks.

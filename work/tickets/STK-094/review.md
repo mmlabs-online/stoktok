@@ -239,3 +239,136 @@ No violations found.
 - 🟡2 (migrate detection that fails closed) and 🟡6 (`read_only`, "no internet egress" wording) are in STK-097 as Ming decided. The same goes for security 🟡8 if Ming wants it.
 - Optional, more robust allow-list: `docker compose config --format json` plus `jq` on `.services.migrate | keys`, if CI has compose. STK-097.
 - Carried from attempt 1: the CLAUDE.md "Current state" line after stage 5; the `profiles: [jobs]` check on the worker; the web/worker network checks being "contains"; the unscheduled jobs (R-7); the stale ming-todo lines 13-16; ADR 0003 line 10.
+
+## Attempt 3 — 2026-11-18
+Verdict: PASS
+
+Scope of this attempt:
+- Attempt 2 Issues 1 and 2, security 🟡8, and the `wdigest` nit (orchestrator note of 2026-11-18). Rework commit 9603f59.
+- HEAD is 8caedfc. It adds only workflow files on top of the rework: `security-review.md` Attempt 3 and the backlog/ticket state.
+
+Every finding from attempt 2 is closed. I found new ways around the migrate check, and so did the security review (🟡9). They work by changing how the `migrate` block is found, not what the block may contain. So they fall outside what Ming asked for in 🟡3 (an allow-list of keys on the `migrate` block). I record them as a 🟡 should-fix for STK-097, not as a blocker; see "Remaining gap". Ming should read that section before merging.
+
+### Checks (run by reviewer, on 8caedfc)
+- typecheck: green (`pnpm typecheck`, exit 0).
+- lint: green (`pnpm lint`, exit 0).
+- test: green (`pnpm test`, exit 0). Counts: core 834, sources 35, ai 184, db 169, worker 310, web 360. These match impl-log Attempt 3.
+- check:deploy-env: `OK: deploy env lists consistent`.
+- `bash -n`: clean on `scripts/*.sh` and `deploy/deployment-repo/apps/stoktok/*.sh`.
+- test:db and db:check: not re-run locally. Nothing under `packages/` or `db/` changed since attempt 2, where both were green. CI ran both on 8caedfc (below).
+- CI, read through the REST API: PR #76 is open and still a draft, head 8caedfc. Run 44231139163 `ci` completed with conclusion success.
+  - Every step is green: typecheck, lint, test, test:db, check:service-key, check:deploy-env, db:check, test:move.
+  - The job log (134556308466) shows `OK: deploy env lists consistent`, 137 `ok:` lines and `test:move OK`.
+  - `images (worker)` and `images (web)` are success. The push was skipped, as on any PR.
+- impl-log vs my run: they match.
+
+### Mutation proofs (scratch `git archive` copy only)
+For each case below I edited the draft compose. Then I ran `check-deploy-env.sh` and `docker compose config --profile migrate` (Compose v5.6.1, no daemon; env_file pointed at an empty scratch file) to see the effective `migrate` service.
+
+**Attempt-2 and security-7 cases: now all FAIL.** Each line was added after `networks: [db]`.
+
+| Case | Check result |
+|---|---|
+| `"privileged": true` | rc 1 (compose: privileged) |
+| `'cap_add': [SYS_ADMIN]` | rc 1 (compose: cap_add) |
+| `privileged : true` | rc 1 |
+| plain `privileged: true` | rc 1 |
+| `<<: *priv` with `x-priv: &priv` placed before `services:` | rc 1, by both the allow-list and the anchor/merge check (compose: privileged) |
+| `<<: *1p` (anchor name starts with a digit) | rc 1, by the allow-list (the anchor regex misses it, but the `<<` matches) |
+| block re-indented to 6 spaces, with or without `privileged` | rc 1 |
+
+**New cases from the orchestrator's list.**
+
+| Case | Check result |
+|---|---|
+| flow-style `  migrate: {image: …, privileged: true, …}` | rc 1 ("lacks migrate", env_file count) |
+| tab-indented key, or a tab after 4 spaces | rc 1 (compose also refuses to parse it) |
+| `command: >-` / `  migrate` / `privileged: true` | rc 1 (needs the exact `command: ["migrate"]` line) |
+| `command: \|` added as a second key | rc 1 (compose: duplicate key) |
+| `!!str privileged: true` | rc 1 |
+| `? privileged` / `: true` | rc 1 |
+| `extends: stoktok-worker`, or `extends:` as a block | rc 1 |
+| `  migrate:` with trailing spaces or a trailing comment | rc 1 ("lacks migrate"), so it fails closed |
+
+**Indent-6 list items** pass the check, as they should, but none of them gets past compose:
+- `      - privileged: true` under migrate's `env_file:` gives rc 0 from the check, but compose rejects it ("path attribute … is missing").
+- `      - privileged: true` under a second `networks:` is a duplicate key, which compose rejects.
+- The required exact lines force flow values on every allowed key except `env_file`, so no list item can reach any other key.
+
+**A second `migrate:` definition inside `services:`** (unquoted or quoted) is a duplicate key, which compose rejects. One placed after `networks:` becomes a network, which compose rejects ("additional properties").
+
+**False positives:**
+- The real draft passes (rc 0).
+- The anchor regex `(^|[[:space:]:,{[-])[&*][A-Za-z_]` matches nothing in the draft. Common shell or cron values (`a && b`, `*/5`, `"*.json"`) do not match it either.
+
+### Remaining gap: the `migrate` block can be found in the wrong place (🟡 should-fix, carried to STK-097)
+`svc_block` (`scripts/check-deploy-env.sh:58-62`) checks the first line equal to `  migrate:`. Nothing ties that line to `services:`, nothing checks that it is the only one, and the check reads only one YAML document. For each of the following I verified that `check-deploy-env.sh` exits 0 while `docker compose config` shows `migrate` with `privileged: true`:
+1. **Decoy under an `x-` key:** an `x-note:` before `services:` holding a clean copy of the migrate block, plus `privileged: true` added to the real one. This is security 🟡9a.
+2. **Decoy as a block scalar:** the same, with the decoy as the text of `x-doc: |`.
+3. **Second YAML document:** `---`, then `services:` / `  migrate:` / `    privileged: true` appended at the end. Compose v5.6.1 merges the documents, which confirms security 🟡9b. I did not check the runner's compose version.
+4. **`include:`** at the top level, pointing at a file that defines `migrate` with `privileged: true`. Compose merges it, and the check never reads the included file.
+   - In the deployment repo this needs a second file under `apps/stoktok/`. Runbook stage 0.3 and step 4 accept exactly two changed files, so an include from the deployment repo would be caught there.
+   - Cases 1 to 3 would not be caught that way: they would already be in the stoktok draft, and the step 4 `cmp` only compares the release PR's compose with that draft.
+
+Why this does not block PASS:
+- What Ming asked for in 🟡3 is now met. Every line inside the `migrate` block is allow-listed, every spelling raised in attempt 2 FAILs, and the `privileged: true` mutation is proven.
+- None of the four cases is a realistic accidental edit, unlike a merge key. Each one deliberately adds a second definition of the service.
+- `check-deploy-env.sh` is a tripwire, not a security boundary (STK-097 says so). The real protection is review of the stoktok PR and Ming's merge of the deployment PR.
+- The security review rates this low and says it does not block PASS.
+
+**Fix for STK-097** (about four lines plus mutation proofs for cases 1 to 4):
+- FAIL on any `^(---|\.\.\.)` line.
+- Allow only `name`, `services` and `networks` as top-level keys (`^[^[:space:]#][^:]*:`). This also blocks `x-*` and `include:`.
+- Require exactly one line matching `^[[:space:]]*["']?migrate["']?[[:space:]]*:`.
+- Start `svc_block` only after `^services:$`.
+- Or, more robustly: `docker compose config --format json` with dummy env, then `jq '.services.migrate | keys'`. Compose is available on GitHub-hosted runners.
+
+### Acceptance criteria (this attempt)
+- [x] **Attempt 2 Issue 1 / security 🟡7**, migrate allow-list:
+  - `scripts/check-deploy-env.sh:112-119`: deny-by-default per line, and the offending lines are printed.
+  - `:121-124`: merge keys, anchors and aliases are rejected anywhere.
+  - Evidence: the mutation tables above. The draft passes.
+- [x] **Attempt 2 Issue 2**, ming-todo stage rows:
+  - `work/ming-todo.md:42` says "open, not merged, and a draft".
+  - `:46` says "mark the STK-094 release PR ready (`gh pr ready`), then merge it".
+- [x] **Security 🟡8**, draft timing:
+  - `docs/deploy.md:110` (step 2) converts the PR to a draft right after `release.yml` opens it, before the compose commit (step 3), with a fallback to Ming at stage 0.3.
+  - `:113` (step 5): "stays a draft".
+  - `:149` (stage 0.3): the `isDraft` = `true` check is still there.
+  - `:190` (stage 4.1): `gh pr ready` before the merge.
+- [x] **`wdigest` nit**: `scripts/test-db-migrate-from-supabase.sh:373` is now the only assignment, and its only use is `:382`. test:move is green in CI.
+- [x] Nothing applies a migration to Supabase, and no secret is committed. The diff is check script, docs and a test line. The only sha256 strings are all-zero test digests.
+- [x] Repo checks are green: see Checks above.
+- Scope: the four files in 9603f59 are exactly the ones the rework note asked for. `backlog.md`, `ticket.md`, `review.md` and `security-review.md` are workflow files.
+
+Ming verification after merge (carried to the PR): plan steps A to I, unchanged from attempts 1 and 2. These include the step 2 `gh pr ready --undo` (or Ming at stage 0.3 if the orchestrator's token cannot do it), the stage 0.3 `isDraft` check, and `gh pr ready` at stage 4.1.
+
+### Issues
+None that block. The remaining gap above is 🟡 should-fix and goes to STK-097.
+
+### Rules R1–R10
+No violations found.
+- R1, R2, R4, R5, R6, R9: no app code changed.
+- R3: no new credential path.
+- R7: the diff stays within the rework note.
+- R8: the guard change has mutation proofs (impl-log Attempt 3, and the tables above).
+- R10: not applicable.
+
+### Nits (do not block)
+1. `docs/deploy.md:114` (step 6): "cut the next version and repeat step 3" should be "repeat steps 2-5". Otherwise a retry PR is not converted to a draft until stage 0.3 catches it. This is security 🟡10.
+2. `work/ming-todo.md:39` still reads in the old order: "adds the compose commit … converts that PR to a draft". Reword it to "converts it to a draft as soon as it opens, then adds the compose commit".
+3. `docs/deploy.md:149` (stage 0.3) gives the `isDraft` check but does not say "if `false`, run `gh pr ready --undo` now", which is the fallback that step 2 points to.
+4. The anchor regex at `scripts/check-deploy-env.sh:121` misses names that start with a digit (`&1`, `*1`). This does no harm today, because the merge still needs `<<`, which is caught.
+
+### Follow-ups (out of scope)
+- STK-097:
+  - the remaining gap above (security 🟡9)
+  - 🟡2 and 🟡6, as Ming decided
+  - allow-lists for the web and worker blocks, which still use only deny-lists
+- Carried from attempts 1 and 2:
+  - the CLAUDE.md "Current state" line after stage 5
+  - the `profiles: [jobs]` check on the worker
+  - the web/worker network checks being "contains"
+  - the unscheduled jobs (R-7)
+  - the stale ming-todo lines 13-16
+  - ADR 0003 line 10
