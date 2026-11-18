@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | BACKLOG |
+| State | PLANNING |
 | Priority | P1 |
 | Areas | db, data, security |
 | Attempts | 0 |
@@ -24,3 +24,4 @@ CLAUDE.md Stack, R3; ADR 0010; consults in work/tickets/STK-084/ (data-engineer 
 - 2026-11-17 (orchestrator): created from the STK-091 planner's split proposal.
 - 2026-11-17 (Ming, via STK-091): include in the runbook/scope: rotate the Supabase DB password after a successful cutover; pin `PG_CLIENT_IMAGE` by digest (STK-091 security F4); optional TLS `verify-full` with a mounted Supabase root cert (F7). Also from STK-091 review: Ming verifies the dry run against live Supabase (pooler reachability from OrbStack, schema-check result, bind-mount permissions), the `--worker-image` leg with a real release image, and one run under macOS `/bin/bash` 3.2.
 - 2026-11-17 (orchestrator, from STK-091 review attempt 3 and security review attempt 3; no rework left on STK-091): make `t_column_pipe_newline` a real regression test (rename to `"a|b<LF>c|d"`, which the attempt-2 code let through; add a case with an extra source table `zzz`; make it self-contained instead of depending on `t_column_pipe`); reword docs/deploy.md:118 so "read-only transaction" clearly refers to the verify step; runbook: run the script inside `tmux`/`screen`; keep `~/srv/backups/stoktok-cutover` out of any offsite/Time Machine sync.
+- 2026-11-18 (orchestrator): consult skipped — the runbook content comes from STK-084's consults (data-engineer runbook/freeze/smoke/AI-ledger, database-optimizer §1–§11, software-architect R2/R3/R7/R8), written for this. STK-091, STK-092 and STK-093 are merged (deployment#88, #90); their deploy runs were queued on the offline self-hosted runner — the runbook states them as preconditions. Ming's manual checklist is in work/ming-todo.md "Move to the shared Postgres"; the runbook must match it.
