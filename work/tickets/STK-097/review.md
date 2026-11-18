@@ -131,3 +131,92 @@ Ming verification after merge (not verified here; the PR must carry them):
 - Echoing a single secret variable (e.g. `echo "$SUPABASE_SERVICE_ROLE_KEY" | base64`) is not flagged. GitHub masks registered secrets but not encodings of them. Consider a "no `$SUPABASE_*`/`$STOKTOK_*` outside `secrets`" pin.
 - From the plan: xtrace via `SHELLOPTS`/`BASH_ENV`; an optional runtime self-check in `deploy-stoktok`; the worker-image `/app/migrations` refusal.
 - The cross-file part of `check-deploy-env.sh` is still GNU-only (G cases are skipped on macOS).
+
+## Attempt 2 — 2026-11-18
+Verdict: PASS
+
+Scope: review Issues 1-2 and security 🟡1, 🟡2, 🟡4 (orchestrator note in ticket.md), rework commit 66bd190. Issue 3 (opening the deployment PR) belongs to the orchestrator and is not judged here.
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exit 0.
+- lint: `pnpm lint` exit 0.
+- test: `pnpm test` exit 0. core 834, sources 35, ai 184, db 169, worker 310, web 360 passed.
+- check:deploy-env: `pnpm check:deploy-env` exit 0. It prints `OK: …/deploy-stoktok.yml`, `OK: deploy env lists consistent`, 78 `ok` lines (11 of them G cases) and `OK: deploy guard mutation proofs`, with no `FAILED`.
+- `bash -n` on `scripts/*.sh`, `deploy/deployment-repo/ops/*.sh` and `deploy/deployment-repo/apps/stoktok/*.sh`: clean.
+- CI on draft PR #77 (head 9fd00b2), read via the REST API:
+  - `deploy-guards-macos` (job 134725386243): success. Image `macos-26-arm64`. It ran `env PATH=/usr/bin:/bin:/usr/sbin:/sbin STK097_SKIP_CROSSFILE=1 /bin/bash scripts/test-deploy-guards.sh`, which means bash 3.2 and BSD tools. It printed 67 `ok` lines and no `FAILED`, including M40, M41, M42, M43, P2 and P3. This is the portability proof for the new `printf` octal / `LC_ALL=C grep -F` / `od` code.
+  - `ci` (job 134725385179): success. Every step passed: typecheck, lint, test, test:db, check:service-key, check:deploy-env (`OK: deploy guard mutation proofs`), db:check and test:move. The `CHECK FAILED` lines in its Postgres container log come from db:check's negative probes; that step succeeded.
+- Live parity:
+  - `git ls-remote` shows the deployment branch `stoktok/stk-097-workflow-guards` at 02dec4d. Its parent is 0428c97 and its base is `main` 563d1e2.
+  - `git diff --stat 563d1e2 02dec4d` lists exactly 3 files.
+  - `git show 02dec4d:<f> | cmp - <draft>` is silent for `deploy-stoktok.yml`, `stoktok-guards.yml` and `ops/check-stoktok-workflow.sh`.
+  - Running the branch's own checker on the branch's `deploy-stoktok.yml` gives exit 0 and `OK`, wrapped in the `::stop-commands::stk…` / `::stk…::` pair.
+- Secret check: no secret was printed or read. The diff adds no credential material.
+- Working trees: `git status` is clean in both `/home/user/stoktok` and `/home/user/deployment`. All my reproductions ran in the scratchpad.
+
+### Acceptance criteria (rework scope)
+- [x] Issue 1, CR and Unicode line breaks.
+  - Evidence: `check-stoktok-workflow.sh:23-31` rejects the file before any output. `:38` `show()` strips CR. Cases M40-M43, P2 and P3 pass.
+  - I re-ran my attempt-1 reproductions on a copy. Every one exits 1 with only the fixed message `FAIL: workflow contains a carriage return or a Unicode line break`. In each case, splitting the output on CR and stripping leading whitespace leaves 0 `::` lines, and 0 bytes of the injected text appear. The inputs were:
+    - `set | true` + CR + `::error title=forged::stoktok-guards OK`
+    - `echo hi` + CR + `set`
+    - `echo hi` + NEL / U+2028 / U+2029 + `set`
+    - CRLF
+    - NEL + `::error::x`
+  - Other encodings:
+    - A UTF-16LE file (with BOM) exits 1. The required lines are not found, so it fails closed.
+    - A UTF-8 BOM file passes, as it should, because a BOM hides no line.
+    - VT, FF and a lone invalid `0x85` byte pass. None of them is a line break for YAML or for bash, so this is correct.
+- [x] Security 🟡2, stop-commands.
+  - Evidence: `:34-36`. The token is `stk` followed by 16 bytes of `/dev/urandom` as hex. It is new on every run, so the static PR file cannot contain it.
+  - Start and end markers go to stderr. So do all FAIL and `show` lines, which keeps their order.
+  - Before the marker, the only possible output is the usage message (the path comes from main's workflow) or the fixed CR message.
+  - If `od` fails, `set -euo pipefail` aborts the assignment.
+  - `check_rc` (`test-deploy-guards.sh:55-56`) now splits on CR and allows only the marker pair.
+- [x] Security 🟡1, merge-parent check (`stoktok-guards.yml:37-44`). `HEAD_SHA` is passed as step env, not interpolated into the script.
+  - I emulated the second checkout with a real git repo: `sparse-checkout --no-cone` of the one file, `fetch --depth=1` of `refs/pull/<n>/merge`, then the exact step script. The result is shallow, and only the one file is checked out.
+    - Current merge (parents base and H2, event head H2): passes.
+    - Stale merge (built from H1, event head H2): exit 1 with "merge ref is not current".
+    - A 12-character prefix of the head: exit 1, because `-x` needs the full line.
+  - The commit object, and therefore its `parent` lines, is present in a depth-1 clone.
+  - G9 and G10 pin it.
+- [x] Issue 2, guard-job pins (`check-deploy-env.sh:381-405`).
+  - G5-G10 pass.
+  - I also tried these, and each exits 1:
+    - a job-level `permissions: write-all`;
+    - a job-level `env: { A: 1 }`;
+    - a second `sparse-checkout-cone-mode: true`.
+  - A `ref:` in a full-line comment passes. That is correct, because a comment changes nothing.
+  - Residual bypasses are under Follow-ups. None of them is in the ticket's requested cases.
+- [x] Security 🟡4: `deploy/deployment-repo/README.md:49-54` states that the checker is protected only by CODEOWNERS and "Require review from Code Owners" on deployment main.
+- [x] Scope: 66bd190 touches only the 5 rework files and impl-log, all listed in impl-log "Files touched". The other commits since attempt 1 are workflow bookkeeping (backlog, ticket, security-review). The deployment commit changes only the 2 re-copied files.
+- [ ] Issue 3, the deployment PR is open: not judged here (it belongs to the orchestrator). Running `GET pulls?head=…` still shows no PR.
+
+Ming verification after merge: unchanged from attempt 1, items 1-4. Add: confirm "Require review from Code Owners" and "Require branches to be up to date" on deployment `main`.
+
+### Issues
+None blocking.
+
+### Rules R1–R10
+- No violations found.
+- R3: no secret is reachable from the guard job. It uses no `secrets.` and no `environment:`, has `contents: read`, and both checkouts set `persist-credentials: false`. Nothing from the PR is executed.
+- R7: every changed file is within the rework scope.
+- R8: checks are green, and there is no `packages/core` change.
+
+### Nits (do not block)
+- `README.md:52` and `stoktok-guards.yml:37` say "second parent", but the code accepts any `parent` line. This is safe, because the head can equal the first parent only if the PR has no commits. Align the wording (same as security N3).
+- `impl-log.md` attempt 2 still says the deployment branch is "not pushed … still 0428c97". It is now pushed at 02dec4d. Record that in the next log entry or the PR body.
+- `check_rc` accepts the marker lines anywhere and in any number (same as security N1).
+
+### Follow-ups (out of scope)
+- Guard-pin bypasses through YAML spellings that line greps do not see. With `STK097_GUARDS_WF=<copy> bash scripts/check-deploy-env.sh`, each of these exits 0:
+  - `"ref": ${{ github.event.pull_request.head.sha }}` added to the first checkout. The checker would then come from the PR.
+  - a job-level `"permissions": write-all`;
+  - a job-level `"env": {…}`;
+  - `token: ${{ github['token'] }}`.
+  - Also see security 🟡5 (`continue-on-error`, `if:`, `shell:`, `working-directory:`, `repository:`).
+  - Every one of these needs a deliberate edit to a reviewed file. The robust fix is to pin `stoktok-guards.yml` by exact content (compare it with an expected copy or hash) instead of key by key.
+- The deploy-stoktok deny list can be bypassed through a double-quoted flow scalar. A new step with `run: "true\nset"` passes the checker (exit 0); YAML turns `\n` into a newline, so bash would run a bare `set`. The same applies to the `\r`, `\x85`, `\L` and `\P` escapes. Suggested fix: require every `run:` to be a `|` block scalar (no `run: "`, no `run: '`, no plain one-line `run:` that has a backslash), with a mutation case. This is the same tripwire class as the README states.
+- Security 🟡3: SHA-pin the actions.
+- Security N2: strip other control characters in `show()`.
+- Security N4: "Require branches to be up to date" in the README.
