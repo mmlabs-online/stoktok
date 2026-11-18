@@ -304,3 +304,99 @@ Scope: Ming's note "after attempt 2 PASS" (last rework). Code commit 445b918 (la
 ### Follow-ups (out of scope)
 - `uses:` steps with inline code (for example `actions/github-script` `script:`) are not covered by the `run:` rule.
 - Security 🟡3: SHA-pin the actions (already deferred by Ming).
+
+## Post-escalation fix — 2026-11-18
+Verdict: REWORK
+
+Scope: escalation option 2 (Ming: "run tiếp"). Stoktok commit 3cb57e5. Deployment branch `stoktok/stk-097-workflow-guards` at a3565cb (`git ls-remote` confirms; parent 2c52ee5).
+
+### Checks (run by reviewer)
+- typecheck: `pnpm typecheck` exit 0.
+- lint: `pnpm lint` exit 0.
+- test: `pnpm test` exit 0. core 834, sources 35, ai 184, db 169, worker 310, web 360 passed.
+- check:deploy-env: `pnpm check:deploy-env` exit 0. 91 `ok` lines, no `FAILED`. Includes `ok M46-quoted-key`, `ok M47-single-quoted-key`, `ok M48-flow-mapping-item`, `ok M49-explicit-key`, `OK: <draft deploy-stoktok.yml>` and `OK: deploy guard mutation proofs`.
+- `bash -n` on `scripts/check-deploy-env.sh`, `scripts/test-deploy-guards.sh` and `deploy/deployment-repo/ops/check-stoktok-workflow.sh`: exit 0.
+- Deployment parity: `git show a3565cb:<f> | cmp - <draft>` is silent for `ops/check-stoktok-workflow.sh`, `.github/workflows/stoktok-guards.yml` and `.github/workflows/deploy-stoktok.yml`. So the deployment checker is byte-identical to the draft.
+- CI on draft PR #77 (head 3cb57e5, open, draft, unmerged), via the REST API:
+  - `ci` (job 134824578229): success. Its log has `ok M46-quoted-key` through `ok M49-explicit-key` and `OK: deploy guard mutation proofs`.
+  - `deploy-guards-macos` (job 134824577656, run 44310919825): **cancelled**. It was queued from 13:09:59 to 13:13:51 and ran no steps. So the new awk pass has **not** run on macOS/BSD awk in CI.
+- BSD awk, checked by reading `check-stoktok-workflow.sh:227-236`: only `substr`, `~`, `sub`-free loops, bracket classes (`[[:space:]]`, `[{]`, `[?]`, `[|>]`, `[-+0-9]`) and no intervals or gawk extensions. The program is a single-quoted shell string, and the `'"'"'` splices produce a literal `'`. I expect it to be compatible, but CI has not confirmed it, because the macOS job was cancelled.
+- Working trees: both are clean. All reproductions ran in the scratchpad.
+
+### Attempt-3 blocker reproductions and variants
+Method: a new step was inserted before `- name: pull` in a copy of the draft. Each copy was run through the checker and also parsed with PyYAML 6.0.3, which checks that the YAML is valid and that some step's `run` has a bare `set` line. Ruby Psych (libyaml) gave the same results for the bypasses below.
+
+**Exit 1 (closed):**
+- `"run": "true\nset"`
+- `'run': "true\nset"`
+- `- {name: zz, "run": "true\nset"}`
+- `? run` / `: "true\nset"`
+- `"\x72un": …`
+- `"run"   : …`
+- a quoted key under `with:`
+- a quoted key after a `- [a]` item
+- a quoted key after `x: [a, b]`
+- `- "run": …` and `- - "run": x`
+- `? !!str run`
+- a trailing comment on the item line (`- name: zz # x: |`)
+
+**Exit 0 (no false positives):**
+- the live draft: no awk flags. It has `paths: ['apps/stoktok/**']` and `== 'success'` values.
+- `name: "x"`
+- a `run: |` block that contains `"a": b`, `'x': y`, `? z` and `{a: b}`.
+
+**Still exit 0, and the YAML is valid with a bare `set` in a step's `run` (PyYAML and Psych agree):**
+- B1 `        &a "run": "true\nset"`: an anchor before a quoted key.
+- B2 `        !!str "run": "true\nset"`: a tag before a quoted key.
+- B3 `      - &s {name: zz, "run": "true\nset"}` and B4 `      - !!map {name: zz, "run": "true\nset"}`: an anchor or tag before a flow item.
+- B5 `      - name: &k run` then `        *k : "true\nset"`: an alias key.
+- B6 the job's `    steps:` line changed to `    steps: # x: |` and a step with `"run": "true\nset"` added. The block-start regex at `:235` sees `: |` inside the comment and sets `inblk`. Every line indented more than `steps:` is then skipped, which is every step. This turns off the whole new rule with one comment.
+- Not a bypass: `"run":"true\nset"` (no space after the colon) is a parse error in both PyYAML and Psych. `<<: {"run": …}` is already caught by the heredoc rule.
+
+### Acceptance criteria (option 2 spec)
+- [ ] **An awk pass rejects, outside block-scalar content, any key line that starts with `"`, `'`, `{` or `?`.** FAILED, see Issue 1.
+  - The four named spellings and every listed variant are rejected.
+  - B6, however, shows that block-scalar detection treats a comment as a block start. So "outside block-scalar content" is not what the code implements.
+  - B1-B5 are the same hiding-a-key class through a node property or an alias.
+- [x] **Mutation cases M46-M49** (`scripts/test-deploy-guards.sh:154-157`): each passes with exit 1.
+- [x] **Live deploy workflow passes**: the checker prints `OK` for the draft, and the deployment branch file is byte-identical.
+- [x] **Re-copied to the deployment branch**: a3565cb, byte-identical, pushed.
+- [ ] **impl-log push status**: stale again, see Issue 2.
+- [ ] **CI (incl. deploy-guards-macos)**: `ci` is green. `deploy-guards-macos` was cancelled before it ran any step. It must be re-run and pass on the reworked head.
+
+### Issues
+#### Issue 1 — 🔴 blocker — the new key rule can be switched off by a comment, and it misses keys behind an anchor, tag or alias
+- **Where**: `deploy/deployment-repo/ops/check-stoktok-workflow.sh:233` and `:235`.
+- **Expected**: outside real block-scalar content, no `run` key can be written in a way that hides it from the line checks. This is the purpose of option 2.
+- **Actual**: B1-B6 above exit 0, and each one is valid YAML whose step `run` has a bare `set` line.
+- **Fix instruction**:
+  1. At `:235`, test block starts on the line with any trailing comment removed. For example: `nc = line; sub(/[[:space:]]#.*$/, "", nc)`, then match `nc` against the existing regex. This also still detects `run: | # c`.
+  2. At `:233`, widen the first test to `line ~ /^[{&!*]/`. After indent and `- ` markers, a key position that starts with an anchor, tag or alias is then rejected too.
+  3. I ran this exact variant (in the scratchpad, not in the repo). It flags nothing in the live draft and nothing in F1/F2. It flags B1-B6 and every case listed under "Exit 1".
+  4. Add mutation cases, each expecting exit 1:
+     - M50 `&a "run": …`
+     - M51 `!!str "run": …`
+     - M52 `- &s {…}`
+     - M53 alias key `*k : …`
+     - M54 `steps: # x: |` plus a quoted `run` key
+  5. Add a negative control that expects exit 0: a step with `run: | # comment` and a plain body.
+  6. Re-copy the checker to the deployment branch byte for byte.
+
+#### Issue 2 — 🟡 should-fix — impl-log push status is stale
+- **Where**: `work/tickets/STK-097/impl-log.md:122`.
+- **Expected**: the log names the pushed head of the deployment branch.
+- **Actual**: the log says "committed on the deployment branch but not pushed". `git ls-remote` shows a3565cb pushed.
+- **Fix instruction**: after the re-push, replace the line with "Deployment branch pushed at <sha> (parent a3565cb); deployment PR not yet opened".
+
+### Rules R1–R10
+- R7: the files changed are the checker, the test script and the impl-log. All three are in the option-2 scope.
+- R3: no secret material in the diff.
+- No violations found.
+
+### Nits (do not block)
+- M46/M47 add a second `run` key to the existing `pull` step. A real parser would reject that, or keep only the last value. The cases still prove the checker flags the line. A separate new step, like the ones I used, would be a cleaner proof.
+- The flag variable is named `quoted_keys`, but it now also covers flow and explicit keys, and after the fix it will cover anchors, tags and aliases too.
+
+### Follow-ups (out of scope)
+- Unchanged from attempt 3: `uses:` steps with inline code, and SHA-pinning the actions.
+- Escalation option 3 (parse with a real YAML parser) remains the only full fix for this class.
