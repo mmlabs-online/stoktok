@@ -30,3 +30,4 @@ CLAUDE.md R3, Conventions (secrets); work/tickets/STK-093/security-review.md (at
 
 ## Notes / answers from Ming
 - 2026-11-18 (orchestrator): created from STK-093 reviews; Ming chose to open the STK-093 PRs and carry these here. The `stoktok` GitHub environment already restricts deployments to `main` (Ming, 2026-11-18).
+- 2026-11-18 (orchestrator, from STK-094 security review): 🟡2 — live deploy-stoktok.yml migrate detection fails open (`config --services | grep -qx migrate` treats a config error as "no migrate"); capture the service list under `set -e`, and optionally refuse a release whose worker image has /app/migrations when compose has no migrate service. 🟡6 — consider `read_only: true` on the migrate service if the runner writes nothing; say "no internet egress" (the `db` network also holds cloudflared, pgAdmin and other apps' Postgres). Workflow header still says /healthz.
