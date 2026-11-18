@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P2 |
 | Areas | security |
-| Attempts | 1 |
+| Attempts | 2 |
 | Created | 2026-11-18 |
 | PR | — |
 
@@ -35,3 +35,4 @@ CLAUDE.md R3, Conventions (secrets); work/tickets/STK-093/security-review.md (at
 - 2026-11-18 (Ming): run STK-097 next, before the v0.3.0 cut (cut blocked on deploy-postgres #9 failing and deploy-stoktok #10 queued).
 - 2026-11-18 (orchestrator): consult skipped — scope is the itemised findings from the STK-093/STK-094 security reviews. Parts that change the live deployment repo (🟡2 workflow fix, 🟡6, deployment-side guard) go on a deployment-repo branch + PR, like STK-093; Ming merges.
 - 2026-11-18 (orchestrator): attempt 1 = REWORK. Rework scope: review Issue 1 (CR / NEL / U+2028 / U+2029 in the PR file: reject up front, strip in show(), cases P2, M40 — this also closes security 🟡2(a)), plus security 🟡2 rest (`::stop-commands::<per-run token>` around PR-derived output), review Issue 2 (pins on stoktok-guards.yml: first checkout must not take a PR ref, no job-level permissions/env, sparse-checkout required; cases G5–G8), security 🟡1 (verify the merge commit has `parent ${{ github.event.pull_request.head.sha }}` via `git cat-file -p HEAD`, pin + case), security 🟡4 (state in deploy/deployment-repo/README.md that the checker itself is protected only by CODEOWNERS/code-owner review on deployment main). Re-copy changed files to the deployment branch. Issue 3 (open the deployment PR) is the orchestrator's after PASS. Security 🟡3 (SHA-pin actions repo-wide) → follow-up.
+- 2026-11-18 (Ming, after attempt 2 PASS): fix before the PR (last rework, attempt 3): compare the whole `stoktok-guards.yml` against an expected copy/hash instead of key-by-key pins (closes quoted keys, `github['token']`, `continue-on-error`, `if:`, `shell:`, `working-directory:`, `repository:` — security 🟡5 and review attempt 2); require every `run:` in the deploy workflow to be a `|` block (closes `run: "true\nset"`); README wording ("a `parent` line", not "second parent"; add "Require branches to be up to date"); impl-log push status. Other nits and 🟡3 (SHA-pin actions) → follow-up. Ming is not sure which deployment-repo settings are on (code-owner review, fork PR workflows, required check) → ming-todo items.

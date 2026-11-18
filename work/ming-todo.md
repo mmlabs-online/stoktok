@@ -32,6 +32,11 @@ Order matters; never print the env file or a password (`docker inspect` only wit
 - [ ] `docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' $(docker compose -p stoktok ps -q stoktok-web)` shows `db web`.
 - [ ] The site shows the same data; `/Users/mingming/stoktok/current/run-job.sh eod-prices --dry-run` exits 0.
 
+**Deployment repo settings (STK-097) — check on GitHub**
+- [ ] Settings → Branches → `main`: "Require review from Code Owners" is on (the deploy-guard checker is protected only by this).
+- [ ] Settings → Actions → General: "Run workflows from fork pull requests" is off.
+- [ ] After the STK-097 deployment PR merges: make `stoktok-guards / check` a required status check on `main`, with "Require branches to be up to date".
+
 **Decisions**
 - [ ] STK-094 (cutover) waits for STK-090 (owner-role test:db) per ADR 0010 — run STK-090 first, or waive it.
 - [ ] Open a Next.js patch-upgrade ticket? `next build` intermittently aborts with a security advisory (makes `pnpm build` / `check:service-key` flaky).
