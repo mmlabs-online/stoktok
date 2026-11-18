@@ -216,7 +216,7 @@ jobs:
           fi
           pwfile="postgres/secrets/apps/$DB_APP.password"
           pw=""
-          read -r pw < "$pwfile" || true
+          IFS= read -r pw < "$pwfile" || true
           re_pw='^[A-Za-z0-9_-]{16,}$'
           if ! [[ "$pw" =~ $re_pw ]]; then
             echo "::error::$pwfile is missing or malformed (see postgres/scripts/add-app-db.sh). Nothing was started; $ENV_FILE was not changed."

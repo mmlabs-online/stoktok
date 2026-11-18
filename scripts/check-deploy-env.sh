@@ -106,6 +106,8 @@ if grep -nE 'set -[A-Za-z]*x|set -o xtrace' "$WF"; then
   echo "FAIL: set -x in workflow" >&2
   fail=1
 fi
+# Assumes the convention: compose is run as "${compose[@]}" (array named compose) or "docker compose" on one line;
+# another array name, docker-compose, or a line continuation is not seen.
 if grep -E '(compose\[@\]\}"|docker compose).* config([[:space:]]|$)' "$WF" | grep -vE -- '--(quiet|services)'; then
   echo "FAIL: compose config without --quiet or --services" >&2
   fail=1
@@ -240,7 +242,7 @@ fi
 mktemp_line="$(echo "$secrets_step" | grep -n 'mktemp' | head -n 1 | cut -d: -f1 || true)"
 for lit in 'pwfile="postgres/secrets/apps/$DB_APP.password"' \
            'pw=""' \
-           'read -r pw < "$pwfile" || true' \
+           'IFS= read -r pw < "$pwfile" || true' \
            "re_pw='^[A-Za-z0-9_-]{16,}\$'" \
            'if ! [[ "$pw" =~ $re_pw ]]; then' \
            'STOKTOK_DATABASE_URL="postgres://$DB_APP:$pw@postgres:5432/$DB_APP"'; do
@@ -250,6 +252,88 @@ for lit in 'pwfile="postgres/secrets/apps/$DB_APP.password"' \
     fail=1
   fi
 done
+
+# STK-093: the password guard order (pwfile < IFS= read < re_pw < guard < exit 1 within 4 lines < URL < mktemp < printf).
+pw_ok="$(echo "$secrets_step" | awk '
+  { l = $0; sub(/^[[:space:]]+/, "", l); sub(/[[:space:]]+$/, "", l) }
+  l == "pwfile=\"postgres/secrets/apps/$DB_APP.password\"" && !f { f = NR }
+  l == "IFS= read -r pw < \"$pwfile\" || true" && !rd { rd = NR }
+  l == "re_pw='"'"'^[A-Za-z0-9_-]{16,}$'"'"'" && !r { r = NR }
+  r && l == "if ! [[ \"$pw\" =~ $re_pw ]]; then" && !g { g = NR; next }
+  g && !x && NR <= g + 4 && l == "exit 1" { x = NR }
+  l == "STOKTOK_DATABASE_URL=\"postgres://$DB_APP:$pw@postgres:5432/$DB_APP\"" && !u { u = NR }
+  /mktemp/ && !m { m = NR }
+  /^[[:space:]]*printf .*> "\$tmp"/ && !p { p = NR }
+  END { print (f && rd && r && g && x && u && m && p && f < rd && rd < g && r < g && g < x && x < u && u < m && m < p) ? "yes" : "no" }')"
+if [ "$pw_ok" != yes ]; then
+  echo "FAIL: the password guard (re_pw, if ! [[ \"\$pw\" =~ \$re_pw ]] + exit 1) must follow IFS= read and precede STOKTOK_DATABASE_URL=, mktemp and the printf in the secrets step" >&2
+  fail=1
+fi
+# STK-093: the password and the URL are never echoed. Outside the secrets step no code line may mention them; inside it
+# $pw appears only on the guard and the URL assignment, $STOKTOK_DATABASE_URL only on the single printf.
+re_pwvar='\$\{?pw([^A-Za-z0-9_]|$)'
+wf_nc="$(grep -vE '^\s*#' "$WF" || true)"
+out_of_step="$(echo "$wf_nc" | sed '/^      - name: secrets[[:space:]]*$/,/^      - name: pull[[:space:]]*$/d')"
+if echo "$out_of_step" | grep -nE -e "$re_pwvar" -e 'STOKTOK_DATABASE_URL'; then
+  echo "FAIL: the database password or URL is referenced outside the secrets step" >&2
+  fail=1
+fi
+pw_lines="$(echo "$secrets_step" | grep -E "$re_pwvar" || true)"
+pw_count="$(echo "$secrets_step" | grep -cE "$re_pwvar" || true)"
+if [ "$pw_count" != 2 ] \
+   || ! echo "$pw_lines" | grep -qF 'if ! [[ "$pw" =~ $re_pw ]]; then' \
+   || ! echo "$pw_lines" | grep -qF 'STOKTOK_DATABASE_URL="postgres://$DB_APP:$pw@postgres:5432/$DB_APP"'; then
+  echo "FAIL: in the secrets step \$pw may appear only on the guard and the URL assignment" >&2
+  fail=1
+fi
+url_count="$(echo "$secrets_step" | grep -cE '\$\{?STOKTOK_DATABASE_URL' || true)"
+if [ "$url_count" != 1 ] || ! echo "$secrets_step" | grep -E '\$\{?STOKTOK_DATABASE_URL' | grep -qE "$printf_shape"; then
+  echo "FAIL: in the secrets step \$STOKTOK_DATABASE_URL may appear only on the single printf" >&2
+  fail=1
+fi
+
+# STK-093: the env file is written under umask 077, via a temp file in the same dir (atomic rename), mode 600, then an
+# owner+mode check; order: umask < pwfile < chmod 700 dir < mktemp "$dir/ < trap < printf < chmod 600 < mv -f < stat check + exit 1.
+mode_ok="$(echo "$secrets_step" | awk '
+  { l = $0; sub(/^[[:space:]]+/, "", l); sub(/[[:space:]]+$/, "", l) }
+  l == "umask 077" && !a { a = NR }
+  l == "pwfile=\"postgres/secrets/apps/$DB_APP.password\"" && !f { f = NR }
+  l == "chmod 700 \"$dir\"" && !d { d = NR }
+  l == "tmp=\"$(mktemp \"$dir/.stoktok.env.XXXXXX\")\"" && !m { m = NR }
+  l == "trap '"'"'rm -f \"$tmp\"'"'"' EXIT" && !t { t = NR }
+  l ~ /^printf .* > "\$tmp"$/ && !p { p = NR }
+  l == "chmod 600 \"$tmp\"" && !c { c = NR }
+  l == "mv -f \"$tmp\" \"$ENV_FILE\"" && !v { v = NR }
+  l == "if [ \"$(stat -f '"'"'%Su %Lp'"'"' \"$ENV_FILE\")\" != \"$(id -un) 600\" ]; then" && !s { s = NR; next }
+  s && !x && NR <= s + 4 && l == "exit 1" { x = NR }
+  END { print (a && f && d && m && t && p && c && v && s && x && a < f && f < d && d < m && m < t && t < p && p < c && c < v && v < s && s < x) ? "yes" : "no" }')"
+if [ "$mode_ok" != yes ]; then
+  echo "FAIL: the secrets step must keep, in order: umask 077, chmod 700 \"\$dir\", mktemp \"\$dir/.stoktok.env.XXXXXX\", trap rm, the printf, chmod 600 \"\$tmp\", mv -f \"\$tmp\" \"\$ENV_FILE\", the owner+mode stat check + exit 1" >&2
+  fail=1
+fi
+# STK-093: nothing in the workflow may dump the shell or the env file into the log (name-independent deny list).
+if echo "$wf_nc" | grep -nE -e '^\s*(set|env|export|declare|typeset|readonly|printenv)\s*$' \
+     -e '(declare|typeset|export|readonly)\s+-[A-Za-z]*p' -e 'printenv' -e '(^|[^A-Za-z_])env\s*\|' \
+     -e '(^|[^A-Za-z_-])(cat|head|tail|less|more|xxd|od|strings)\s+.*(ENV_FILE|\$tmp|\$pwfile|secrets/|\.env)'; then
+  echo "FAIL: workflow dumps the shell or a secret file (bare set/env/export/declare -p/printenv, cat of the env file, \$tmp or secrets/)" >&2
+  fail=1
+fi
+if echo "$wf_nc" | grep -E 'docker[[:space:]]+(container[[:space:]]+)?inspect' | grep -vE -- '[[:space:]](-f|--format)([[:space:]=]|$)'; then
+  echo "FAIL: docker inspect without -f in workflow" >&2
+  fail=1
+fi
+# STK-093: the trigger set is exactly push on main (apps/stoktok paths) + workflow_dispatch; `if: github.ref == main` is
+# also true for pull_request_target, schedule and workflow_run, so those must never appear.
+on_block="$(echo "$wf_nc" | awk '/^on:[[:space:]]*$/ { o = 1; print; next } o && /^[^[:space:]]/ { o = 0 } o && NF { print }')"
+want_on="$(printf '%s\n' 'on:' '  push:' '    branches: [main]' "    paths: ['apps/stoktok/**']" '  workflow_dispatch:')"
+if [ "$on_block" != "$want_on" ]; then
+  echo "FAIL: the on: block must be exactly push (branches [main], paths apps/stoktok/**) and workflow_dispatch" >&2
+  fail=1
+fi
+if echo "$wf_nc" | grep -nE '^\s*(pull_request|pull_request_target|workflow_run|schedule|workflow_call|issue_comment|repository_dispatch)\s*:'; then
+  echo "FAIL: forbidden trigger in workflow (pull_request, pull_request_target, workflow_run, schedule, ...)" >&2
+  fail=1
+fi
 
 # STK-084: the "database is ahead" literal is pinned in migrate.ts; the deploy workflow must grep the same text.
 ahead_prefix="$(sed -n "s/^export const MIGRATE_AHEAD_PREFIX = '\(.*\)';\$/\1/p" "$ROOT/packages/db/src/pg/migrate.ts")"

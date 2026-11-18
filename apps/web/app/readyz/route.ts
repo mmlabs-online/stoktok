@@ -30,7 +30,7 @@ async function check(): Promise<Result> {
 }
 
 export async function GET(): Promise<Response> {
-  const now = Date.now();
+  const now = performance.now();
   if (!cached || now - cached.at >= CACHE_MS) cached = { at: now, result: check() };
   const result = await cached.result;
   return result.ok
