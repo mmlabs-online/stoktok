@@ -7,7 +7,7 @@
 | Areas | db, security, architecture |
 | Attempts | 2 |
 | Created | 2026-11-17 |
-| PR | — |
+| PR | https://github.com/mmlabs-online/deployment/pull/90 · https://github.com/mmlabs-online/stoktok/pull/73 |
 
 ## Goal
 Split from STK-084 (see work/tickets/STK-084/plan.md "Split proposal" and its consults). Scope: deployment repo PR: copy the reviewed `deploy/deployment-repo/` drafts from STK-084 verbatim (networks, env file with STOKTOK_DATABASE_URL + master key while keeping SUPABASE_*, mode 0600). The PR body must say it also ships the STK-072 AI-key env lines that never reached the live workflow (both optional).
