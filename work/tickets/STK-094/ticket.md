@@ -22,3 +22,4 @@ CLAUDE.md Stack, R3, R5; ADR 0010; work/tickets/STK-084/ticket.md (shared-Postgr
 
 ## Notes / answers from Ming
 - 2026-11-17 (orchestrator): created from the STK-084 planner's split proposal.
+- 2026-11-18 (orchestrator, from STK-096 security review S6): consider requiring `@sha256:` for `--worker-image` on non-local runs of `scripts/db-migrate-from-supabase.sh` (it receives the target DB password). Plus STK-096 review nits not fixed there (see work/tickets/STK-096/review.md Attempt 1).
