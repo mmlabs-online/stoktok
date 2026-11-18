@@ -2,10 +2,10 @@
 
 | Field | Value |
 |---|---|
-| State | REVIEW |
+| State | REWORK |
 | Priority | P2 |
 | Areas | security |
-| Attempts | 0 |
+| Attempts | 1 |
 | Created | 2026-11-18 |
 | PR | — |
 
@@ -34,3 +34,4 @@ CLAUDE.md R3, Conventions (secrets); work/tickets/STK-093/security-review.md (at
 - 2026-11-18 (orchestrator, from STK-094 attempt 3 reviews): 🟡9 decoy/second-definition bypasses of the migrate check (x-… decoy, block-scalar decoy, `---` second document — confirmed merged by compose v5.6.1, `include:`); 🟡10 runbook step 6 should repeat steps 2–5; ming-todo line 39 order; stage 0.3 fallback `gh pr ready --undo`; allow-lists for web/worker blocks.
 - 2026-11-18 (Ming): run STK-097 next, before the v0.3.0 cut (cut blocked on deploy-postgres #9 failing and deploy-stoktok #10 queued).
 - 2026-11-18 (orchestrator): consult skipped — scope is the itemised findings from the STK-093/STK-094 security reviews. Parts that change the live deployment repo (🟡2 workflow fix, 🟡6, deployment-side guard) go on a deployment-repo branch + PR, like STK-093; Ming merges.
+- 2026-11-18 (orchestrator): attempt 1 = REWORK. Rework scope: review Issue 1 (CR / NEL / U+2028 / U+2029 in the PR file: reject up front, strip in show(), cases P2, M40 — this also closes security 🟡2(a)), plus security 🟡2 rest (`::stop-commands::<per-run token>` around PR-derived output), review Issue 2 (pins on stoktok-guards.yml: first checkout must not take a PR ref, no job-level permissions/env, sparse-checkout required; cases G5–G8), security 🟡1 (verify the merge commit has `parent ${{ github.event.pull_request.head.sha }}` via `git cat-file -p HEAD`, pin + case), security 🟡4 (state in deploy/deployment-repo/README.md that the checker itself is protected only by CODEOWNERS/code-owner review on deployment main). Re-copy changed files to the deployment branch. Issue 3 (open the deployment PR) is the orchestrator's after PASS. Security 🟡3 (SHA-pin actions repo-wide) → follow-up.
