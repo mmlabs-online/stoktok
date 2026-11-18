@@ -151,3 +151,78 @@ The real control over `deploy-stoktok.yml` and over the checker itself is still 
 - /home/user/stoktok/scripts/test-deploy-guards.sh
 
 > Orchestrator, 2026-11-18: verified with `cmp` that the three files on deployment branch stoktok/stk-097-workflow-guards @ 02dec4d are byte-identical to the stoktok drafts (the auditor could not see that checkout).
+
+## Attempt 3
+
+**Verdict: no 🔴. 🟡5 is closed.** There is one new low 🟡 (the new `run:` rule can be bypassed with a quoted or flow-style key) and three nits. This was a read-only audit of the stoktok tree at 445b918. I ran nothing and read or quoted no secret values.
+
+### Closure of 🟡5 (step-level keys on the guard job)
+**Closed**, at `/home/user/stoktok/scripts/check-deploy-env.sh:345-366`.
+- A whole-file sha256 replaces the key-by-key regexes. Every key I listed in attempt 2 (`continue-on-error`, `if:`, `working-directory`, `shell:`/`defaults`, `repository:`) now fails, along with any other edit.
+- Mutation cases G13-G17 cover them (`/home/user/stoktok/scripts/test-deploy-guards.sh:183-187`). With a hash pin, every G case except G0 is trivially guaranteed to fail. That is expected; what still matters is G0 (the unchanged file passes).
+- The pinned file content is what I audited in attempts 1-2: `/home/user/stoktok/deploy/deployment-repo/.github/workflows/stoktok-guards.yml:1-44`. It has one `run: |`, no `if`/`continue-on-error`/`shell`/`working-directory`/`repository`, `contents: read`, and both checkouts use `persist-credentials: false`.
+
+**Your specific concerns:**
+- **Hash tool fallback failing open: no, it fails closed** (`check-deploy-env.sh:357-361`). The script runs under `set -euo pipefail` (`:4`).
+  - If `shasum` is missing, `sha256sum` runs. If that is also missing, or either tool errors (e.g. `shasum` is present but its Perl `Digest::SHA` is broken), pipefail gives the `x | cut` pipeline a non-zero status and `set -e` aborts the script with a non-zero exit.
+  - Even if `-e` were lost, `g_sum` would be empty, which is never equal to the 64-hex constant, so `:362` fails.
+  - The only weakness is that the abort prints no FAIL line (nit N5).
+- **Hash computed over a different file than the one checked: no.** The `-f` test and the hash both use the same `$GUARDS_WF` (`:352-360`).
+  - `STK097_GUARDS_WF` can redirect the check to another file. It is a test hook and only an environment variable set by the CI job could reach it, so a PR to stoktok cannot set it. Nit N6: drop it, or refuse it when `CI` is set without a test marker.
+  - `[ -f ]` follows symlinks. A committed symlink draft would be hashed through to its target, which would show in review. This is a theoretical nit only.
+  - Line endings: a checkout with `core.autocrlf=true` changes the hash, but that fails closed.
+- **The `run:` rule vs. the CR/Unicode rejection: no bad interaction.**
+  - The rejection (`check-stoktok-workflow.sh:26-31`) exits before the token is printed and before the `run:` rule runs (`:222-223`). A CR can therefore never sit inside a `run: |` line that the rule then accepts.
+  - The rule's anchor `[[:space:]]*$` cannot be satisfied by a hidden CR either.
+  - The deploy workflow has exactly 12 `run:` lines, all `        run: |` (`deploy-stoktok.yml:73…433`), so B0 still passes.
+  - `|-`, `|+`, `|2`, `>` and a bare `run:` followed by a plain multi-line scalar are all rejected, so the rule fails closed on them. A job-level `defaults: run: shell:` would be a false positive. There is none today.
+
+### New finding
+**🟡6 (low): the `run:` rule only matches an unquoted key that follows whitespace or `-`** (`/home/user/stoktok/deploy/deployment-repo/ops/check-stoktok-workflow.sh:222`).
+- The regex `(^|[[:space:]-])run[[:space:]]*:` misses:
+  - a quoted key: `"run": "true\nset"` or `'run': …`;
+  - a flow mapping with no space after the brace: `- {run: "true\nset"}`.
+- GitHub Actions accepts all three. A double-quoted `\n` becomes a real newline for bash, so this reopens exactly the hiding trick that M44 tests, and every line-based deny check is blind to it.
+- Why it is low: it needs a deliberate edit to `deploy-stoktok.yml` that gets past code-owner review. The README already calls the deny list a tripwire.
+- One-commit fix:
+  - widen the match to `(^|[^A-Za-z0-9_])["']?run["']?[[:space:]]*:` (with the same `|` allow-pattern), or reject any `{` / quoted key in step lines outright;
+  - add M46 `"run": "true\nset"` and M47 `- {run: "true\nset"}`.
+- Ties to AC3 (no secret printed).
+
+### Nits
+- **N5:** if no hash tool works, `check-deploy-env.sh` dies silently under `set -e`. Add `command -v sha256sum >/dev/null || { echo "FAIL: no sha256 tool" >&2; exit 1; }` so CI shows why.
+- **N6:** `STK097_GUARDS_WF` (`check-deploy-env.sh:352`) is a production-path override that exists only for tests. It is harmless today; consider scoping it to the test harness.
+- **N7:** `test-deploy-guards.sh:151-153` puts M44/M45 (the `run:` cases) under the "CR / Unicode" comment heading. This is cosmetic.
+
+### Does the pin protect the live deployment copy?
+**No. It protects only the stoktok draft.**
+- The hash runs in stoktok CI against `/home/user/stoktok/deploy/deployment-repo/.github/workflows/stoktok-guards.yml`.
+- On deployment `main`, nothing checks the live `stoktok-guards.yml`:
+  - the guard job checks only `deploy-stoktok.yml`;
+  - because of `pull_request_target`, a PR that edits `stoktok-guards.yml` is judged by `main`'s old copy, so it passes.
+- So the live copy can drift from the pinned draft without any failing check. As with the checker (🟡4), the only live control is CODEOWNERS (`/.github/`) plus "Require review from Code Owners".
+- The pin still has value: it makes the stoktok side the reviewed source of truth, and a verbatim copy carries that review.
+- Recommendation (AC2):
+  1. Say this in `/home/user/stoktok/deploy/deployment-repo/README.md:49-56`. Today the README covers the checker's exposure but not the workflow file's. Suggested wording: "`stoktok-guards.yml` is pinned by sha256 in the stoktok repo only; the deployment copy is protected by code-owner review."
+  2. At setup-PR time, and in the cutover runbook, `shasum -a 256` the deployment copy against `GUARDS_SHA256`, the same way the orchestrator ran `cmp` in attempt 2.
+
+### Recommendations
+1. Fix 🟡6 in this ticket (two-line regex change plus two mutation cases), or send it to follow-ups with 🟡3.
+2. Add the README sentence on the live copy, and the hash comparison step for setup PRs.
+3. N5-N7 are optional.
+
+### Risks
+The real control over `deploy-stoktok.yml`, the checker and `stoktok-guards.yml` on deployment `main` is still code-owner review plus the `stoktok` environment's main-only rule. All the guards are tripwires until `stoktok-guards / check` is required with "up to date" enforced.
+
+### Open questions (unchanged)
+- Is "Require review from Code Owners" on for deployment `main`?
+- Is "Run workflows from fork pull requests" off?
+- Will `stoktok-guards / check` be a required check, with "require branches up to date"?
+
+### Files
+- /home/user/stoktok/scripts/check-deploy-env.sh
+- /home/user/stoktok/deploy/deployment-repo/ops/check-stoktok-workflow.sh
+- /home/user/stoktok/deploy/deployment-repo/.github/workflows/stoktok-guards.yml
+- /home/user/stoktok/deploy/deployment-repo/.github/workflows/deploy-stoktok.yml
+- /home/user/stoktok/deploy/deployment-repo/README.md
+- /home/user/stoktok/scripts/test-deploy-guards.sh
