@@ -60,3 +60,34 @@ None.
 ### Scope self-check
 - Could the diff be smaller? No; every hunk maps to a plan item.
 - Diff size: about +130 / -31 lines over 8 files, plus this log.
+
+## Attempt 2 — 2026-11-18 (REWORK: Ming's note after attempt 1 PASS; security 🟡1, 🟡3, 🟡4, 🟡5, review nit 1 and 4)
+
+### Files touched
+- `scripts/check-deploy-env.sh`: migrate block key allow-list (`image restart profiles env_file cap_drop security_opt command networks`); the migrate image line is now an anchored regex `^image: ${STOKTOK_WORKER_IMAGE:?...}$` (🟡3, nit 1).
+- `scripts/db-migrate-from-supabase.sh`: `--worker-image` for a remote source must match `mingming21400/stoktok-worker:vX.Y.Z[-pre]@sha256:<64 hex>` (the deploy-stoktok.yml:105 pattern; message keeps "--worker-image must be pinned by digest"); the script's own `docker run ... migrate` gets `--cap-drop ALL --security-opt no-new-privileges:true`; header comment on the source-local exemption (🟡4).
+- `scripts/test-db-migrate-from-supabase.sh`: S6 asserts the message for the `@sha256:<64>:x` case (🟡5), a new "digest of another repository" case (exit 2 + message), and the positive worker-image case now uses a `mingming21400/stoktok-worker:v0.3.0@sha256:0...0` value.
+- `docs/deploy.md`: "Cutover release" step 5 converts the PR to draft (`gh pr ready --undo`); stage 0.3 requires "draft"; stage 4.1 marks it ready first (🟡1).
+- `work/ming-todo.md`: the cutover item says the PR is a draft, mark ready at 4.1; the stale `release/stoktok-v0.2.2` sentence removed (nit 4).
+Each is required by the listed finding. `plan.md` step C (orchestrator, `gh pr ready --undo` after the compose push) was not edited; docs/deploy.md carries the instruction.
+
+### Tests and mutation proofs (scratch copy / temporary edit, restored)
+- check-deploy-env.sh (scratch copy under the scratchpad): `privileged: true` in migrate -> exit 1 "keys outside the allow-list: privileged"; `volumes:` (docker.sock) -> exit 1; image line with a suffix `:evil` -> exit 1; image line with a prefix -> exit 1. Unmodified tree: exit 0.
+- S6: reverting the repository pin to the generic regex -> 2 new asserts FAIL (other repository exit 2 + message); changing the message text -> the 3 message asserts FAIL. Unmodified: `t_usage_guards` passes.
+- Not mutation-tested: the `--cap-drop/--security-opt` flags on the script's `docker run migrate` (the harness has no `--worker-image` run with a local source; stage 1 of the runbook exercises it).
+
+### Checks
+- typecheck, lint, test (apps/web, apps/worker, packages): green. `format:check`/`format` do not exist in this repo's scripts.
+- test:db (throwaway PG 16 on 127.0.0.1:55432, password superuser over TCP, data dir under /var/tmp, deleted afterwards): 27 files / 154 tests passed. db:check: OK (server 16, not 17, warns locally).
+- check:deploy-env: OK. `bash -n` on scripts/*.sh and deploy/.../apps/stoktok/*.sh: clean.
+- test:move with a host docker stand-in outside the repo (a Python script in the scratchpad that runs pg_dump/psql on the host, maps /secrets and /work, emulates ps/rm/run -d and `image inspect`; committed scripts unchanged): 114 ok, 23 FAIL, and the 23 failures are identical to the baseline run on the stashed tree (111 ok, same 23). Cause: only PG 16 is available, the script requires target >= 17 ("target server is below Postgres 17"), plus the bash 3.2 syntax checks that need bash 3.2. The full move was therefore not exercised here; the usage-guard and client-image-pin tests (all S6 asserts) pass.
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+- 🟡2 and 🟡6 stay in STK-097 as Ming said. plan.md step C still lacks the draft step (orchestrator action).
+- Pre-existing: web/worker network checks are "contains" (`[tunnel, db, default]` passes).
+
+### Scope self-check
+Only the listed findings were changed; no deployment repo, release, push or PR.

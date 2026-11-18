@@ -98,7 +98,7 @@ if [ -z "$migrate_block" ]; then
   fail=1
 else
   migrate_lines="$(echo "$migrate_block" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
-  if ! echo "$migrate_lines" | grep -qF 'image: ${STOKTOK_WORKER_IMAGE:?'; then
+  if ! echo "$migrate_lines" | grep -qE '^image: \$\{STOKTOK_WORKER_IMAGE:\?[^}]*\}$'; then
     echo "FAIL: migrate image must be \${STOKTOK_WORKER_IMAGE:?...}" >&2
     fail=1
   fi
@@ -109,8 +109,10 @@ else
       fail=1
     fi
   done
-  if echo "$migrate_lines" | grep -qE '^(healthcheck|ports|environment):'; then
-    echo "FAIL: migrate must have no healthcheck, ports or environment" >&2
+  # Allow-list: every top-level key of the migrate block (indent 4) must be one of these (no privileged, volumes, cap_add, ...).
+  bad_keys="$(echo "$migrate_block" | sed -n -E 's/^    ([A-Za-z_]+):.*/\1/p' | grep -vxE 'image|restart|profiles|env_file|cap_drop|security_opt|command|networks' || true)"
+  if [ -n "$bad_keys" ]; then
+    echo "FAIL: migrate has keys outside the allow-list (image restart profiles env_file cap_drop security_opt command networks): $(echo $bad_keys)" >&2
     fail=1
   fi
 fi

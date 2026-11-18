@@ -36,7 +36,7 @@ Order matters; never print the env file or a password (`docker inspect` only wit
 - [ ] STK-094 (cutover) waits for STK-090 (owner-role test:db) per ADR 0010 — run STK-090 first, or waive it.
 - [ ] Open a Next.js patch-upgrade ticket? `next build` intermittently aborts with a security advisory (makes `pnpm build` / `check:service-key` flaky).
 
-- [ ] **Approve the cutover release**: the orchestrator cuts `release/v0.3.0` from the STK-094 merge commit and adds the compose commit to deployment PR `release/stoktok-v0.3.0`. Do not merge that PR before stage 4. Close any stale `release/stoktok-v0.2.2` PR unmerged.
+- [ ] **Approve the cutover release**: the orchestrator cuts `release/v0.3.0` from the STK-094 merge commit and adds the compose commit to deployment PR `release/stoktok-v0.3.0`. The orchestrator converts that PR to a draft; check it is still a draft before stage 0 and mark it ready only at stage 4.1. Do not merge that PR before stage 4.
 
 **Cutover (`docs/deploy.md` "Cutover runbook (STK-096)"; stage names as in the runbook)**
 - [ ] **0. Preconditions**: runner online and the two deploys above green; STK-090 merged or waived; STK-094 release PR open and not merged and changing exactly `release.env` + `compose.yml` (`pr-scope` green); worker image from its `release.env` pulled; tag checkout; `PG_CLIENT_IMAGE` pinned by digest; Supabase pooler details in the password manager; optional root cert (`MOVE_SRC_SSLROOTCERT`); `~/srv/backups/stoktok-cutover` mode 700 and `tmutil isexcluded` says excluded; work inside `tmux`.

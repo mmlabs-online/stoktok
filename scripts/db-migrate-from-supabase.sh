@@ -5,7 +5,9 @@
 # Reference: docs/deploy.md "Data move script (STK-091)". Bash 3.2 compatible (macOS /bin/bash).
 # STK-096: a remote source needs PG_CLIENT_IMAGE pinned by digest (F4); MOVE_SRC_SSLROOTCERT (optional, F7) is
 # mounted read-only into the source legs only. Runbook: docs/deploy.md "Cutover runbook (STK-096)".
-# STK-094 (S6): a remote source also needs --worker-image pinned by digest (the image receives the target password).
+# STK-094 (S6): a remote source also needs --worker-image as mingming21400/stoktok-worker:vX.Y.Z@sha256:<digest>, the
+# deploy-stoktok.yml pattern (the image receives the target password). The exemption keys on the source being local although the
+# secret at risk is the target's: production runs always have a remote source, and a local source only appears in tests.
 set -euo pipefail
 unset PGHOST PGHOSTADDR PGPORT PGSERVICE PGSERVICEFILE PGDATABASE PGUSER PGOPTIONS PGPASSWORD PGPASSFILE PGSSLMODE
 umask 077
@@ -104,8 +106,8 @@ SRC_LOCAL=0; case "$SRC_HOST" in localhost|127.0.0.1) SRC_LOCAL=1 ;; esac
 if [ "$SRC_LOCAL" = 0 ] && ! [[ "$PG_CLIENT_IMAGE" =~ ^[A-Za-z0-9._/:-]+@sha256:[0-9a-f]{64}$ ]]; then
   usage_err "PG_CLIENT_IMAGE must be pinned by digest (<repo>@sha256:<64 hex>) for a remote source; see docs/deploy.md Cutover runbook"
 fi
-if [ -n "$IMAGE" ] && [ "$SRC_LOCAL" = 0 ] && ! [[ "$IMAGE" =~ ^[A-Za-z0-9._/:-]+@sha256:[0-9a-f]{64}$ ]]; then
-  usage_err "--worker-image must be pinned by digest (<repo>[:tag]@sha256:<64 hex>) for a remote source: use STOKTOK_WORKER_IMAGE from the release PR's release.env"
+if [ -n "$IMAGE" ] && [ "$SRC_LOCAL" = 0 ] && ! [[ "$IMAGE" =~ ^mingming21400/stoktok-worker:v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?@sha256:[0-9a-f]{64}$ ]]; then
+  usage_err "--worker-image must be pinned by digest (mingming21400/stoktok-worker:vX.Y.Z@sha256:<64 hex>) for a remote source: use STOKTOK_WORKER_IMAGE from the release PR's release.env"
 fi
 SRC_CERT="${MOVE_SRC_SSLROOTCERT:-}"
 if [ -n "$SRC_CERT" ]; then
@@ -245,7 +247,7 @@ if [ -n "$IMAGE" ]; then
   if [ "$VERIFY_ONLY" = 0 ]; then
     step "migrate (worker image)"
     STOKTOK_DATABASE_URL="postgres://$DST_USER:$DST_PW@$DST_HOST:$DST_PORT/$TARGET" \
-      docker run --rm --network "$DST_NET" -e STOKTOK_DATABASE_URL "$IMAGE" migrate
+      docker run --rm --network "$DST_NET" --cap-drop ALL --security-opt no-new-privileges:true -e STOKTOK_DATABASE_URL "$IMAGE" migrate
   fi
 fi
 step "assert schema_migrations"

@@ -183,6 +183,10 @@ t_usage_guards() {
   assert "says --worker-image must be pinned by digest" out_has "--worker-image must be pinned by digest"
   XENV="MOVE_SRC_HOST=db.example.invalid MOVE_SRC_SSLMODE=require PG_CLIENT_IMAGE=postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000"
   run_move --target "$DST_DB" --worker-image mingming21400/stoktok-worker@sha256:0000000000000000000000000000000000000000000000000000000000000000:x; assert "a worker image with text after the digest (exit 2)" rc_is 2
+  assert "says --worker-image must be pinned by digest (text after digest)" out_has "--worker-image must be pinned by digest"
+  XENV="MOVE_SRC_HOST=db.example.invalid MOVE_SRC_SSLMODE=require PG_CLIENT_IMAGE=postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  run_move --target "$DST_DB" --worker-image postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000; assert "a digest of another repository (exit 2)" rc_is 2
+  assert "says --worker-image must be pinned by digest (other repository)" out_has "--worker-image must be pinned by digest"
   printf '%s\n%s\n%s\n' '-----BEGIN CERTIFICATE-----' 'ZmlsbGVy' '-----END CERTIFICATE-----' > "$TMP/ca.pem"
   printf '%s\n' 'not a certificate' > "$TMP/bad.pem"
   XENV="MOVE_SRC_SSLROOTCERT=$TMP/ca.pem MOVE_SRC_SSLMODE=disable"
@@ -366,6 +370,7 @@ t_client_image_pin() {
   digest="$("$REAL_DOCKER" image inspect -f '{{index .RepoDigests 0}}' postgres:17 2>/dev/null || true)"
   if [ -z "$digest" ]; then echo "  skip: no repo digest for postgres:17"; return; fi
   : > "$LOG"
+  wdigest="mingming21400/stoktok-worker:v0.3.0@sha256:0000000000000000000000000000000000000000000000000000000000000000"
   XENV="PG_CLIENT_IMAGE=$digest MOVE_SRC_HOST=db.example.invalid MOVE_SRC_SSLMODE=require"
   run_move --target "$DST3_DB" --skip-migrate --dry-run
   assert "a digest-pinned image passes the guard (exit 1, not 2)" rc_is 1
@@ -373,8 +378,9 @@ t_client_image_pin() {
   assert "fails at preflight (the source host does not resolve)" out_has "FAILED at step: preflight"
   assert "the docker run used the digest image" bash -c "grep '^run ' '$LOG' | grep -qF '$digest'"
   assert_no_leak
+  wdigest="mingming21400/stoktok-worker:v0.3.0@sha256:0000000000000000000000000000000000000000000000000000000000000000"
   XENV="PG_CLIENT_IMAGE=$digest MOVE_SRC_HOST=db.example.invalid MOVE_SRC_SSLMODE=require"
-  run_move --target "$DST3_DB" --worker-image "$digest" --dry-run
+  run_move --target "$DST3_DB" --worker-image "$wdigest" --dry-run
   assert "a digest-pinned worker image passes the S6 guard (exit 1, not 2)" rc_is 1
   assert "no worker pin complaint" out_lacks "--worker-image must be pinned"
   assert "fails at preflight" out_has "FAILED at step: preflight"
