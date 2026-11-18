@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | IN_PROGRESS |
+| State | REVIEW |
 | Priority | P1 |
 | Areas | db, data, security |
 | Attempts | 0 |
@@ -25,3 +25,4 @@ CLAUDE.md Stack, R3, R5; ADR 0010; work/tickets/STK-084/ticket.md (shared-Postgr
 - 2026-11-18 (orchestrator, from STK-096 security review S6): consider requiring `@sha256:` for `--worker-image` on non-local runs of `scripts/db-migrate-from-supabase.sh` (it receives the target DB password). Plus STK-096 review nits not fixed there (see work/tickets/STK-096/review.md Attempt 1).
 - 2026-11-18 (orchestrator, from STK-096 review/security attempt 3; no rework left there): runbook wording in docs/deploy.md "Cutover runbook (STK-096)" — N3: rollback rows should re-freeze per stage 2.3–2.6 (include "no deployment-repo merge"); N4: in the `migrate` failed row, before starting web by hand after `did-not-complete`, check no stoktok container runs and `docker inspect -f '{{.Config.Image}}' stoktok-web` names v0.2.1; the "Scheduler NOT installed" notify suffix breaks the exact "must read" match (say so); work/ming-todo.md item 7 wording (rotation also after an aborted cutover if 0.8 fell back); make the fresh pg-backup dump mandatory in the 14-day row; stage 4.2 dump glob/timestamp check. Update the CLAUDE.md "Current state" line after the cutover.
 - 2026-11-18 (orchestrator): all dependencies merged (STK-091 #71, STK-096 #74, STK-093 #73 + deployment#90, STK-090 #75; STK-092 deployment#88). The self-hosted runner is back: deploy-postgres #9 was in progress, deploy-stoktok #10 still queued, when this run started. Consult skipped — STK-084's consults and STK-096's runbook cover this slice. There are 333 commits in v0.2.1..main: the release review is part of this ticket. Cutting the release (pushing `release/vX.Y.Z`) and merging the release PR are outward actions: the orchestrator asks Ming before cutting, and Ming merges.
+- 2026-11-18 (orchestrator): R-9 checked via GitHub: no PR (open or closed) exists for deployment branch release/stoktok-v0.2.2, so nothing to close. deploy-postgres #9 (STK-092) ran when the runner came back and FAILED after 10 min (logs not downloadable via API; Ming to check) — the `stoktok` role/DB may not exist yet; runbook stage 0 must see it green before the dry run.
