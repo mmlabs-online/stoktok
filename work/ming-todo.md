@@ -32,11 +32,17 @@ Order matters; never print the env file or a password (`docker inspect` only wit
 - [ ] `docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' $(docker compose -p stoktok ps -q stoktok-web)` shows `db web`.
 - [ ] The site shows the same data; `/Users/mingming/stoktok/current/run-job.sh eod-prices --dry-run` exits 0.
 
+**Deployment repo settings (STK-097) — check on GitHub**
+- [ ] Settings → Branches → `main`: "Require review from Code Owners" is on (the deploy-guard checker is protected only by this).
+- [ ] Settings → Actions → General: "Run workflows from fork pull requests" is off.
+- [ ] After the STK-097 deployment PR merges: make `stoktok-guards / check` a required status check on `main`, with "Require branches to be up to date".
+
 **Decisions**
 - [ ] STK-094 (cutover) waits for STK-090 (owner-role test:db) per ADR 0010 — run STK-090 first, or waive it.
 - [ ] Open a Next.js patch-upgrade ticket? `next build` intermittently aborts with a security advisory (makes `pnpm build` / `check:service-key` flaky).
 
-- [ ] **Approve the cutover release**: the orchestrator cuts `release/v0.3.0` from the STK-094 merge commit and adds the compose commit to deployment PR `release/stoktok-v0.3.0`. The orchestrator converts that PR to a draft; check it is still a draft before stage 0 and mark it ready only at stage 4.1. Do not merge that PR before stage 4.
+- [ ] **STK-097 workflow guards**: read and merge the deployment PR `stoktok/stk-097-workflow-guards` (3 files: `deploy-stoktok.yml`, `stoktok-guards.yml`, `ops/check-stoktok-workflow.sh`; nothing under `apps/`, so it deploys nothing) before cutover stage 4, so v0.3.0 is deployed by the fail-closed workflow. After the first run of `stoktok-guards / check`, make it a required status check for `main` (Settings, Rules). Once `deploy-stoktok` #10 is green, optionally run `deploy-stoktok` via `workflow_dispatch` on `main`: the `pull` step shows "has no migrate service yet", the summary says `deployed: ... v0.2.1 ... healthy`, `changed=false`, and `ls -a ~/.config/stoktok` shows no `.stoktok.env.*` (never print the env file).
+- [ ] **Approve the cutover release**: the orchestrator cuts `release/v0.3.0` from the STK-094 merge commit, converts deployment PR `release/stoktok-v0.3.0` to a draft as soon as it opens, then adds the compose commit. Check it is still a draft before stage 0 and mark it ready only at stage 4.1. Do not merge that PR before stage 4.
 
 **Cutover (`docs/deploy.md` "Cutover runbook (STK-096)"; stage names as in the runbook)**
 - [ ] **0. Preconditions**: runner online and the two deploys above green; STK-090 merged or waived; STK-094 release PR open, not merged, and a draft, and changing exactly `release.env` + `compose.yml` (`pr-scope` green); worker image from its `release.env` pulled; tag checkout; `PG_CLIENT_IMAGE` pinned by digest; Supabase pooler details in the password manager; optional root cert (`MOVE_SRC_SSLROOTCERT`); `~/srv/backups/stoktok-cutover` mode 700 and `tmutil isexcluded` says excluded; work inside `tmux`.

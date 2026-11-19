@@ -15,7 +15,7 @@
     "test:move": "bash scripts/test-db-migrate-from-supabase.sh",
     "build": "pnpm -r --if-present build",
     "check:service-key": "bash scripts/check-no-service-key-in-client.sh",
-    "check:deploy-env": "bash scripts/check-deploy-env.sh",
+    "check:deploy-env": "bash scripts/check-deploy-env.sh && bash scripts/test-deploy-guards.sh",
     "worker:eod": "pnpm --filter @stoktok/worker run job eod-prices",
     "worker:financials": "pnpm --filter @stoktok/worker run job financials",
     "worker:financial-statements": "pnpm --filter @stoktok/worker run job financial-statements",

@@ -1,0 +1,44 @@
+name: stoktok-guards
+
+# Every pull request into main: the merge result of .github/workflows/deploy-stoktok.yml must pass
+# ops/check-stoktok-workflow.sh (STK-097), the guards that keep stoktok's secrets out of the logs.
+# Same pattern as volume-safety.yml. pull_request_target, so the workflow and the checker always come from main
+# and a pull request cannot weaken the checker it is judged by. Nothing from the pull request runs: its copy of
+# deploy-stoktok.yml (the merge result, so a stale branch does not fail on an older copy) is checked out into pr/
+# and only read by grep/awk. Read-only token, no environment, no secrets, no credentials kept.
+# The check only reads the one workflow file; the compose file is covered in the stoktok repo and at the cutover stage 0.3.
+
+on:
+  pull_request_target:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: [self-hosted, macbook-runner]
+    timeout-minutes: 5
+    steps:
+      - name: checker from main
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: deploy-stoktok.yml of the merge result (data only)
+        uses: actions/checkout@v7
+        with:
+          ref: refs/pull/${{ github.event.pull_request.number }}/merge
+          path: pr
+          sparse-checkout: .github/workflows/deploy-stoktok.yml
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      # refs/pull/<n>/merge is recomputed asynchronously: judge the file only if the merge commit has a `parent` line naming
+      # the head this run was triggered for, so the status never lands on content the check did not read.
+      - name: check
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git -C pr cat-file -p HEAD | grep -qxF "parent $HEAD_SHA" || { echo "merge ref is not current for head $HEAD_SHA; re-run" >&2; exit 1; }
+          bash ops/check-stoktok-workflow.sh pr/.github/workflows/deploy-stoktok.yml

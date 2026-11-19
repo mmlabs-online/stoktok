@@ -134,7 +134,7 @@ if ! diff <(echo "$written") <(echo "$wanted"); then
   fail=1
 fi
 
-for f in "$ROOT"/deploy/deployment-repo/apps/stoktok/*.sh "$ROOT"/scripts/*.sh; do
+for f in "$ROOT"/deploy/deployment-repo/apps/stoktok/*.sh "$ROOT"/deploy/deployment-repo/ops/*.sh "$ROOT"/scripts/*.sh; do
   if ! bash -n "$f"; then
     echo "FAIL: bash -n $f" >&2
     fail=1
@@ -143,30 +143,11 @@ done
 
 # STK-043: the deploy workflow gets the secrets from the `stoktok` environment and never prints them.
 WF="$ROOT/deploy/deployment-repo/.github/workflows/deploy-stoktok.yml"
-if ! grep -qE '^\s+environment: stoktok\s*$' "$WF"; then
-  echo "FAIL: workflow lacks 'environment: stoktok'" >&2
-  fail=1
-fi
-if ! grep -qF "if: github.ref == 'refs/heads/main'" "$WF"; then
-  echo "FAIL: workflow lacks the main-only guard" >&2
-  fail=1
-fi
-if grep -E '(^|[^.A-Za-z])secrets\.' "$WF" | grep -vE '^\s+[A-Z_]+: \$\{\{ secrets\.[A-Z_]+ \}\}\s*$'; then
-  echo "FAIL: 'secrets.' used outside a step env mapping" >&2
-  fail=1
-fi
-if grep -nE 'set -[A-Za-z]*x|set -o xtrace' "$WF"; then
-  echo "FAIL: set -x in workflow" >&2
-  fail=1
-fi
-# Assumes the convention: compose is run as "${compose[@]}" (array named compose) or "docker compose" on one line;
-# another array name, docker-compose, or a line continuation is not seen.
-if grep -E '(compose\[@\]\}"|docker compose).* config([[:space:]]|$)' "$WF" | grep -vE -- '--(quiet|services)'; then
-  echo "FAIL: compose config without --quiet or --services" >&2
-  fail=1
-fi
-if grep -nF '<<' "$WF"; then
-  echo "FAIL: heredoc in workflow" >&2
+DRAFTS="$ROOT/deploy/deployment-repo"
+# The workflow-only guards (secrets step, deny lists, triggers, migrate detection) live in one portable script that is
+# also copied to the deployment repo (STK-097); everything below needs another file.
+if ! bash "$DRAFTS/ops/check-stoktok-workflow.sh" "$WF"; then
+  echo "FAIL: ops/check-stoktok-workflow.sh" >&2
   fail=1
 fi
 wf_env_file="$(sed -n 's/^  ENV_FILE: //p' "$WF")"
@@ -208,20 +189,10 @@ secrets_step="$(sed -n '/^      - name: secrets\s*$/,/^      - name: pull\s*$/p'
 # Exactly one printf, and it is the plain `printf '<format>' "$VAR"... > "$tmp"` line (no second command on it, no other target).
 printf_shape="^[[:space:]]+printf '[^']*'( \"\\\$[A-Z][A-Z0-9_]*\")+ > \"\\\$tmp\"[[:space:]]*\$"
 printf_line="$(echo "$secrets_step" | grep -E "$printf_shape" || true)"
-if [ "$(echo "$printf_line" | grep -c .)" -ne 1 ] || [ "$(echo "$secrets_step" | grep -cE '^[[:space:]]*printf ')" -ne 1 ]; then
-  echo "FAIL: secrets step needs exactly one env-file printf of the form: printf '...' \"\$VAR\"... > \"\$tmp\"" >&2
-  fail=1
-fi
 written_keys="$(echo "$printf_line" | grep -oE '[A-Z][A-Z0-9_]*=%s' | sed 's/=%s//' | sort -u || true)"
 wanted_keys="$(printf '%s\n' $required $optional $derived | grep . | sort -u || true)"
 if ! diff <(echo "$wanted_keys") <(echo "$written_keys"); then
   echo "FAIL: printf keys in the workflow differ from required + optional + derived keys in docs/deploy.md (< doc, > workflow)" >&2
-  fail=1
-fi
-format_order="$(echo "$printf_line" | grep -oE '[A-Z][A-Z0-9_]*=%s' | sed 's/=%s//' || true)"
-argument_order="$(echo "$printf_line" | grep -oE '"\$[A-Z][A-Z0-9_]*"' | tr -d '"$' || true)"
-if ! diff <(echo "$format_order") <(echo "$argument_order"); then
-  echo "FAIL: printf argument order differs from format key order (< format, > arguments)" >&2
   fail=1
 fi
 for k in $required $optional; do
@@ -266,143 +237,14 @@ for k in $optional; do
     fail=1
   fi
 done
-# The secrets step writes the env file only with the one printf; no other redirect to $tmp / $ENV_FILE, no tee.
-other_writers="$(echo "$secrets_step" | grep -vE "$printf_shape" \
-  | grep -E '>(>|\|)?[[:space:]]*"?\$\{?(tmp|ENV_FILE)|(^|[^A-Za-z_])tee([^A-Za-z_]|$)' || true)"
-if [ -n "$other_writers" ]; then
-  echo "FAIL: secrets step writes to the env file outside the single printf: $other_writers" >&2
-  fail=1
-fi
-
-# STK-084: the required master key has a format guard (before mktemp and the printf); the database URL is derived from the
-# committed password file with builtins only, inside the secrets step before mktemp.
-guard_ok="$(echo "$secrets_step" | awk '
-  { l = $0; sub(/^[[:space:]]+/, "", l); sub(/[[:space:]]+$/, "", l) }
-  l == "re_master_key='"'"'^[A-Za-z0-9+/]{43}=$'"'"'" { r = NR }
-  r && l == "if ! [[ \"$STOKTOK_AI_KEYS_MASTER_KEY\" =~ $re_master_key ]]; then" && !g { g = NR; next }
-  g && !x && NR <= g + 4 && /^[[:space:]]*exit 1[[:space:]]*$/ { x = 1 }
-  /mktemp/ && !m { m = NR }
-  /^[[:space:]]*printf .*> "\$tmp"/ && !p { p = NR }
-  END { print (r && g && x && m && p && r < g && g < m && g < p) ? "yes" : "no" }')"
-if [ "$guard_ok" != yes ]; then
-  echo "FAIL: STOKTOK_AI_KEYS_MASTER_KEY lacks re_master_key='^[A-Za-z0-9+/]{43}=\$' and its guard + exit 1 before mktemp in the secrets step" >&2
-  fail=1
-fi
-if ! grep -qE '^  DB_APP: stoktok\s*$' "$WF"; then
-  echo "FAIL: workflow lacks 'DB_APP: stoktok'" >&2
-  fail=1
-fi
-mktemp_line="$(echo "$secrets_step" | grep -n 'mktemp' | head -n 1 | cut -d: -f1 || true)"
-for lit in 'pwfile="postgres/secrets/apps/$DB_APP.password"' \
-           'pw=""' \
-           'IFS= read -r pw < "$pwfile" || true' \
-           "re_pw='^[A-Za-z0-9_-]{16,}\$'" \
-           'if ! [[ "$pw" =~ $re_pw ]]; then' \
-           'STOKTOK_DATABASE_URL="postgres://$DB_APP:$pw@postgres:5432/$DB_APP"'; do
-  l="$(echo "$secrets_step" | grep -nF -- "$lit" | head -n 1 | cut -d: -f1 || true)"
-  if [ -z "$l" ] || [ -z "$mktemp_line" ] || [ "$l" -ge "$mktemp_line" ]; then
-    echo "FAIL: secrets step lacks (before mktemp): $lit" >&2
-    fail=1
-  fi
-done
-
-# STK-093: the password guard order (pwfile < IFS= read < re_pw < guard < exit 1 within 4 lines < URL < mktemp < printf).
-pw_ok="$(echo "$secrets_step" | awk '
-  { l = $0; sub(/^[[:space:]]+/, "", l); sub(/[[:space:]]+$/, "", l) }
-  l == "pwfile=\"postgres/secrets/apps/$DB_APP.password\"" && !f { f = NR }
-  l == "IFS= read -r pw < \"$pwfile\" || true" && !rd { rd = NR }
-  l == "re_pw='"'"'^[A-Za-z0-9_-]{16,}$'"'"'" && !r { r = NR }
-  r && l == "if ! [[ \"$pw\" =~ $re_pw ]]; then" && !g { g = NR; next }
-  g && !x && NR <= g + 4 && l == "exit 1" { x = NR }
-  l == "STOKTOK_DATABASE_URL=\"postgres://$DB_APP:$pw@postgres:5432/$DB_APP\"" && !u { u = NR }
-  /mktemp/ && !m { m = NR }
-  /^[[:space:]]*printf .*> "\$tmp"/ && !p { p = NR }
-  END { print (f && rd && r && g && x && u && m && p && f < rd && rd < g && r < g && g < x && x < u && u < m && m < p) ? "yes" : "no" }')"
-if [ "$pw_ok" != yes ]; then
-  echo "FAIL: the password guard (re_pw, if ! [[ \"\$pw\" =~ \$re_pw ]] + exit 1) must follow IFS= read and precede STOKTOK_DATABASE_URL=, mktemp and the printf in the secrets step" >&2
-  fail=1
-fi
-# STK-093: the password and the URL are never echoed. Outside the secrets step no code line may mention them; inside it
-# $pw appears only on the guard and the URL assignment, $STOKTOK_DATABASE_URL only on the single printf.
-re_pwvar='\$\{?pw([^A-Za-z0-9_]|$)'
-wf_nc="$(grep -vE '^\s*#' "$WF" || true)"
-out_of_step="$(echo "$wf_nc" | sed '/^      - name: secrets[[:space:]]*$/,/^      - name: pull[[:space:]]*$/d')"
-if echo "$out_of_step" | grep -nE -e "$re_pwvar" -e 'STOKTOK_DATABASE_URL'; then
-  echo "FAIL: the database password or URL is referenced outside the secrets step" >&2
-  fail=1
-fi
-pw_lines="$(echo "$secrets_step" | grep -E "$re_pwvar" || true)"
-pw_count="$(echo "$secrets_step" | grep -cE "$re_pwvar" || true)"
-if [ "$pw_count" != 2 ] \
-   || ! echo "$pw_lines" | grep -qF 'if ! [[ "$pw" =~ $re_pw ]]; then' \
-   || ! echo "$pw_lines" | grep -qF 'STOKTOK_DATABASE_URL="postgres://$DB_APP:$pw@postgres:5432/$DB_APP"'; then
-  echo "FAIL: in the secrets step \$pw may appear only on the guard and the URL assignment" >&2
-  fail=1
-fi
-url_count="$(echo "$secrets_step" | grep -cE '\$\{?STOKTOK_DATABASE_URL' || true)"
-if [ "$url_count" != 1 ] || ! echo "$secrets_step" | grep -E '\$\{?STOKTOK_DATABASE_URL' | grep -qE "$printf_shape"; then
-  echo "FAIL: in the secrets step \$STOKTOK_DATABASE_URL may appear only on the single printf" >&2
-  fail=1
-fi
-
-# STK-093: the env file is written under umask 077, via a temp file in the same dir (atomic rename), mode 600, then an
-# owner+mode check; order: umask < pwfile < chmod 700 dir < mktemp "$dir/ < trap < printf < chmod 600 < mv -f < stat check + exit 1.
-mode_ok="$(echo "$secrets_step" | awk '
-  { l = $0; sub(/^[[:space:]]+/, "", l); sub(/[[:space:]]+$/, "", l) }
-  l == "umask 077" && !a { a = NR }
-  l == "pwfile=\"postgres/secrets/apps/$DB_APP.password\"" && !f { f = NR }
-  l == "chmod 700 \"$dir\"" && !d { d = NR }
-  l == "tmp=\"$(mktemp \"$dir/.stoktok.env.XXXXXX\")\"" && !m { m = NR }
-  l == "trap '"'"'rm -f \"$tmp\"'"'"' EXIT" && !t { t = NR }
-  l ~ /^printf .* > "\$tmp"$/ && !p { p = NR }
-  l == "chmod 600 \"$tmp\"" && !c { c = NR }
-  l == "mv -f \"$tmp\" \"$ENV_FILE\"" && !v { v = NR }
-  l == "if [ \"$(stat -f '"'"'%Su %Lp'"'"' \"$ENV_FILE\")\" != \"$(id -un) 600\" ]; then" && !s { s = NR; next }
-  s && !x && NR <= s + 4 && l == "exit 1" { x = NR }
-  END { print (a && f && d && m && t && p && c && v && s && x && a < f && f < d && d < m && m < t && t < p && p < c && c < v && v < s && s < x) ? "yes" : "no" }')"
-if [ "$mode_ok" != yes ]; then
-  echo "FAIL: the secrets step must keep, in order: umask 077, chmod 700 \"\$dir\", mktemp \"\$dir/.stoktok.env.XXXXXX\", trap rm, the printf, chmod 600 \"\$tmp\", mv -f \"\$tmp\" \"\$ENV_FILE\", the owner+mode stat check + exit 1" >&2
-  fail=1
-fi
-# STK-093: nothing in the workflow may dump the shell or the env file into the log (name-independent deny list).
-if echo "$wf_nc" | grep -nE -e '^\s*(set|env|export|declare|typeset|readonly|printenv)\s*$' \
-     -e '(declare|typeset|export|readonly)\s+-[A-Za-z]*p' -e 'printenv' -e '(^|[^A-Za-z_])env\s*\|' \
-     -e '(^|[^A-Za-z_-])(cat|head|tail|less|more|xxd|od|strings)\s+.*(ENV_FILE|\$tmp|\$pwfile|secrets/|\.env)'; then
-  echo "FAIL: workflow dumps the shell or a secret file (bare set/env/export/declare -p/printenv, cat of the env file, \$tmp or secrets/)" >&2
-  fail=1
-fi
-if echo "$wf_nc" | grep -E 'docker[[:space:]]+(container[[:space:]]+)?inspect' | grep -vE -- '[[:space:]](-f|--format)([[:space:]=]|$)'; then
-  echo "FAIL: docker inspect without -f in workflow" >&2
-  fail=1
-fi
-# STK-093: the trigger set is exactly push on main (apps/stoktok paths) + workflow_dispatch; `if: github.ref == main` is
-# also true for pull_request_target, schedule and workflow_run, so those must never appear.
-on_block="$(echo "$wf_nc" | awk '/^on:[[:space:]]*$/ { o = 1; print; next } o && /^[^[:space:]]/ { o = 0 } o && NF { print }')"
-want_on="$(printf '%s\n' 'on:' '  push:' '    branches: [main]' "    paths: ['apps/stoktok/**']" '  workflow_dispatch:')"
-if [ "$on_block" != "$want_on" ]; then
-  echo "FAIL: the on: block must be exactly push (branches [main], paths apps/stoktok/**) and workflow_dispatch" >&2
-  fail=1
-fi
-if echo "$wf_nc" | grep -nE '^\s*(pull_request|pull_request_target|workflow_run|schedule|workflow_call|issue_comment|repository_dispatch)\s*:'; then
-  echo "FAIL: forbidden trigger in workflow (pull_request, pull_request_target, workflow_run, schedule, ...)" >&2
-  fail=1
-fi
-
 # STK-084: the "database is ahead" literal is pinned in migrate.ts; the deploy workflow must grep the same text.
 ahead_prefix="$(sed -n "s/^export const MIGRATE_AHEAD_PREFIX = '\(.*\)';\$/\1/p" "$ROOT/packages/db/src/pg/migrate.ts")"
 if [ -z "$ahead_prefix" ] || ! grep -qF "AHEAD_PREFIX: '$ahead_prefix'" "$WF"; then
   echo "FAIL: workflow AHEAD_PREFIX differs from MIGRATE_AHEAD_PREFIX in packages/db/src/pg/migrate.ts" >&2
   fail=1
 fi
-for n in backup migrate; do
-  if ! sed -n "/^      - name: $n\s*\$/,/^        run:/p" "$WF" | grep -qF "if: steps.pull.outputs.migrate == 'true'"; then
-    echo "FAIL: step '$n' must be guarded by steps.pull.outputs.migrate == 'true'" >&2
-    fail=1
-  fi
-done
 
 # STK-044: one runner user; env file, scheduler dir and log dir agree across workflow, compose, scripts, plist, runbook.
-DRAFTS="$ROOT/deploy/deployment-repo"
 ADR="$ROOT/docs/adr/0003-deploy-and-scheduling.md"
 RUNCHECK="$DRAFTS/.github/workflows/runner-check.yml"
 PLIST="$DRAFTS/apps/stoktok/launchd/online.mmlabs.stoktok.jobs.plist"
@@ -498,6 +340,29 @@ if ! grep -qF 'launchctl bootstrap "$dom"' "$WF" || ! grep -qF 'dom="gui/$(id -u
    || grep -n 'system/' "$WF" | grep -vF 'launchctl print system/'; then
   echo "FAIL: agent must use the gui domain; system/ only in the read-only preflight print" >&2
   fail=1
+fi
+
+# STK-097: the deployment-side guard job is pinned as a whole: the sha256 of stoktok-guards.yml must equal the committed
+# value below (pull_request_target on main only, read-only token, no secrets or environment, nothing credentialed, one run
+# line). Any edit, however small, fails until the file and the hash are updated together. To update after a deliberate change:
+#   shasum -a 256 deploy/deployment-repo/.github/workflows/stoktok-guards.yml   (macOS; sha256sum on Linux)
+# paste the hash into GUARDS_SHA256 and copy the file verbatim to the deployment repo in the same PR.
+# STK097_GUARDS_WF lets scripts/test-deploy-guards.sh point this check at a mutated copy.
+GUARDS_SHA256="da5f972e00d975ae73db72fa5901be4b4c11d708b24cfae364316d9ee282dc08"
+GUARDS_WF="${STK097_GUARDS_WF:-$DRAFTS/.github/workflows/stoktok-guards.yml}"
+if [ ! -f "$GUARDS_WF" ]; then
+  echo "FAIL: missing stoktok-guards.yml draft" >&2
+  fail=1
+else
+  if command -v shasum >/dev/null 2>&1; then
+    g_sum="$(shasum -a 256 "$GUARDS_WF" | cut -d' ' -f1)"
+  else
+    g_sum="$(sha256sum "$GUARDS_WF" | cut -d' ' -f1)"
+  fi
+  if [ "$g_sum" != "$GUARDS_SHA256" ]; then
+    echo "FAIL: stoktok-guards.yml differs from the pinned copy (sha256 $g_sum, expected $GUARDS_SHA256); see the update note above GUARDS_SHA256" >&2
+    fail=1
+  fi
 fi
 
 if [ "$fail" -ne 0 ]; then exit 1; fi
