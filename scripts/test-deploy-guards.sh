@@ -60,13 +60,16 @@ check_rc() { # <want> <id> <rc> <out-file>
     echo "ok $id"
   fi
 }
-# expect <want-rc> <id>: run the checker on the mutated copy.
+# expect <want-rc> <id> [message]: run the checker on the mutated copy; with a message, the output must contain it.
 expect() {
   if [ "$2" != B0-unchanged-draft ] && cmp -s "$DRAFT" "$cur"; then
     echo "FAILED $2: the mutation did not change the workflow"; failures=$((failures + 1)); return
   fi
   bash "$CHK" "$cur" > "$W/out" 2>&1
   check_rc "$1" "$2" "$?" "$W/out"
+  if [ -n "${3:-}" ] && [ "$1" -ne 0 ] && ! grep -qF -- "$3" "$W/out"; then
+    echo "FAILED $2: output lacks the message: $3"; failures=$((failures + 1))
+  fi
 }
 
 fresh; expect 0 B0-unchanged-draft
@@ -149,12 +152,37 @@ fresh; ins_end deploy 'set -euo pipefail'; expect 0 C3-set-with-options
 fresh; ins_end secrets 'echo "::warning::x"; set'; expect 1 P1-no-line-starts-with-colons
 
 # CR / Unicode line breaks: rejected up front (they hide lines from grep but not from YAML or bash), nothing printed from the file
-fresh; ins_end deploy 'run: "true\nset"'; expect 1 M44-quoted-run
-fresh; ins_end deploy 'run: true'; expect 1 M45-plain-oneline-run
-fresh; ins_after '- name: pull' '  "run": "true\nset"'; expect 1 M46-quoted-key
-fresh; ins_after '- name: pull' "  ${q}run${q}: ${q}true${q}"; expect 1 M47-single-quoted-key
-fresh; ins_after '- name: pull' '- {name: zz, "run": "set"}'; expect 1 M48-flow-mapping-item
-fresh; ins_after '- name: pull' '  : set'; ins_after '- name: pull' '  ? run'; expect 1 M49-explicit-key
+fresh; ins_end deploy 'run: "true\nset"'; expect 1 M44-quoted-run 'every run:'
+fresh; ins_end deploy 'run: true'; expect 1 M45-plain-oneline-run 'every run:'
+fresh; ins_after '- name: pull' '  "run": "true\nset"'; expect 1 M46-quoted-key 'allow-list'
+fresh; ins_after '- name: pull' "  ${q}run${q}: ${q}true${q}"; expect 1 M47-single-quoted-key 'allow-list'
+fresh; ins_after '- name: pull' '- {name: zz, "run": "set"}'; expect 1 M48-flow-mapping-item 'allow-list'
+fresh; ins_after '- name: pull' '  : set'; ins_after '- name: pull' '  ? run'; expect 1 M49-explicit-key 'allow-list'
+# allow-list (Ming 2026-11-19): anchors, tags, aliases, flow values, tabs, multi-line quotes, comment tricks
+nl='
+'
+fresh; ins_after '- name: pull' '  &a "run": "true\nset"'; expect 1 M50-anchor-before-quoted-key 'allow-list'
+fresh; ins_after '- name: pull' '  !!str "run": "true\nset"'; expect 1 M51-tag-before-quoted-key 'allow-list'
+fresh; ins_after '- name: pull' '- &s {name: zz, "run": "set"}'; expect 1 M52-anchor-before-flow-item 'allow-list'
+fresh; ins_after '- name: pull' '- !!map {name: zz, "run": "set"}'; expect 1 M53-tag-before-flow-item 'allow-list'
+fresh; ins_after '- name: pull' '  *k : "true\nset"'; expect 1 M54-alias-key 'allow-list'
+fresh; repl 'steps:' 'steps: # x: |'; ins_after '- name: pull' '  "run": "true\nset"'; expect 1 M55-comment-fakes-block-start 'allow-list'
+fresh; ins_after 'runs-on: [self-hosted, macbook-runner]' 'zz: {runs-on: [self-hosted], steps: [{"run": "set"}]}'; expect 1 M56-flow-mapping-value 'allow-list'
+fresh; ins_after 'runs-on: [self-hosted, macbook-runner]' 'zz: [run: set]'; expect 1 M57-flow-sequence-value 'allow-list'
+fresh; ins_after '- name: pull' "-$(printf '\t')"'{run: set}'; expect 1 M58-tab-after-dash 'contains a tab'
+fresh; ins_after 'runs-on: [self-hosted, macbook-runner]' "zz:$(printf '\t')x"; expect 1 M59-tab-after-colon 'contains a tab'
+fresh; ins_after '- name: pull' '  x: "abc'"$nl"'  y: |'"$nl"'        "run": "true\nset"'; expect 1 M60-multiline-quote-fakes-block 'allow-list'
+fresh; ins_after 'runs-on: [self-hosted, macbook-runner]' 'zz: [a, b]'; expect 1 M61-other-flow-sequence 'allow-list'
+fresh; ins_after 'runs-on: [self-hosted, macbook-runner]' 'zz: *a'; expect 1 M62-alias-value 'allow-list'
+fresh; ins_after 'runs-on: [self-hosted, macbook-runner]' 'zz: "a" b'; expect 1 M63-text-after-closing-quote 'allow-list'
+fresh; ins_after 'runs-on: [self-hosted, macbook-runner]' "zz: ${q}it${q}${q}s"; expect 1 M64-unclosed-single-quote 'allow-list'
+fresh; ins_after 'runs-on: [self-hosted, macbook-runner]' '- &a run'; expect 1 M65-anchor-list-item 'allow-list'
+fresh; ins_after 'runs-on: [self-hosted, macbook-runner]' 'zz: ? run'; expect 1 M66-explicit-key-value 'allow-list'
+# negative controls for the allow-list
+fresh; repl 'run: |' 'run: | # comment'; expect 0 C4-run-block-with-comment
+fresh; ins_after 'runs-on: [self-hosted, macbook-runner]' 'name: "x"'; expect 0 C5-quoted-value
+fresh; ins_after 'runs-on: [self-hosted, macbook-runner]' 'zz:'"$nl"'      - "main"'; expect 0 C6-quoted-list-item
+fresh; ins_after 'runs-on: [self-hosted, macbook-runner]' "zz: ${q}it${q}${q}s${q} # note"; expect 0 C7-single-quote-escape-and-comment
 fresh; ins_end deploy "$(printf 'echo hi\r          set')"; expect 1 M40-cr-hides-bare-set
 fresh; ins_end deploy "$(printf 'set | true\r::error::x')"; expect 1 P2-cr-forged-command
 fresh; ins_end deploy "$(printf 'echo hi\302\205          set')"; expect 1 M41-nel

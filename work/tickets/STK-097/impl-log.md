@@ -15,7 +15,7 @@ stoktok repo, commit 1 `8ed5663` (pure move, `pnpm check:deploy-env` OK before a
 | `docs/deploy.md` | guards subsection; 🟡7 / fail-closed note; step 6 "repeat steps 2-5"; stage 0.3 `gh pr ready --undo` |
 | `work/ming-todo.md` | line 39 wording; STK-097 Ming items |
 
-deployment repo (`/home/user/deployment`), branch `stoktok/stk-097-workflow-guards` from fetched origin/main `563d1e2`, commit `0428c97`, deployment branch pushed at 02dec4d; PR not yet opened. Exactly 3 files, each `cmp`-equal to the stoktok draft: `.github/workflows/deploy-stoktok.yml`, `.github/workflows/stoktok-guards.yml`, `ops/check-stoktok-workflow.sh`. Nothing under `apps/`. Created through a temporary worktree (removed), so the checked-out branch `stoktok/expand-shared-postgres` was not touched.
+deployment repo (`/home/user/deployment`), branch `stoktok/stk-097-workflow-guards` from fetched origin/main `563d1e2`, commit `0428c97`, deployment branch pushed at a3565cb; PR not yet opened. Exactly 3 files, each `cmp`-equal to the stoktok draft: `.github/workflows/deploy-stoktok.yml`, `.github/workflows/stoktok-guards.yml`, `ops/check-stoktok-workflow.sh`. Nothing under `apps/`. Created through a temporary worktree (removed), so the checked-out branch `stoktok/expand-shared-postgres` was not touched.
 
 Pre-edit parity: `git fetch --depth=50 origin main`, then `git show origin/main:.github/workflows/deploy-stoktok.yml | cmp - <stoktok draft at 233b075>` was silent (byte-equal). No drift.
 
@@ -119,7 +119,7 @@ Only Ming's three items.
 
 ## Post-escalation fix - 2026-11-18 (option 2, one targeted fix outside the loop)
 
-Push status: deployment branch pushed at 2c52ee5 (before this fix); PR not yet opened. This fix is committed on the deployment branch but not pushed.
+Push status: deployment branch pushed at a3565cb; PR not yet opened. This fix is committed on the deployment branch but not pushed.
 
 ### Files touched
 | File | Required because |
@@ -139,3 +139,27 @@ Quoted scalars in list items (`- "main"`) are allowed on purpose: only quote-the
 
 ### Scope self-check
 Only the checker pass, M46-M49 and the log.
+
+## Allow-list fix (Ming 2026-11-19)
+
+Push status: deployment branch pushed at a3565cb; PR not yet opened. This fix is committed on the deployment branch but not pushed.
+
+### Files touched
+| File | Required because |
+|---|---|
+| `deploy/deployment-repo/ops/check-stoktok-workflow.sh` | The key deny-list awk pass is replaced by an allow-list: outside block scalars, after indent and `- ` markers and with a trailing ` #` comment removed, a line is blank, a comment, a plain key or a plain list item; values may not start with `{ & * ! ?`; `[` only on the three exact live lines (`branches: [main]`, `paths: ['apps/stoktok/**']`, `runs-on: [self-hosted, macbook-runner]`); quoted values must close on the line; any tab fails. The `run:` rule accepts `run: \| # comment`. Fixed messages, no PR bytes. |
+| `scripts/test-deploy-guards.sh` | `expect` can assert the message (M44-M49 now do); M50-M66 (B1-B6, items 1-5 and variants) FAIL; C4-C7 negative controls pass (`run: \| # comment`, `name: "x"`, `- "main"`, escaped quote + comment) |
+| `deploy/deployment-repo/README.md` | tripwire / known gap / code-owner review note |
+| `work/tickets/STK-097/impl-log.md` | this section; push status corrected |
+
+### Checks
+See the final report.
+
+### Out-of-plan files
+None.
+
+### Follow-ups
+Multi-line quoted scalars that fake indentation are a documented known gap (README).
+
+### Scope self-check
+Only the allow-list, its mutation cases, the README note and the log.

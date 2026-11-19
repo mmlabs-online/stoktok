@@ -30,6 +30,12 @@ for lb in '\r' '\302\205' '\342\200\250' '\342\200\251'; do
   fi
 done
 
+# A tab can sit where YAML allows it after `-` or `:` and hide a line from the space-based checks below.
+if LC_ALL=C grep -qF "$(printf '\t')" "$WF"; then
+  echo "FAIL: workflow contains a tab" >&2
+  exit 1
+fi
+
 # Text from the PR's file is printed only between stop-commands and its per-run token (unknowable to the PR author).
 tok="stk$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
 echo "::stop-commands::$tok" >&2
@@ -219,23 +225,61 @@ if [ "$(grep -cE '^      - name: secrets[[:space:]]*$' "$WF")" -ne 1 ] || [ "$(g
   bad "exactly one '- name: secrets' step, followed by exactly one '- name: pull' step, is required"
 fi
 # STK-097: every `run:` is a plain `|` block scalar: a quoted or one-line run (`run: "true\nset"`) hides code from the line checks.
-{ echo "$wf_nc" | grep -E '(^|[[:space:]-])run[[:space:]]*:' | grep -vE '^[[:space:]]+run: \|[[:space:]]*$' || true; } \
+{ echo "$wf_nc" | grep -E '(^|[[:space:]-])run[[:space:]]*:' | grep -vE '^[[:space:]]+run: \|([[:space:]]+#.*)?[[:space:]]*$' || true; } \
   | flag "every run: must be a '|' block scalar (no quoted or one-line run:)" || fail=1
-# STK-097: no mapping key in quoted, flow or explicit form (`"run": ...`, `'"'"'run'"'"': ...`, `{name: x, "run": ...}`, `? run`), which would
-# hide a key from the line checks. Block-scalar content (lines more indented than the key that opened a `|` / `>` block) is
-# skipped. A line is judged after its leading indent and any `- ` markers are removed. Fixed message: no PR bytes printed.
-quoted_keys="$(echo "$wf_nc" | awk '
-  { if ($0 ~ /^[[:space:]]*$/) next
-    line = $0; col = 0
+# STK-097 (allow-list, Ming 2026-11-19): outside block-scalar content every line, after its indent and any `- ` markers and
+# with a trailing ` #...` comment removed, must be blank, a comment, a plain key (`name:` with a letter or _ first), or a plain
+# scalar list item. A value must not start with { [ & * ! or ? (the only [ lines are the exact ones in allow_flow, copied from
+# the live workflow); a quoted value must close on the same line. Block-scalar content (lines more indented than the key that
+# opened a `|` / `>` block) is skipped. Fixed message: no PR bytes printed. Tripwire only: spellings beyond this list (e.g.
+# a multi-line quoted scalar that fakes indentation) are a known gap; the real control is code-owner review.
+allow_flow="$(printf '%s\n' 'branches: [main]' "paths: ['apps/stoktok/**']" 'runs-on: [self-hosted, macbook-runner]')"
+bad_lines="$(FLOW="$allow_flow" awk '
+  BEGIN { n = split(ENVIRON["FLOW"], fl, "\n"); for (i = 1; i <= n; i++) okflow[fl[i]] = 1
+          dq = sprintf("%c", 34); sq = sprintf("%c", 39) }
+  { line = $0; sub(/[[:space:]]+$/, "", line)
+    if (line == "") next
+    col = 0
     while (substr(line, 1, 1) == " ") { col++; line = substr(line, 2) }
     if (inblk) { if (col > blk) next; inblk = 0 }
-    while (substr(line, 1, 2) == "- ") { col += 2; line = substr(line, 3); while (substr(line, 1, 1) == " ") { col++; line = substr(line, 2) } }
-    if (line ~ /^[{]/ || line ~ /^[?]([[:space:]]|$)/) { print "x"; next }
-    if (line ~ /^["'"'"']/ && line ~ /["'"'"'][[:space:]]*:([[:space:]]|$)/) { print "x"; next }
-    if (line ~ /(^|:[[:space:]]+)[|>][-+0-9]*[[:space:]]*$/) { inblk = 1; blk = col }
-  }')"
-if [ -n "$quoted_keys" ]; then
-  bad "workflow has a quoted, flow ({...}) or explicit (?) mapping key: write plain keys"
+    if (substr(line, 1, 1) == "#") next
+    isitem = 0
+    while (line == "-" || substr(line, 1, 2) == "- ") {
+      isitem = 1; col++; line = substr(line, 2)
+      while (substr(line, 1, 1) == " ") { col++; line = substr(line, 2) }
+    }
+    if (line == "" || substr(line, 1, 1) == "#") next
+    head = ""; val = line; iskey = 0
+    if (match(line, /^[A-Za-z_][A-Za-z0-9_-]*[[:space:]]*:([[:space:]]|$)/)) {
+      iskey = 1; head = substr(line, 1, RLENGTH); val = substr(line, RLENGTH + 1)
+      sub(/[[:space:]]+$/, "", head); head = head " "
+      while (substr(val, 1, 1) == " ") val = substr(val, 2)
+    } else if (!isitem || val ~ /:([[:space:]]|$)/) { print "x"; next }
+    c = substr(val, 1, 1)
+    if (c == dq || c == sq) {
+      i = 2; closed = 0; L = length(val)
+      while (i <= L) {
+        ch = substr(val, i, 1)
+        if (c == dq && ch == "\\") { i += 2; continue }
+        if (ch == c) { if (c == sq && substr(val, i + 1, 1) == sq) { i += 2; continue }; closed = 1; break }
+        i++
+      }
+      rest = substr(val, i + 1)
+      if (!closed || (rest !~ /^[[:space:]]*$/ && rest !~ /^[[:space:]]+#/)) print "x"
+      next
+    }
+    for (i = 1; i <= length(val); i++) {
+      if (substr(val, i, 1) == "#" && (i == 1 || substr(val, i - 1, 1) == " ")) { val = substr(val, 1, i - 1); break }
+    }
+    sub(/[[:space:]]+$/, "", val)
+    c = substr(val, 1, 1)
+    if (c == "") next
+    if (c == "{" || c == "&" || c == "*" || c == "!" || c == "?") { print "x"; next }
+    if (c == "[") { if (!((head val) in okflow)) print "x"; next }
+    if (val ~ /^[|>][-+0-9]*$/) { inblk = 1; blk = col }
+  }' "$WF")"
+if [ -n "$bad_lines" ]; then
+  bad "workflow has a line outside the allow-list (plain keys, plain list items, closed quotes, no flow/anchor/tag/alias/explicit-key forms)"
 fi
 # STK-097: every printf key except the derived database URL has a format guard, a whole line
 # `if ! [[ "$KEY" =~ ... ]]; then` with `exit 1` within 4 lines, before mktemp (name-independent: no key list here).
